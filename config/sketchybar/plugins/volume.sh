@@ -11,11 +11,12 @@ case "$SENDER" in
     ;;
   mouse.clicked)
     if [ "$BUTTON" = "right" ]; then
-      open 'x-apple.systempreferences:com.apple.Sound-Settings.extension'
-    else
       osascript -e 'set volume output muted (not output muted of (get volume settings))'
+      # fall through to re-render (mute doesn't fire volume_change)
+    else
+      "$CONFIG_DIR/plugins/volume_menu.sh" toggle
+      exit 0
     fi
-    # fall through to re-render (mute doesn't fire volume_change)
     ;;
 esac
 
@@ -40,3 +41,5 @@ else
 fi
 
 sketchybar --set "$NAME" icon="$ICON" label="$LABEL"
+# keep the popup slider in sync if it's open
+sketchybar --set volume.slider slider.percentage="$VOLUME" >/dev/null 2>&1 || true
