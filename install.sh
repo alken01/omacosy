@@ -64,7 +64,7 @@ fi
 # invalidate its Accessibility grant); runs as a launchd agent
 if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
   log "Building omacosy-ffm (grant Accessibility when prompted)"
-  swiftc -O -o "$HOME/.local/bin/omacosy-ffm" "$REPO_DIR/helper/ffm.swift"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-ffm" "$REPO_DIR/helper/ffm.swift"
 fi
 # stable code identity so TCC grants survive rebuilds (skipped when no
 # signing identity is present — then re-grant after each rebuild)

@@ -12,6 +12,35 @@
 import AppKit
 import ApplicationServices
 
+// Private SkyLight focus — the route AeroSpace and yabai use. The AX
+// attributes politely no-op for some apps (Arc: every call returns
+// success, nothing happens); SLPS actually moves focus.
+struct PSN { var hi: UInt32 = 0, lo: UInt32 = 0 }
+@_silgen_name("GetProcessForPID")
+func GetProcessForPID(_ pid: pid_t, _ psn: inout PSN) -> OSStatus
+@_silgen_name("_SLPSSetFrontProcessWithOptions")
+func SLPSSetFrontProcess(_ psn: inout PSN, _ wid: UInt32, _ mode: UInt32) -> Int32
+@_silgen_name("SLPSPostEventRecordTo")
+func SLPSPostEvent(_ psn: inout PSN, _ bytes: UnsafeMutablePointer<UInt8>) -> Int32
+
+func slpsFocus(pid: pid_t, wid: UInt32) {
+    var psn = PSN()
+    guard GetProcessForPID(pid, &psn) == noErr else { return }
+    _ = SLPSSetFrontProcess(&psn, wid, 0x200) // kCPSUserGenerated
+    var w = wid
+    var bytes = [UInt8](repeating: 0, count: 0xf8)
+    bytes[0x04] = 0xf8
+    bytes[0x3a] = 0x10
+    withUnsafeBytes(of: &w) { src in
+        for i in 0..<4 { bytes[0x3c + i] = src[i] }
+    }
+    for i in 0x20..<0x30 { bytes[i] = 0xff }
+    bytes[0x08] = 0x01
+    bytes.withUnsafeMutableBufferPointer { _ = SLPSPostEvent(&psn, $0.baseAddress!) }
+    bytes[0x08] = 0x02
+    bytes.withUnsafeMutableBufferPointer { _ = SLPSPostEvent(&psn, $0.baseAddress!) }
+}
+
 let pollSeconds = 0.08
 let dwellTicks = 2
 
@@ -27,7 +56,7 @@ func displayBounds() -> [CGRect] {
     return (0..<Int(n)).map { CGDisplayBounds(ids[$0]) }
 }
 
-func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect)? {
+func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid: UInt32)? {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     let screens = displayBounds()
@@ -53,7 +82,7 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect)? {
         if rect.width * rect.height > 0, visible / (rect.width * rect.height) < 0.3 {
             continue
         }
-        return (pid, "\(pid):\(num)", rect)
+        return (pid, "\(pid):\(num)", rect, UInt32(num))
     }
     return nil
 }
@@ -128,6 +157,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
             // residual feedback loop with the window manager
             let now = CFAbsoluteTimeGetCurrent()
             if now - lastFocusAt > 0.4 {
+                slpsFocus(pid: hit.pid, wid: hit.wid)
                 focus(pid: hit.pid, rect: hit.rect)
                 lastFocusAt = now
                 lastKey = hit.key
