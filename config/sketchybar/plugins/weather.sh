@@ -41,7 +41,7 @@ case "$SENDER" in
       i=$((i + 1))
     done < "$CACHE"
     sketchybar --set weather popup.drawing=on
-("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" >/dev/null 2>&1 &)
+("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" weather >/dev/null 2>&1 &)
     exit 0
     ;;
 esac

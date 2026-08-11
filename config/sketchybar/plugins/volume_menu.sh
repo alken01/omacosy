@@ -67,4 +67,4 @@ while IFS= read -r dev; do
 done < <(SwitchAudioSource -a -t output)
 
 sketchybar --set volume popup.drawing=on
-("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" >/dev/null 2>&1 &)
+("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)
