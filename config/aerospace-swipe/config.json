@@ -3,5 +3,6 @@
   "natural_swipe": true,
   "wrap_around": true,
   "skip_empty": false,
-  "fingers": 4
+  "fingers": 4,
+  "cursor_monitor": true
 }
