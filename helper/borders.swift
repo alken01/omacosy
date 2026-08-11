@@ -171,6 +171,9 @@ win.ignoresMouseEvents = true
 win.hasShadow = false
 win.level = .floating
 win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+// no order-front zoom: intermediate frames of that animation draw the
+// ring growing across the window face
+win.animationBehavior = .none
 
 let view = NSView(frame: .zero)
 view.wantsLayer = true
