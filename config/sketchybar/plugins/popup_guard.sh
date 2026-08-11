@@ -12,6 +12,7 @@ case "$ANCHOR" in
   volume) CHILD_RE='^volume\.(menu\.|slider)' ;;
   weather) CHILD_RE='^weather\.pop\.' ;;
   wifi) CHILD_RE='^wifi\.pop\.' ;;
+  bluetooth) CHILD_RE='^bt\.pop\.' ;;
   *) exit 0 ;;
 esac
 
@@ -29,6 +30,7 @@ close_popup() {
       ;;
     weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
     wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
+    bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
   esac
 }
 
