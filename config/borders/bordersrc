@@ -6,6 +6,6 @@ source "$HOME/.config/omarchy/current/theme/borders.sh"
 borders \
   style=round \
   width=5.0 \
-  hidpi=on \
+  hidpi=off \
   active_color="$ACTIVE_COLOR" \
   inactive_color="$INACTIVE_COLOR"
