@@ -144,15 +144,17 @@ esc = ['reload-config', 'mode main']
 r = ['flatten-workspace-tree', 'mode main']  # reset layout
 backspace = ['close-all-windows-but-current', 'mode main']
 
-# 1-6 live on the external display, 7-9 on the laptop; each falls back
-# to whatever is present so single-display use still works.
+# Portable monitor roles instead of hardware names: 1-6 on the main
+# display, 7-9 on the secondary. On a single display everything falls
+# back to main; on any two-display setup the split follows the user's
+# primary-display choice rather than specific hardware.
 [workspace-to-monitor-force-assignment]
-1 = ['dell', 'main']
-2 = ['dell', 'main']
-3 = ['dell', 'main']
-4 = ['dell', 'main']
-5 = ['dell', 'main']
-6 = ['dell', 'main']
-7 = ['built-in', 'main']
-8 = ['built-in', 'main']
-9 = ['built-in', 'main']
+1 = ['main']
+2 = ['main']
+3 = ['main']
+4 = ['main']
+5 = ['main']
+6 = ['main']
+7 = ['secondary', 'main']
+8 = ['secondary', 'main']
+9 = ['secondary', 'main']
