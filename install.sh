@@ -41,7 +41,13 @@ link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
 link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
 link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
 link "$REPO_DIR/config/borders"      "$HOME/.config/borders"
-link "$REPO_DIR/config/karabiner"    "$HOME/.config/karabiner"
+
+# Karabiner is COPIED, not symlinked: its background services can't read
+# configs living under ~/Documents (TCC folder protection) without Full
+# Disk Access. The repo copy is the source of truth on install.
+mkdir -p "$HOME/.config/karabiner"
+cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
+launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
 
 # theme scripts on PATH (aerospace's theme chord calls ~/.local/bin/theme-next)
 mkdir -p "$HOME/.local/bin"
