@@ -96,6 +96,17 @@ func cocoaRect(_ r: CGRect) -> CGRect {
         width: r.width, height: r.height)
 }
 
+func displayOf(_ r: CGRect) -> CGDirectDisplayID {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var n: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return 0 }
+    let c = CGPoint(x: r.midX, y: r.midY)
+    for i in 0..<Int(n) where CGDisplayBounds(ids[i]).contains(c) {
+        return ids[i]
+    }
+    return 0
+}
+
 func isFullscreen(_ r: CGRect) -> Bool {
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
     var n: UInt32 = 0
@@ -156,6 +167,11 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         return
     }
     guard f != lastFrame || !win.isVisible else { return }
+    // crossing displays: hide for the jump so the ring never visibly
+    // travels between screens
+    if win.isVisible, displayOf(f) != displayOf(lastFrame) {
+        win.orderOut(nil)
+    }
     lastFrame = f
 
     let radius = conf.appRadius[appName] ?? conf.radius
