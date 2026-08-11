@@ -112,10 +112,12 @@ log "Building aerospace-swipe (grant Accessibility when prompted)"
 # AutoRaise reads ~/.AutoRaise (no XDG support) — copied like karabiner
 cp "$REPO_DIR/config/autoraise/config" "$HOME/.AutoRaise"
 
-log "Starting sketchybar + borders + autoraise"
+log "Starting sketchybar + borders"
 brew services restart sketchybar
 brew services restart borders
-brew services restart autoraise
+
+log "Starting AutoRaise (grant Accessibility when prompted)"
+open -a AutoRaise
 
 log "Starting AeroSpace"
 open -a AeroSpace

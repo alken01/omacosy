@@ -9,7 +9,7 @@ cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
 brew "sketchybar"
 brew "borders"
-brew "autoraise"             # focus follows mouse (config: no raise, no warp)
+cask "autoraiseapp"          # focus follows mouse (app bundle: TCC prompts work)
 
 # CLI stack
 brew "fzf"
