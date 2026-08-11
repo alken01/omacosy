@@ -86,8 +86,8 @@ fi
 if [ ! -d "$HOME/.local/share/aerospace-swipe" ]; then
   git clone -q https://github.com/acsandmann/aerospace-swipe.git "$HOME/.local/share/aerospace-swipe"
 fi
-# macOS 26 fix: accumulate touches across gesture events (upstream counts
-# per-event, which never reaches the finger threshold on 26.3)
+# macOS 26 fix: read raw MultitouchSupport frames on all devices —
+# event taps no longer carry multi-touch data on 26.3
 if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-macos26-raw-multitouch.patch" 2>/dev/null; then
   git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-macos26-raw-multitouch.patch"
 fi
