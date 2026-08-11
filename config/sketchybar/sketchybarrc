@@ -75,6 +75,7 @@ sketchybar --add item front_app left \
 # --- Right side: clock, battery, volume ------------------------------------
 # clock: click toggles a calendar popup
 sketchybar --add item clock right \
+  --subscribe clock mouse.exited.global \
   --set clock update_freq=30 script="$PLUGIN_DIR/clock.sh" \
     click_script="$PLUGIN_DIR/calendar.sh" \
     popup.align=right \
@@ -91,7 +92,7 @@ sketchybar --add item battery right \
 
 # volume: scroll adjusts, click opens the sound menu, right-click mutes
 sketchybar --add item volume right \
-  --subscribe volume volume_change mouse.clicked mouse.scrolled \
+  --subscribe volume volume_change mouse.clicked mouse.scrolled mouse.exited.global \
   --set volume script="$PLUGIN_DIR/volume.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \

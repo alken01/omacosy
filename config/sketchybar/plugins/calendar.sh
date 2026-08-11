@@ -5,7 +5,17 @@
 
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
-if [ "$(sketchybar --query clock | jq -r '.popup.drawing' 2>/dev/null)" = "on" ]; then
+OPEN="$(sketchybar --query clock | jq -r '.popup.drawing' 2>/dev/null)"
+
+if [ "${1:-toggle}" = "close" ]; then
+  if [ "$OPEN" = "on" ]; then
+    sketchybar --set clock popup.drawing=off
+    sketchybar --remove '/clock.cal\..*/' >/dev/null 2>&1
+  fi
+  exit 0
+fi
+
+if [ "$OPEN" = "on" ]; then
   sketchybar --set clock popup.drawing=off
   sketchybar --remove '/clock.cal\..*/' >/dev/null 2>&1
   exit 0

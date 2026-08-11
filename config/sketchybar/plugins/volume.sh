@@ -3,6 +3,10 @@
 #   scroll = adjust, left click = toggle mute, right click = Sound settings
 
 case "$SENDER" in
+  mouse.exited.global)
+    "$CONFIG_DIR/plugins/volume_menu.sh" close
+    exit 0
+    ;;
   mouse.scrolled)
     DELTA="${SCROLL_DELTA:-0}"
     STEP=$(( DELTA > 0 ? 5 : -5 ))

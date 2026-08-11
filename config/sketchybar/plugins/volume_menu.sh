@@ -12,6 +12,10 @@ close() {
 }
 
 case "${1:-toggle}" in
+  close)
+    close
+    exit 0
+    ;;
   slider)
     # PERCENTAGE = where on the slider the user clicked
     osascript -e "set volume output volume ${PERCENTAGE:-50}"
