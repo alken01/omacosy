@@ -59,6 +59,28 @@ if [ ! -x "$HOME/.local/bin/omacosy-helper" ] || [ "$REPO_DIR/helper/main.swift"
   log "Building omacosy-helper"
   swiftc -O -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
 fi
+
+# focus-follows-mouse daemon (own binary so helper rebuilds never
+# invalidate its Accessibility grant); runs as a launchd agent
+if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
+  log "Building omacosy-ffm (grant Accessibility when prompted)"
+  swiftc -O -o "$HOME/.local/bin/omacosy-ffm" "$REPO_DIR/helper/ffm.swift"
+fi
+cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.omacosy.ffm</string>
+  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-ffm</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/omacosy-ffm.err</string>
+</dict>
+</plist>
+PLIST
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
+launchctl load "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist"
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 
@@ -109,15 +131,10 @@ log "Building aerospace-swipe (grant Accessibility when prompted)"
 "$REPO_DIR/macos-defaults.sh"
 
 # --- 7. Services ------------------------------------------------------------
-# AutoRaise reads ~/.AutoRaise (no XDG support) — copied like karabiner
-cp "$REPO_DIR/config/autoraise/config" "$HOME/.AutoRaise"
-
 log "Starting sketchybar + borders"
 brew services restart sketchybar
 brew services restart borders
 
-log "Starting AutoRaise (grant Accessibility when prompted)"
-open -a AutoRaise
 
 log "Starting AeroSpace"
 open -a AeroSpace

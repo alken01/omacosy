@@ -14,8 +14,8 @@ osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
 osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
 brew services stop sketchybar 2>/dev/null || true
 brew services stop borders 2>/dev/null || true
-osascript -e 'quit app "AutoRaise"' 2>/dev/null || true
-rm -f "$HOME/.AutoRaise"
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
 
 # aerospace-swipe: unload its launch agent and remove config
 if [ -d "$HOME/.local/share/aerospace-swipe" ]; then

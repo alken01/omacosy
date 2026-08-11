@@ -2,14 +2,12 @@
 
 tap "nikitabobko/tap"        # aerospace
 tap "FelixKratz/formulae"    # sketchybar, borders
-tap "dimentium/autoraise"    # focus follows mouse
 
 # Window management + bar + borders
 cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
 brew "sketchybar"
 brew "borders"
-cask "autoraiseapp"          # focus follows mouse (app bundle: TCC prompts work)
 
 # CLI stack
 brew "fzf"
