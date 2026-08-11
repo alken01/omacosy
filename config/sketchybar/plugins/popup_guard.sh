@@ -11,6 +11,7 @@ case "$ANCHOR" in
   clock) CHILD_RE='^clock\.cal\.' ;;
   volume) CHILD_RE='^volume\.(menu\.|slider)' ;;
   weather) CHILD_RE='^weather\.pop\.' ;;
+  wifi) CHILD_RE='^wifi\.pop\.' ;;
   *) exit 0 ;;
 esac
 
@@ -27,6 +28,7 @@ close_popup() {
       sketchybar --remove volume.slider >/dev/null 2>&1
       ;;
     weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
+    wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
   esac
 }
 
