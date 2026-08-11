@@ -26,6 +26,18 @@ fi
 mkdir -p "$CURRENT_DIR"
 ln -sfn "$THEMES_DIR/$NAME" "$CURRENT_DIR/theme"
 
+# Korren: prefer its hand-tuned built-in theme when one matches; fall
+# back to live-deriving from the omarchy palette. Korren watches its
+# config file, so this repaints immediately.
+KORREN_CFG="$HOME/Library/Application Support/korren/config.toml"
+case "$NAME" in
+  tokyo-night|catppuccin|gruvbox|solarized-dark|osaka-jade|daylight) korren_theme="$NAME" ;;
+  *) korren_theme="omarchy" ;;
+esac
+if [ -f "$KORREN_CFG" ]; then
+  sed -i '' "s/^name = \".*\"/name = \"$korren_theme\"/" "$KORREN_CFG"
+fi
+
 # sketchybar: full reload so the bar re-reads the palette
 command -v sketchybar >/dev/null && sketchybar --reload || true
 
