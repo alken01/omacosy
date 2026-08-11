@@ -29,8 +29,8 @@ sketchybar --default \
 # --- Apple menu (far left) ---------------------------------------------------
 sketchybar --add item apple left \
   --subscribe apple mouse.clicked \
-  --set apple icon="" icon.color="$ACCENT" icon.padding_left=10 icon.padding_right=10 label.drawing=off \
-    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 \
+  --set apple icon="" icon.color="$ACCENT" icon.font="JetBrainsMono Nerd Font:Bold:15.0" icon.padding_left=8 icon.padding_right=8 padding_right=10 label.drawing=off \
+    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=26 \
     script="$PLUGIN_DIR/apple.sh" \
     popup.align=left \
     popup.background.color="$BAR_BG_SOLID" \
