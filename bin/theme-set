@@ -38,6 +38,12 @@ if [ -f "$KORREN_CFG" ]; then
   sed -i '' "s/^name = \".*\"/name = \"$korren_theme\"/" "$KORREN_CFG"
 fi
 
+# Wallpaper: first image in the theme's backgrounds/ dir, on every desktop
+WALL="$(ls "$THEMES_DIR/$NAME"/backgrounds/* 2>/dev/null | head -1)"
+if [ -n "$WALL" ]; then
+  osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$WALL\"" >/dev/null 2>&1 || true
+fi
+
 # sketchybar: full reload so the bar re-reads the palette
 command -v sketchybar >/dev/null && sketchybar --reload || true
 
