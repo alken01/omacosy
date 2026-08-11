@@ -46,6 +46,11 @@ restore "$HOME/.config/starship.toml"
 restore "$HOME/.config/aerospace"
 restore "$HOME/.config/sketchybar"
 
+# re-enable Karabiner's helper agents we disabled
+for agent in Karabiner-Menu Karabiner-NotificationWindow; do
+  launchctl enable "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
+done
+
 # Karabiner's config is a copied real file (its daemons can't read
 # ~/Documents), so remove our copy rather than a symlink.
 rm -f "$HOME/.config/karabiner/karabiner.json"

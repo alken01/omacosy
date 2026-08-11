@@ -47,6 +47,14 @@ link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
 mkdir -p "$HOME/.config/karabiner"
 cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
 launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
+# Karabiner's Menu and NotificationWindow helper apps idle at ~135MB
+# combined and serve a menu-bar icon we hide; remapping lives in the
+# core service, which stays
+for agent in Karabiner-Menu Karabiner-NotificationWindow; do
+  launchctl bootout "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
+  launchctl disable "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
+done
+pkill -f "Karabiner-Menu|Karabiner-NotificationWindow" 2>/dev/null || true
 
 # theme scripts on PATH (aerospace's theme chord calls ~/.local/bin/theme-next)
 mkdir -p "$HOME/.local/bin"
