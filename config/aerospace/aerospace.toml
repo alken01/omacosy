@@ -128,7 +128,7 @@ cmd-ctrl-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
 # Apps (omarchy: Super+Shift+letter)
 cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files
 cmd-ctrl-alt-shift-m = 'exec-and-forget open -a Spotify' # music
-cmd-ctrl-alt-shift-s = 'exec-and-forget open -a Slack'   # slack
+cmd-ctrl-alt-shift-g = 'exec-and-forget open -a Slack'   # messenger (omarchy: G)
 
 # Theme cycle (T for theme; float lives on plain Super+T)
 cmd-ctrl-alt-shift-t = 'exec-and-forget $HOME/.local/bin/theme-next'

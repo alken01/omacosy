@@ -135,7 +135,11 @@ app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+t` | toggle floating |
 | `Super+j` | toggle split direction |
 | `Super+-` / `Super+=` | resize |
-| `Super+shift+f/m/s` | Finder / Spotify / Slack |
+| `Super+shift+f/m/g` | Finder / Spotify / Slack |
+| `Super+s` / `Super+shift+s` | scratchpad workspace (toggle / send window) |
+| `Super+l` | lock screen |
+| `Super+esc` |  system menu |
+| `Super+shift+b` | btop (floating) |
 | `Super+shift+t` | next theme |
 | `Super+r` | resize mode (`h/j/k/l`, `-`/`=`, `esc`) |
 | `Super+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
