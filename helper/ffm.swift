@@ -72,9 +72,6 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     let screens = displayBounds()
     for w in list { // list is front-to-back
-        // JankyBorders draws its rings as layer-0 windows exactly
-        // covering each tile — never hit-test them
-        if (w["kCGWindowOwnerName"] as? String) == "borders" { continue }
         guard (w["kCGWindowLayer"] as? Int) == 0,
             let b = w["kCGWindowBounds"] as? [String: Any],
             let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,

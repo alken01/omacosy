@@ -40,7 +40,6 @@ link "$REPO_DIR/zsh/zshrc"           "$HOME/.zshrc"
 link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
 link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
 link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
-link "$REPO_DIR/config/borders"      "$HOME/.config/borders"
 
 # Karabiner is COPIED, not symlinked: its background services can't read
 # configs living under ~/Documents (TCC folder protection) without Full
@@ -66,16 +65,38 @@ if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt
   log "Building omacosy-ffm (grant Accessibility when prompted)"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-ffm" "$REPO_DIR/helper/ffm.swift"
 fi
+
+# focused-window border ring (replaces JankyBorders; no permissions)
+if [ ! -x "$HOME/.local/bin/omacosy-borders" ] || [ "$REPO_DIR/helper/borders.swift" -nt "$HOME/.local/bin/omacosy-borders" ]; then
+  log "Building omacosy-borders"
+  swiftc -O -o "$HOME/.local/bin/omacosy-borders" "$REPO_DIR/helper/borders.swift"
+fi
 # stable code identity so TCC grants survive rebuilds (skipped when no
 # signing identity is present — then re-grant after each rebuild)
 if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Development"; then
   codesign -f -s "Apple Development" --identifier com.omacosy.helper "$HOME/.local/bin/omacosy-helper" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
+  codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
 fi
 
 # hover-ignore list (launchd agents can't read ~/Documents — copied)
 mkdir -p "$HOME/.config/omacosy"
 cp "$REPO_DIR/config/ffm-ignore" "$HOME/.config/omacosy/ffm-ignore"
+
+cat > "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.omacosy.borders</string>
+  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-borders</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+</dict>
+</plist>
+PLIST
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/null || true
+launchctl load "$HOME/Library/LaunchAgents/com.omacosy.borders.plist"
 
 cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -142,9 +163,8 @@ log "Building aerospace-swipe (grant Accessibility when prompted)"
 "$REPO_DIR/macos-defaults.sh"
 
 # --- 7. Services ------------------------------------------------------------
-log "Starting sketchybar + borders"
+log "Starting sketchybar"
 brew services restart sketchybar
-brew services restart borders
 
 
 log "Starting AeroSpace"

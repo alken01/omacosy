@@ -40,7 +40,7 @@ Privacy & Security):
 | Tiling WM | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | `config/aerospace/aerospace.toml` |
 | Super key | [Karabiner](https://karabiner-elements.pqrs.org) (Caps Lock → cmd+ctrl+alt) | `config/karabiner/` (copied, not symlinked — TCC) |
 | Status bar | [sketchybar](https://github.com/FelixKratz/SketchyBar) | `config/sketchybar/` |
-| Window borders | [JankyBorders](https://github.com/FelixKratz/JankyBorders) | `config/borders/bordersrc` |
+| Window borders | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | System glue | `omacosy-helper` (self-compiled, 64KB) | `helper/main.swift` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift` |
@@ -49,7 +49,11 @@ Privacy & Security):
 | Shell | zsh + oh-my-zsh | `zsh/zshrc` |
 | CLI stack | fzf, eza, zoxide, ripgrep, bat, lazygit, btop | wired in `zsh/zshrc` |
 
-`omacosy-ffm` provides focus-follows-mouse (AutoRaise is broken on
+`omacosy-borders` draws the focused-window ring (JankyBorders was
+retired: window-sized client bitmaps cost it hundreds of MB plus a
+known CGContext leak; ours strokes one CAShapeLayer the WindowServer
+rasterizes — no permissions, rounded corners, theme-aware via the
+active theme's borders.sh). `omacosy-ffm` provides focus-follows-mouse (AutoRaise is broken on
 macOS 26 — cooperative activation; and AX focus attributes silently
 no-op for Chromium apps like Arc, so it focuses via the same private
 SkyLight calls AeroSpace uses). `omacosy-helper` replaces four
@@ -103,7 +107,7 @@ Themes: `tokyo-night`, `catppuccin`, `gruvbox`, `osaka-jade`. Each
 
 - `colors.toml` — the 22-variable omarchy palette (read by Korren; names
   matching a Korren built-in use its hand-tuned version instead)
-- `sketchybar.sh` / `borders.sh` — bar and border colors
+- `sketchybar.sh` / `borders.sh` — bar and border-ring colors
 - `backgrounds/` — wallpaper (from omarchy's theme packs)
 
 To add a theme, copy a directory and adjust.
@@ -146,6 +150,6 @@ auto-land on 8, music on 9 via window rules).
 ./uninstall.sh
 ```
 
-Stops AeroSpace/sketchybar/borders/Karabiner/aerospace-swipe, restores
+Stops AeroSpace/sketchybar/Karabiner/aerospace-swipe and the omacosy agents, restores
 the native menu bar and any backed-up configs, removes the helper.
 Homebrew packages stay installed (removal command printed at the end).

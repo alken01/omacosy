@@ -13,7 +13,8 @@ log "Stopping AeroSpace, sketchybar, borders"
 osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
 osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
 brew services stop sketchybar 2>/dev/null || true
-brew services stop borders 2>/dev/null || true
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" "$HOME/.local/bin/omacosy-borders"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
 rm -rf "$HOME/.config/omacosy"
@@ -44,7 +45,6 @@ restore "$HOME/.zshrc"
 restore "$HOME/.config/starship.toml"
 restore "$HOME/.config/aerospace"
 restore "$HOME/.config/sketchybar"
-restore "$HOME/.config/borders"
 
 # Karabiner's config is a copied real file (its daemons can't read
 # ~/Documents), so remove our copy rather than a symlink.
@@ -75,7 +75,7 @@ fi
 cat <<'EOF'
 
 Done. Left in place on purpose:
-  - Homebrew packages (remove with: brew uninstall sketchybar borders && brew uninstall --cask aerospace karabiner-elements)
+  - Homebrew packages (remove with: brew uninstall sketchybar && brew uninstall --cask aerospace karabiner-elements)
   - Karabiner's Caps Lock remap stops once the app is quit/uninstalled.
   - The menu bar returns fully after logging out and back in.
   - Claude desktop's caps-lock dictation shortcut was removed during setup;

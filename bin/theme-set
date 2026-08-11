@@ -55,10 +55,6 @@ fi
 # sketchybar: full reload so the bar re-reads the palette
 command -v sketchybar >/dev/null && sketchybar --reload || true
 
-# borders: a running instance restyles in place when invoked again
-if command -v borders >/dev/null && pgrep -q borders; then
-  source "$CURRENT_DIR/theme/borders.sh"
-  borders active_color="$ACTIVE_COLOR" inactive_color="$INACTIVE_COLOR" >/dev/null 2>&1 || true
-fi
+# omacosy-borders re-reads the theme file on its own (mtime watch)
 
 echo "theme: $NAME"

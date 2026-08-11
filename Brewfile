@@ -7,7 +7,6 @@ tap "FelixKratz/formulae"    # sketchybar, borders
 cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
 brew "sketchybar"
-brew "borders"
 
 # CLI stack
 brew "fzf"
