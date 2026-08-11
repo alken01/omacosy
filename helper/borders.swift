@@ -127,8 +127,11 @@ func isFullscreen(_ r: CGRect) -> Bool {
     guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return false }
     for i in 0..<Int(n) {
         let d = CGDisplayBounds(ids[i])
-        if abs(d.origin.x - r.origin.x) < 2, abs(d.origin.y - r.origin.y) < 2,
-            abs(d.width - r.width) < 2, abs(d.height - r.height) < 2 {
+        guard d.intersects(r) else { continue }
+        // native fullscreen (incl. split-view halves and notch-adjusted
+        // frames): top-aligned and full display height. Managed windows
+        // never touch the display top — the bar owns that edge.
+        if abs(r.origin.y - d.origin.y) < 2, r.height >= d.height - 4 {
             return true
         }
     }
