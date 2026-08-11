@@ -191,6 +191,7 @@ var pendingApp = ""
 var pendingTicks = 0
 var justHid = true
 var lastFrame = CGRect.zero
+var lastWsSwitchAt = Date.distantPast
 shape.strokeColor = loadColor()
 shape.lineWidth = conf.width
 
@@ -214,21 +215,22 @@ func tick() {
     }
     missTicks = 0
 
-    // stability gate: mid-flight windows move every tick; only a frame
-    // seen identically across polls may be ringed. The old ring hides
-    // the moment the target changes — never display stale geometry.
+    // stability gate — but only where ghosts can exist: mid-flight
+    // frames occur around workspace switches (we get that signal), so
+    // demand stillness for 600ms after one and be instant otherwise.
+    // Ordinary focus changes ring in a single tick, like a compositor.
+    let inSwitchWindow = Date().timeIntervalSince(lastWsSwitchAt) < 0.6
+    let required = inSwitchWindow ? (justHid ? 4 : 2) : 1
     if f != pendingFrame || appName != pendingApp {
         pendingFrame = f
         pendingApp = appName
         pendingTicks = 1
         if win.isVisible, f != lastFrame { hideRing("target-changed") }
-        return
+        if required > 1 { return }
+    } else {
+        pendingTicks += 1
     }
-    pendingTicks += 1
-    // transitions come in bursts right after a hide: mid-flight frames
-    // can pause a beat, so the first show after hiding needs twice the
-    // stillness before the ring commits
-    if pendingTicks < (justHid ? 4 : 2) { return }
+    if pendingTicks < required { return }
     justHid = false
 
     guard f != lastFrame || !win.isVisible else { return }
@@ -296,7 +298,10 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
 // aerospace announces workspace switches by touching this file
 // (exec-on-workspace-change): hide instantly, don't wait for stale
 // frontmost/frame data to catch up
-watch("/tmp/omacosy-ws-switch", create: true) { hideRing("workspace-switch") }
+watch("/tmp/omacosy-ws-switch", create: true) {
+    lastWsSwitchAt = Date()
+    hideRing("workspace-switch")
+}
 
 // theme-set swaps the ~/.config/omarchy/current/theme symlink — watch
 // the directory; the file behind the old symlink never changes itself
