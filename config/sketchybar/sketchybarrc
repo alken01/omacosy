@@ -139,6 +139,12 @@ sketchybar --add item media.prev q \
 sketchybar --add bracket media media.prev media.play media.next media.title \
   --set media background.color="$ITEM_BG" background.corner_radius=4 background.height=26
 
+# q-position stacking is right-to-left and drifts across reloads; pin
+# the visual order (prev, play, next, title) explicitly
+sketchybar --move media.title before media.prev \
+  --move media.next after media.title \
+  --move media.play after media.next
+
 # --- Right side (first added = rightmost) -----------------------------------
 # activity: system monitor in the corner, opens btop floating in Ghostty
 sketchybar --add item activity right \

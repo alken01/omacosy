@@ -33,3 +33,7 @@ sketchybar --set media.title drawing=on label="$ARTIST — $TRACK" \
   --set media.play drawing=on icon="$PICON" \
   --set media.next drawing=on \
   --set media background.drawing=on
+# re-pin the order — q stacking drifts (see sketchybarrc)
+sketchybar --move media.title before media.prev \
+  --move media.next after media.title \
+  --move media.play after media.next
