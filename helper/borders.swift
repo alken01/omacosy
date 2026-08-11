@@ -169,6 +169,9 @@ func tlog(_ m: String) {
 
 var conf = loadConf()
 var missTicks = 0
+var pendingFrame = CGRect.zero
+var pendingApp = ""
+var pendingTicks = 0
 var lastFrame = CGRect.zero
 var lastMtime = Date.distantPast
 var lastConfMtime = confMtime()
@@ -201,6 +204,16 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         return
     }
     missTicks = 0
+    // stability gate: mid-flight windows move every tick; only a frame
+    // seen identically twice in a row may be ringed
+    if f != pendingFrame || appName != pendingApp {
+        pendingFrame = f
+        pendingApp = appName
+        pendingTicks = 1
+        return
+    }
+    pendingTicks += 1
+    if pendingTicks < 2 { return }
     guard f != lastFrame || !win.isVisible else { return }
     // crossing displays: hide for the jump so the ring never visibly
     // travels between screens
