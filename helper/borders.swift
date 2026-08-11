@@ -140,6 +140,19 @@ shape.fillColor = nil
 view.layer?.addSublayer(shape)
 win.contentView = view
 
+let logURL = URL(fileURLWithPath: "/tmp/omacosy-borders.log")
+let logFmt = ISO8601DateFormatter()
+func tlog(_ m: String) {
+    let line = "\(logFmt.string(from: Date())) \(m)\n"
+    if let h = try? FileHandle(forWritingTo: logURL) {
+        h.seekToEndOfFile()
+        h.write(line.data(using: .utf8)!)
+        try? h.close()
+    } else {
+        try? line.data(using: .utf8)!.write(to: logURL)
+    }
+}
+
 var conf = loadConf()
 var missTicks = 0
 var lastFrame = CGRect.zero
@@ -169,6 +182,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         if missTicks >= 3, win.isVisible {
             win.orderOut(nil)
             lastFrame = .zero
+            tlog("hide reason=miss-or-fullscreen")
         }
         return
     }
@@ -178,6 +192,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     // travels between screens
     if win.isVisible, displayOf(f) != displayOf(lastFrame) {
         win.orderOut(nil)
+        tlog("jump-display app=\(appName)")
     }
     lastFrame = f
 
@@ -194,7 +209,10 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     shape.path = CGPath(roundedRect: inset, cornerWidth: radius,
         cornerHeight: radius, transform: nil)
     CATransaction.commit()
-    if !win.isVisible { win.orderFrontRegardless() }
+    if !win.isVisible {
+        win.orderFrontRegardless()
+        tlog("show app=\(appName) f=\(Int(f.origin.x)),\(Int(f.origin.y)) \(Int(f.width))x\(Int(f.height))")
+    }
 }
 RunLoop.current.add(timer, forMode: .common)
 app.run()
