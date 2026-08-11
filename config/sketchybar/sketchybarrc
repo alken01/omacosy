@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# sketchybar — omarchy-style status bar. Colors come from the current theme.
+
+export PATH="/opt/homebrew/bin:$PATH"
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
+
+sketchybar --bar \
+  position=top \
+  height=34 \
+  color="$BAR_COLOR" \
+  padding_left=10 \
+  padding_right=10 \
+  corner_radius=0 \
+  y_offset=0 \
+  blur_radius=20
+
+sketchybar --default \
+  icon.font="JetBrainsMono Nerd Font:Bold:14.0" \
+  label.font="JetBrainsMono Nerd Font:SemiBold:13.0" \
+  icon.color="$ICON_COLOR" \
+  label.color="$LABEL_COLOR" \
+  icon.padding_left=6 \
+  icon.padding_right=4 \
+  label.padding_left=0 \
+  label.padding_right=6 \
+  background.corner_radius=6 \
+  background.height=24
+
+# --- Workspaces (AeroSpace) ------------------------------------------------
+sketchybar --add event aerospace_workspace_change
+
+for sid in $(aerospace list-workspaces --all); do
+  sketchybar --add item "space.$sid" left \
+    --subscribe "space.$sid" aerospace_workspace_change \
+    --set "space.$sid" \
+      label="$sid" \
+      icon.drawing=off \
+      label.padding_left=8 \
+      label.padding_right=8 \
+      background.color="$ITEM_BG" \
+      background.drawing=off \
+      click_script="aerospace workspace $sid" \
+      script="$PLUGIN_DIR/aerospace.sh $sid"
+done
+
+# --- Front app --------------------------------------------------------------
+sketchybar --add item front_app left \
+  --subscribe front_app front_app_switched \
+  --set front_app \
+    icon.drawing=off \
+    label.font="JetBrainsMono Nerd Font:Bold:13.0" \
+    label.color="$ACCENT" \
+    script="$PLUGIN_DIR/front_app.sh"
+
+# --- Right side: clock, battery, volume ------------------------------------
+sketchybar --add item clock right \
+  --set clock update_freq=30 script="$PLUGIN_DIR/clock.sh"
+
+sketchybar --add item battery right \
+  --subscribe battery system_woke power_source_change \
+  --set battery update_freq=120 script="$PLUGIN_DIR/battery.sh"
+
+sketchybar --add item volume right \
+  --subscribe volume volume_change \
+  --set volume script="$PLUGIN_DIR/volume.sh"
+
+sketchybar --update

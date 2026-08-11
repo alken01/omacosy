@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# JankyBorders — active-window highlight. Colors come from the current theme.
+
+source "$HOME/.config/omarchy/current/theme/borders.sh"
+
+borders \
+  style=round \
+  width=5.0 \
+  hidpi=on \
+  active_color="$ACTIVE_COLOR" \
+  inactive_color="$INACTIVE_COLOR"

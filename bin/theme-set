@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# theme-set <name> — switch the whole desktop theme in one move.
+# Swaps ~/.config/omarchy/current/theme (the omarchy convention), then
+# nudges every consumer: Korren live-reloads on its own (it watches the
+# omarchy dir), sketchybar reloads, borders restyles in place.
+
+set -euo pipefail
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+THEMES_DIR="$REPO_DIR/themes"
+CURRENT_DIR="$HOME/.config/omarchy/current"
+
+case "${1:-list}" in
+  list)
+    for t in "$THEMES_DIR"/*/; do basename "$t"; done
+    exit 0
+    ;;
+esac
+
+NAME="$1"
+if [ ! -d "$THEMES_DIR/$NAME" ]; then
+  echo "theme-set: unknown theme '$NAME'. Available:" >&2
+  for t in "$THEMES_DIR"/*/; do basename "$t"; done >&2
+  exit 1
+fi
+
+mkdir -p "$CURRENT_DIR"
+ln -sfn "$THEMES_DIR/$NAME" "$CURRENT_DIR/theme"
+
+# sketchybar: full reload so the bar re-reads the palette
+command -v sketchybar >/dev/null && sketchybar --reload || true
+
+# borders: a running instance restyles in place when invoked again
+if command -v borders >/dev/null && pgrep -q borders; then
+  source "$CURRENT_DIR/theme/borders.sh"
+  borders active_color="$ACTIVE_COLOR" inactive_color="$INACTIVE_COLOR" >/dev/null 2>&1 || true
+fi
+
+echo "theme: $NAME"
