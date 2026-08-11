@@ -2,7 +2,8 @@
 # theme-next — cycle to the next theme (bound to ctrl+alt+shift+space).
 
 set -euo pipefail
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# resolve through the ~/.local/bin symlink to the real repo
+REPO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 THEMES_DIR="$REPO_DIR/themes"
 
 themes=()
