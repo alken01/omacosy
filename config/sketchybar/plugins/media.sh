@@ -5,7 +5,7 @@
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
 hide() {
-  for S in media media2; do
+  for S in media_1 media_2 media_3 media_4; do
     sketchybar --set "$S.title" drawing=off \
       --set "$S.prev" drawing=off \
       --set "$S.play" drawing=off \
@@ -30,7 +30,7 @@ fi
 
 if [ "$STATE" = "playing" ]; then PICON="󰏤"; else PICON="󰐊"; fi
 
-for S in media media2; do
+for S in media_1 media_2 media_3 media_4; do
   sketchybar --set "$S.title" drawing=on label="$ARTIST — $TRACK" \
     --set "$S.prev" drawing=on \
     --set "$S.play" drawing=on icon="$PICON" \

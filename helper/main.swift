@@ -1,6 +1,7 @@
 // omacosy-helper — tiny compiled utility replacing four brew dependencies
 // (cliclick, desktoppr, switchaudio-osx, blueutil):
 //   cursor                  print the cursor position as "x,y" (CG top-left)
+//   displays                per display (arrangement order): "index<TAB>notched"
 //   wallpaper <path>        set the desktop picture on every screen
 //   audio list              output devices: "*<TAB>name" (current) / "-<TAB>name"
 //   audio set <name>        make <name> the default output device
@@ -75,6 +76,15 @@ switch args.count > 1 ? args[1] : "" {
 case "cursor":
     guard let e = CGEvent(source: nil) else { exit(1) }
     print("\(Int(e.location.x)),\(Int(e.location.y))")
+
+case "displays":
+    // arrangement-ordered (left to right, matching AeroSpace/sketchybar
+    // numbering): "<index><TAB><1 if notched else 0>"
+    let screens = NSScreen.screens.sorted { $0.frame.origin.x < $1.frame.origin.x }
+    for (i, scr) in screens.enumerated() {
+        let notched = scr.safeAreaInsets.top > 0 ? 1 : 0
+        print("\(i + 1)\t\(notched)")
+    }
 
 case "wallpaper":
     guard args.count > 2 else { fail("usage: wallpaper <path>") }

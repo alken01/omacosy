@@ -116,10 +116,9 @@ sketchybar --add item front_app left \
 # unusable on the laptop). Single display: joins the left cluster.
 sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
-MONITOR_COUNT="$(aerospace list-monitors 2>/dev/null | wc -l | tr -d ' ')"
-
-# one capsule definition, instantiated per display situation:
-#   media_capsule <prefix> <position> <display> <title_max_chars>
+# one capsule per display: centered where there's no notch, left
+# cluster where there is one (center = notch territory). Generic for
+# any display arrangement; omacosy-helper reports notch per display.
 media_capsule() {
   local pfx=$1 pos=$2 disp=$3 chars=$4
   sketchybar --add item "$pfx.prev" "$pos" \
@@ -139,18 +138,20 @@ media_capsule() {
     --set "$pfx" background.color="$ITEM_BG" background.corner_radius=4 background.height=26
 }
 
-if [ "${MONITOR_COUNT:-1}" -gt 1 ]; then
-  # docked: centered on the external display; the laptop bar gets a
-  # compact copy in its left cluster (center there is notch territory)
-  media_capsule media center 1 28
-  media_capsule media2 left 2 20
-else
-  media_capsule media left all 28
-fi
+FIRST_MEDIA=""
+while IFS=$'\t' read -r idx notched; do
+  [ -z "$idx" ] && continue
+  if [ "$notched" = "1" ]; then
+    media_capsule "media_$idx" left "$idx" 20
+  else
+    media_capsule "media_$idx" center "$idx" 28
+  fi
+  [ -z "$FIRST_MEDIA" ] && FIRST_MEDIA="media_$idx"
+done < <("$HOME/.local/bin/omacosy-helper" displays 2>/dev/null || printf '1\t0\n')
 
-# the title item carries the update wiring
-sketchybar --subscribe media.title spotify_change \
-  --set media.title update_freq=60 script="$PLUGIN_DIR/media.sh"
+# one title item carries the update wiring; the plugin repaints all sets
+[ -n "$FIRST_MEDIA" ] && sketchybar --subscribe "$FIRST_MEDIA.title" spotify_change \
+  --set "$FIRST_MEDIA.title" update_freq=60 script="$PLUGIN_DIR/media.sh"
 
 # relayout when displays come and go (docking)
 sketchybar --add item display_watcher left \
