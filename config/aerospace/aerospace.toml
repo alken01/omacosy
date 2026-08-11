@@ -87,7 +87,7 @@ cmd-ctrl-alt-shift-right = 'move right'
 # Layout (omarchy: Super+T float toggle, Super+J split toggle, Super+F fullscreen)
 cmd-ctrl-alt-t = 'layout floating tiling'
 cmd-ctrl-alt-j = 'layout tiles horizontal vertical'
-cmd-ctrl-alt-f = 'fullscreen'
+cmd-ctrl-alt-f = 'fullscreen --no-outer-gaps'
 
 # Resize (omarchy: Super+Minus / Super+Equal)
 cmd-ctrl-alt-minus = 'resize smart -50'

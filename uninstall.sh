@@ -36,7 +36,11 @@ restore "$HOME/.config/starship.toml"
 restore "$HOME/.config/aerospace"
 restore "$HOME/.config/sketchybar"
 restore "$HOME/.config/borders"
-restore "$HOME/.config/karabiner"
+
+# Karabiner's config is a copied real file (its daemons can't read
+# ~/Documents), so remove our copy rather than a symlink.
+rm -f "$HOME/.config/karabiner/karabiner.json"
+rmdir "$HOME/.config/karabiner" 2>/dev/null || true
 
 # Pre-omarchy-mac, ~/.zshrc pointed at the old dotbot repo — relink if
 # nothing else restored it and that repo is still around.
@@ -64,6 +68,9 @@ cat <<'EOF'
 Done. Left in place on purpose:
   - Homebrew packages (remove with: brew uninstall sketchybar borders && brew uninstall --cask aerospace karabiner-elements)
   - Karabiner's Caps Lock remap stops once the app is quit/uninstalled.
+  - The menu bar returns fully after logging out and back in.
+  - Claude desktop's caps-lock dictation shortcut was removed during setup;
+    re-enable it in Claude's settings if you used it.
   - If AeroSpace still appears in System Settings -> General -> Login Items, remove it there.
   - The repo itself and your shell tools (fzf, eza, zoxide, ...) are untouched.
 EOF
