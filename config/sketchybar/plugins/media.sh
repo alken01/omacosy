@@ -5,11 +5,13 @@
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
 hide() {
-  sketchybar --set media.title drawing=off \
-    --set media.prev drawing=off \
-    --set media.play drawing=off \
-    --set media.next drawing=off \
-    --set media background.drawing=off
+  for S in media media2; do
+    sketchybar --set "$S.title" drawing=off \
+      --set "$S.prev" drawing=off \
+      --set "$S.play" drawing=off \
+      --set "$S.next" drawing=off \
+      --set "$S" background.drawing=off 2>/dev/null
+  done
 }
 
 if ! pgrep -xq Spotify; then
@@ -28,8 +30,10 @@ fi
 
 if [ "$STATE" = "playing" ]; then PICON="󰏤"; else PICON="󰐊"; fi
 
-sketchybar --set media.title drawing=on label="$ARTIST — $TRACK" \
-  --set media.prev drawing=on \
-  --set media.play drawing=on icon="$PICON" \
-  --set media.next drawing=on \
-  --set media background.drawing=on
+for S in media media2; do
+  sketchybar --set "$S.title" drawing=on label="$ARTIST — $TRACK" \
+    --set "$S.prev" drawing=on \
+    --set "$S.play" drawing=on icon="$PICON" \
+    --set "$S.next" drawing=on \
+    --set "$S" background.drawing=on 2>/dev/null
+done
