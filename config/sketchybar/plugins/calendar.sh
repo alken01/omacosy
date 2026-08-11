@@ -42,3 +42,4 @@ done < <(cal | sed 's/ *$//')
 sketchybar --set clock.cal.0 label.color="$ACCENT" 2>/dev/null
 
 sketchybar --set clock popup.drawing=on
+("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" >/dev/null 2>&1 &)

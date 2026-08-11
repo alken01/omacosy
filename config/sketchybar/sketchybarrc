@@ -8,12 +8,11 @@ source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 sketchybar --bar \
   position=top \
   height=34 \
-  color="$BAR_COLOR" \
+  color=0x00000000 \
   padding_left=10 \
   padding_right=10 \
   corner_radius=0 \
   y_offset=0 \
-  blur_radius=20
 
 sketchybar --default \
   icon.font="JetBrainsMono Nerd Font:Bold:14.0" \
@@ -24,7 +23,7 @@ sketchybar --default \
   icon.padding_right=4 \
   label.padding_left=0 \
   label.padding_right=6 \
-  background.corner_radius=6 \
+  background.corner_radius=4 \
   background.height=24
 
 # --- Workspaces (AeroSpace) ------------------------------------------------
@@ -39,12 +38,16 @@ for sid in $WORKSPACES; do
     --subscribe "space.$sid" aerospace_workspace_change \
     --set "space.$sid" \
       label="$sid" \
+      padding_left=2 \
+      padding_right=2 \
       label.color="$MUTED" \
       icon.drawing=off \
       label.padding_left=8 \
       label.padding_right=8 \
-      background.color="$ITEM_BG" \
+      background.color="$ACCENT" \
       background.drawing=off \
+      background.corner_radius=4 \
+      background.height=20 \
       click_script="aerospace workspace $sid" \
       script="$PLUGIN_DIR/aerospace.sh $sid"
 done
@@ -53,11 +56,30 @@ done
 # aerospace monitor ids and sketchybar display numbers both follow the
 # arrangement order, so they map 1:1. Without aerospace the items keep
 # display=all (the fallback bar is still usable).
-for mid in $(aerospace list-monitors --format '%{monitor-id}' 2>/dev/null); do
-  for sid in $(aerospace list-workspaces --monitor "$mid" 2>/dev/null); do
-    sketchybar --set "space.$sid" display="$mid"
+MONITORS="$(aerospace list-monitors --format '%{monitor-id}' 2>/dev/null)"
+if [ -n "$MONITORS" ]; then
+  for mid in $MONITORS; do
+    MEMBERS=""
+    for sid in $(aerospace list-workspaces --monitor "$mid" 2>/dev/null); do
+      sketchybar --set "space.$sid" display="$mid"
+      MEMBERS="$MEMBERS space.$sid"
+    done
+    [ -n "$MEMBERS" ] && sketchybar --add bracket "spaces.$mid" $MEMBERS \
+      --set "spaces.$mid" \
+        background.color="$ITEM_BG" \
+        background.corner_radius=4 \
+        background.height=26
   done
-done
+else
+  # no aerospace yet: one capsule around the fallback set
+  MEMBERS=""
+  for sid in $WORKSPACES; do MEMBERS="$MEMBERS space.$sid"; done
+  sketchybar --add bracket spaces.all $MEMBERS \
+    --set spaces.all \
+      background.color="$ITEM_BG" \
+      background.corner_radius=4 \
+      background.height=26
+fi
 
 # paint initial focus/visibility state through the same plugin path
 sketchybar --trigger aerospace_workspace_change \
@@ -66,17 +88,47 @@ sketchybar --trigger aerospace_workspace_change \
 # --- Front app --------------------------------------------------------------
 sketchybar --add item front_app left \
   --subscribe front_app front_app_switched \
-  --set front_app \
+  --set front_app padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
     icon.drawing=off \
     label.font="JetBrainsMono Nerd Font:Bold:13.0" \
     label.color="$ACCENT" \
     script="$PLUGIN_DIR/front_app.sh"
 
+# --- Media (Spotify) --------------------------------------------------------
+# prev / play-pause / next / track title in one capsule; hides itself
+# when Spotify isn't running. Updates on Spotify's own notification.
+sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
+
+sketchybar --add item media.prev center \
+  --set media.prev icon="󰒮" label.drawing=off padding_left=6 \
+    click_script="osascript -e 'tell application \"Spotify\" to previous track'"
+
+sketchybar --add item media.play center \
+  --set media.play icon="󰐊" label.drawing=off \
+    click_script="osascript -e 'tell application \"Spotify\" to playpause'"
+
+sketchybar --add item media.next center \
+  --set media.next icon="󰒭" label.drawing=off \
+    click_script="osascript -e 'tell application \"Spotify\" to next track'"
+
+sketchybar --add item media.title center \
+  --subscribe media.title spotify_change \
+  --set media.title icon.drawing=off \
+    label.max_chars=40 \
+    label.padding_left=4 \
+    label.padding_right=10 \
+    update_freq=10 \
+    script="$PLUGIN_DIR/media.sh" \
+    click_script="open -a Spotify"
+
+sketchybar --add bracket media media.prev media.play media.next media.title \
+  --set media background.color="$ITEM_BG" background.corner_radius=4 background.height=26
+
 # --- Right side: clock, battery, volume ------------------------------------
 # clock: click toggles a calendar popup
 sketchybar --add item clock right \
   --subscribe clock mouse.exited.global \
-  --set clock update_freq=30 script="$PLUGIN_DIR/clock.sh" \
+  --set clock padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=30 script="$PLUGIN_DIR/clock.sh" \
     click_script="$PLUGIN_DIR/calendar.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \
@@ -87,13 +139,25 @@ sketchybar --add item clock right \
 # battery: click opens the Battery settings pane
 sketchybar --add item battery right \
   --subscribe battery system_woke power_source_change \
-  --set battery update_freq=120 script="$PLUGIN_DIR/battery.sh" \
+  --set battery padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=120 script="$PLUGIN_DIR/battery.sh" \
     click_script="open 'x-apple.systempreferences:com.apple.Battery-Settings.extension'"
 
 # volume: scroll adjusts, click opens the sound menu, right-click mutes
 sketchybar --add item volume right \
   --subscribe volume volume_change mouse.clicked mouse.scrolled mouse.exited.global \
-  --set volume script="$PLUGIN_DIR/volume.sh" \
+  --set volume padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 script="$PLUGIN_DIR/volume.sh" \
+    popup.align=right \
+    popup.background.color="$BAR_BG_SOLID" \
+    popup.background.corner_radius=8 \
+    popup.background.border_width=1 \
+    popup.background.border_color="$ACCENT"
+
+# weather: wttr.in pill, click for details popup (leftmost of the right cluster)
+sketchybar --add item weather right \
+  --subscribe weather mouse.clicked mouse.exited.global system_woke \
+  --set weather padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
+    update_freq=1800 \
+    script="$PLUGIN_DIR/weather.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \
     popup.background.corner_radius=8 \

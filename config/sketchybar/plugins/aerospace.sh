@@ -13,10 +13,9 @@ if [ "$SID" = "$FOCUSED" ]; then
     background.color="$ACCENT" \
     label.color="$BAR_BG_SOLID"
 elif [[ "$VISIBLE" == *" $SID "* ]]; then
-  # visible on its monitor but not focused: subtle pill
+  # visible on its monitor but not focused: bright number, no pill
   sketchybar --set "$NAME" \
-    background.drawing=on \
-    background.color="$ITEM_BG" \
+    background.drawing=off \
     label.color="$LABEL_COLOR"
 else
   sketchybar --set "$NAME" \
