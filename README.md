@@ -71,7 +71,8 @@ app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+shift+1..9` | move window to workspace |
 | `Super+tab` | previous workspace |
 | `Super+shift+tab` | throw workspace to other monitor |
-| `Super+f` | fullscreen |
+| `Super+f` | fullscreen (tiling-friendly) |
+| `Super+n` | native macOS fullscreen (claims the notch strip) |
 | `Super+t` | toggle floating |
 | `Super+j` | toggle split direction |
 | `Super+-` / `Super+=` | resize |

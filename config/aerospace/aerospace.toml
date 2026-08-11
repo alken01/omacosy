@@ -88,6 +88,9 @@ cmd-ctrl-alt-shift-right = 'move right'
 cmd-ctrl-alt-t = 'layout floating tiling'
 cmd-ctrl-alt-j = 'layout tiles horizontal vertical'
 cmd-ctrl-alt-f = 'fullscreen --no-outer-gaps'
+# native (green-button) fullscreen: the only mode that may claim the
+# notch strip on the built-in display; deliberate enter/exit only
+cmd-ctrl-alt-n = 'macos-native-fullscreen'
 
 # Resize (omarchy: Super+Minus / Super+Equal)
 cmd-ctrl-alt-minus = 'resize smart -50'
