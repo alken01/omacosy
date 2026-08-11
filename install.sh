@@ -109,9 +109,13 @@ log "Building aerospace-swipe (grant Accessibility when prompted)"
 "$REPO_DIR/macos-defaults.sh"
 
 # --- 7. Services ------------------------------------------------------------
-log "Starting sketchybar + borders"
+# AutoRaise reads ~/.AutoRaise (no XDG support) — copied like karabiner
+cp "$REPO_DIR/config/autoraise/config" "$HOME/.AutoRaise"
+
+log "Starting sketchybar + borders + autoraise"
 brew services restart sketchybar
 brew services restart borders
+brew services restart autoraise
 
 log "Starting AeroSpace"
 open -a AeroSpace

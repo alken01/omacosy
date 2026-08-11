@@ -14,6 +14,8 @@ osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
 osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
 brew services stop sketchybar 2>/dev/null || true
 brew services stop borders 2>/dev/null || true
+brew services stop autoraise 2>/dev/null || true
+rm -f "$HOME/.AutoRaise"
 
 # aerospace-swipe: unload its launch agent and remove config
 if [ -d "$HOME/.local/share/aerospace-swipe" ]; then

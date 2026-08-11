@@ -1,0 +1,4 @@
+#AutoRaise — focus follows mouse only: no raising (tiling), no mouse warping
+pollMillis=50
+delay=0
+focusDelay=1
