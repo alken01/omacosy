@@ -3,6 +3,18 @@
 
 export PATH="/opt/homebrew/bin:$PATH"
 PLUGIN_DIR="$CONFIG_DIR/plugins"
+
+# serialize reloads: two rc passes interleaving their --add calls
+# scramble the whole bar's item order (observed). A reload arriving
+# while one runs yields; stale locks (>30s) are broken.
+RELOAD_LOCK="${TMPDIR:-/tmp}/omacosy-bar-reload.lock"
+if ! mkdir "$RELOAD_LOCK" 2>/dev/null; then
+  AGE=$(( $(date +%s) - $(stat -f %m "$RELOAD_LOCK" 2>/dev/null || echo 0) ))
+  [ "$AGE" -lt 30 ] && exit 0
+  rmdir "$RELOAD_LOCK" 2>/dev/null
+  mkdir "$RELOAD_LOCK" 2>/dev/null || exit 0
+fi
+trap 'rmdir "$RELOAD_LOCK" 2>/dev/null' EXIT
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
 sketchybar --bar \
