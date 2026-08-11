@@ -103,7 +103,7 @@ sketchybar --trigger aerospace_workspace_change \
 # --- Front app --------------------------------------------------------------
 sketchybar --add item front_app left \
   --subscribe front_app front_app_switched \
-  --set front_app padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
+  --set front_app background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
     icon.drawing=off \
     label.font="JetBrainsMono Nerd Font:Bold:13.0" \
     label.color="$ACCENT" \
@@ -149,7 +149,7 @@ sketchybar --add item activity right \
 # clock: click toggles a calendar popup
 sketchybar --add item clock right \
   --subscribe clock mouse.exited.global \
-  --set clock padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=30 script="$PLUGIN_DIR/clock.sh" \
+  --set clock background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=30 script="$PLUGIN_DIR/clock.sh" \
     click_script="$PLUGIN_DIR/calendar.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \
@@ -160,13 +160,13 @@ sketchybar --add item clock right \
 # battery: click opens the Battery settings pane
 sketchybar --add item battery right \
   --subscribe battery system_woke power_source_change \
-  --set battery padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=120 script="$PLUGIN_DIR/battery.sh" \
+  --set battery background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=120 script="$PLUGIN_DIR/battery.sh" \
     click_script="open 'x-apple.systempreferences:com.apple.Battery-Settings.extension'"
 
 # volume: scroll adjusts, click opens the sound menu, right-click mutes
 sketchybar --add item volume right \
   --subscribe volume volume_change mouse.clicked mouse.scrolled mouse.exited.global \
-  --set volume padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 script="$PLUGIN_DIR/volume.sh" \
+  --set volume background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 script="$PLUGIN_DIR/volume.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \
     popup.background.corner_radius=8 \
@@ -176,7 +176,7 @@ sketchybar --add item volume right \
 # weather: wttr.in pill, click for details popup (leftmost of the right cluster)
 sketchybar --add item weather right \
   --subscribe weather mouse.clicked mouse.exited.global system_woke \
-  --set weather padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
+  --set weather background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
     update_freq=1800 \
     script="$PLUGIN_DIR/weather.sh" \
     popup.align=right \
@@ -188,7 +188,7 @@ sketchybar --add item weather right \
 # bluetooth: state pill, click for devices + power toggle + settings
 sketchybar --add item bluetooth right \
   --subscribe bluetooth mouse.clicked \
-  --set bluetooth padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
+  --set bluetooth background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
     update_freq=30 \
     script="$PLUGIN_DIR/bluetooth.sh" \
     popup.align=right \
@@ -200,7 +200,7 @@ sketchybar --add item bluetooth right \
 # wifi: SSID pill, click for details + power toggle + settings
 sketchybar --add item wifi right \
   --subscribe wifi wifi_change mouse.clicked \
-  --set wifi padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
+  --set wifi background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
     update_freq=30 \
     script="$PLUGIN_DIR/wifi.sh" \
     popup.align=right \
@@ -208,5 +208,12 @@ sketchybar --add item wifi right \
     popup.background.corner_radius=8 \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
+
+# uniform spacing: every pill in the right cluster (and the front-app
+# pill) gets the same gap, defined once
+GAP=14
+for it in activity clock battery volume bluetooth wifi weather front_app; do
+  sketchybar --set "$it" padding_left="$GAP" padding_right=0
+done
 
 sketchybar --update
