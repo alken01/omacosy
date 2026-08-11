@@ -141,6 +141,7 @@ view.layer?.addSublayer(shape)
 win.contentView = view
 
 var conf = loadConf()
+var missTicks = 0
 var lastFrame = CGRect.zero
 var lastMtime = Date.distantPast
 var lastConfMtime = confMtime()
@@ -162,10 +163,16 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     }
 
     guard let hit = focusedWindowFrame(), case let (f, appName) = hit, !isFullscreen(f) else {
-        if win.isVisible { win.orderOut(nil) }
-        lastFrame = .zero
+        // transient misses happen around app switches and popups —
+        // only hide after a few consecutive ones, or the ring blinks
+        missTicks += 1
+        if missTicks >= 3, win.isVisible {
+            win.orderOut(nil)
+            lastFrame = .zero
+        }
         return
     }
+    missTicks = 0
     guard f != lastFrame || !win.isVisible else { return }
     // crossing displays: hide for the jump so the ring never visibly
     // travels between screens
@@ -187,7 +194,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     shape.path = CGPath(roundedRect: inset, cornerWidth: radius,
         cornerHeight: radius, transform: nil)
     CATransaction.commit()
-    win.orderFrontRegardless()
+    if !win.isVisible { win.orderFrontRegardless() }
 }
 RunLoop.current.add(timer, forMode: .common)
 app.run()
