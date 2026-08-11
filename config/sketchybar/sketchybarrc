@@ -47,7 +47,6 @@ WORKSPACES="$(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7
 
 for sid in $WORKSPACES; do
   sketchybar --add item "space.$sid" left \
-    --subscribe "space.$sid" aerospace_workspace_change \
     --set "space.$sid" \
       label="$sid" \
       padding_left=2 \
@@ -60,9 +59,13 @@ for sid in $WORKSPACES; do
       background.drawing=off \
       background.corner_radius=4 \
       background.height=20 \
-      click_script="aerospace workspace $sid" \
-      script="$PLUGIN_DIR/aerospace.sh $sid"
+      click_script="aerospace workspace $sid"
 done
+
+# one hidden observer repaints every workspace item in a single pass
+sketchybar --add item spaces_observer left \
+  --subscribe spaces_observer aerospace_workspace_change \
+  --set spaces_observer drawing=off script="$PLUGIN_DIR/spaces.sh"
 
 # Each monitor's bar shows only its own workspaces (i3/omarchy style).
 # aerospace monitor ids and sketchybar display numbers both follow the
@@ -129,7 +132,7 @@ sketchybar --add item media.title center \
     label.max_chars=40 \
     label.padding_left=4 \
     label.padding_right=10 \
-    update_freq=10 \
+    update_freq=60 \
     script="$PLUGIN_DIR/media.sh" \
     click_script="open -a Spotify"
 
