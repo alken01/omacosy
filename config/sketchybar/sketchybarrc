@@ -116,7 +116,7 @@ sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
 
 sketchybar --add item media.prev left \
-  --set media.prev icon="󰒮" label.drawing=off padding_left=6 \
+  --set media.prev icon="󰒮" label.drawing=off \
     click_script="osascript -e 'tell application \"Spotify\" to previous track'"
 
 sketchybar --add item media.play left \
@@ -213,7 +213,7 @@ sketchybar --add item wifi right \
 # uniform spacing: every pill in the right cluster (and the front-app
 # pill) gets the same gap, defined once
 GAP=14
-for it in activity clock battery volume bluetooth wifi weather front_app; do
+for it in activity clock battery volume bluetooth wifi weather front_app media.prev; do
   sketchybar --set "$it" padding_left="$GAP" padding_right=0
 done
 
