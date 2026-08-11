@@ -15,6 +15,10 @@ if ! command -v brew >/dev/null 2>&1; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
+# Homebrew >=6 refuses third-party taps until explicitly trusted
+brew trust nikitabobko/tap 2>/dev/null || true
+brew trust felixkratz/formulae 2>/dev/null || true
+
 log "Installing packages (brew bundle)"
 brew bundle --file="$REPO_DIR/Brewfile"
 

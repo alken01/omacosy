@@ -30,11 +30,17 @@ sketchybar --default \
 # --- Workspaces (AeroSpace) ------------------------------------------------
 sketchybar --add event aerospace_workspace_change
 
-for sid in $(aerospace list-workspaces --all); do
+# Before AeroSpace has accessibility permission its server isn't up yet;
+# fall back to the standard workspace set so the bar is right either way.
+WORKSPACES="$(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7 8 9')"
+FOCUSED="$(aerospace list-workspaces --focused 2>/dev/null || echo '')"
+
+for sid in $WORKSPACES; do
   sketchybar --add item "space.$sid" left \
     --subscribe "space.$sid" aerospace_workspace_change \
     --set "space.$sid" \
       label="$sid" \
+      label.color="$MUTED" \
       icon.drawing=off \
       label.padding_left=8 \
       label.padding_right=8 \
@@ -42,6 +48,12 @@ for sid in $(aerospace list-workspaces --all); do
       background.drawing=off \
       click_script="aerospace workspace $sid" \
       script="$PLUGIN_DIR/aerospace.sh $sid"
+  if [ "$sid" = "$FOCUSED" ]; then
+    sketchybar --set "space.$sid" \
+      background.drawing=on \
+      background.color="$ACCENT" \
+      label.color="$BAR_BG_SOLID"
+  fi
 done
 
 # --- Front app --------------------------------------------------------------
