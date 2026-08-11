@@ -22,7 +22,7 @@ case "${1:-toggle}" in
     exit 0
     ;;
   select)
-    SwitchAudioSource -s "$2" >/dev/null
+    "$HOME/.local/bin/omacosy-helper" audio set "$2" >/dev/null
     close
     exit 0
     ;;
@@ -45,11 +45,10 @@ sketchybar --add slider volume.slider popup.volume 140 \
     script="$PLUGIN_DIR/volume_menu.sh slider" \
   --subscribe volume.slider mouse.clicked
 
-CURRENT="$(SwitchAudioSource -c -t output)"
 i=0
-while IFS= read -r dev; do
+while IFS=$'\t' read -r marker dev; do
   [ -z "$dev" ] && continue
-  if [ "$dev" = "$CURRENT" ]; then
+  if [ "$marker" = "*" ]; then
     ICON="󰄬" COLOR="$ACCENT"
   else
     ICON="·" COLOR="$LABEL_COLOR"
@@ -64,7 +63,7 @@ while IFS= read -r dev; do
       background.drawing=off \
       click_script="$PLUGIN_DIR/volume_menu.sh select \"$dev\""
   i=$((i + 1))
-done < <(SwitchAudioSource -a -t output)
+done < <("$HOME/.local/bin/omacosy-helper" audio list)
 
 sketchybar --set volume popup.drawing=on
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)

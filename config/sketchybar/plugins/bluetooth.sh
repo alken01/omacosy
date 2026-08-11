@@ -2,7 +2,8 @@
 # Bluetooth pill: state icon (+ connected-device count); click opens a
 # popup listing connected (accent, click to disconnect) and paired
 # (muted, click to connect) devices, plus power toggle and settings.
-# Requires blueutil and the Bluetooth privacy permission for sketchybar.
+# Requires the Bluetooth privacy permission for sketchybar (the helper
+# inherits it as a spawned child).
 export PATH="/opt/homebrew/bin:$PATH"
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,9 +14,9 @@ close_popup() {
 }
 
 render() {
-  POWER="$(blueutil -p 2>/dev/null)"
+  POWER="$("$HOME/.local/bin/omacosy-helper" bt power 2>/dev/null)"
   if [ -z "$POWER" ]; then
-    # no permission / blueutil unavailable
+    # no permission / helper unavailable
     sketchybar --set bluetooth icon="󰂲" icon.padding_right=10 label.drawing=off label.padding_right=0
     return
   fi
@@ -23,7 +24,7 @@ render() {
     sketchybar --set bluetooth icon="󰂲" icon.padding_right=4 label.drawing=on label="off" label.padding_right=10
     return
   fi
-  COUNT="$(blueutil --connected --format json 2>/dev/null | jq 'length')"
+  COUNT="$("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null | grep -c '^1')"
   if [ "${COUNT:-0}" -gt 0 ]; then
     sketchybar --set bluetooth icon="󰂱" icon.padding_right=4 label.drawing=on label="$COUNT" label.padding_right=10
   else
@@ -33,21 +34,21 @@ render() {
 
 case "${1:-}" in
   toggle_power)
-    blueutil -p toggle 2>/dev/null
+    "$HOME/.local/bin/omacosy-helper" bt power toggle >/dev/null 2>&1
     close_popup
     sleep 1
     render
     exit 0
     ;;
   connect)
-    blueutil --connect "$2" 2>/dev/null
+    "$HOME/.local/bin/omacosy-helper" bt connect "$2" 2>/dev/null
     close_popup
     sleep 1
     render
     exit 0
     ;;
   disconnect)
-    blueutil --disconnect "$2" 2>/dev/null
+    "$HOME/.local/bin/omacosy-helper" bt disconnect "$2" 2>/dev/null
     close_popup
     sleep 1
     render
@@ -62,7 +63,7 @@ case "$SENDER" in
       exit 0
     fi
     close_popup
-    POWER="$(blueutil -p 2>/dev/null)"
+    POWER="$("$HOME/.local/bin/omacosy-helper" bt power 2>/dev/null)"
     i=0
     if [ "$POWER" = "1" ]; then
       # connected devices: accent, click to disconnect
@@ -74,7 +75,7 @@ case "$SENDER" in
             label.padding_right=10 background.drawing=off \
             click_script="$PLUGIN_DIR/bluetooth.sh disconnect $addr"
         i=$((i + 1))
-      done < <(blueutil --connected --format json 2>/dev/null | jq -r '.[] | [.address, .name] | @tsv')
+      done < <("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null | awk -F'\t' '$1==1 {print $2 "\t" $3}')
       # paired but not connected: muted, click to connect (first 6)
       while IFS=$'\t' read -r addr name; do
         [ -z "$addr" ] && continue
@@ -84,7 +85,7 @@ case "$SENDER" in
             label.padding_right=10 background.drawing=off \
             click_script="$PLUGIN_DIR/bluetooth.sh connect $addr"
         i=$((i + 1))
-      done < <(blueutil --paired --format json 2>/dev/null | jq -r '.[] | select(.connected | not) | [.address, .name] | @tsv' | head -6)
+      done < <("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null | awk -F'\t' '$1==0 {print $2 "\t" $3}' | head -6)
     fi
     [ "$POWER" = "1" ] && TOGGLE_LABEL="turn Bluetooth off" || TOGGLE_LABEL="turn Bluetooth on"
     sketchybar --add item "bt.pop.$i" popup.bluetooth \

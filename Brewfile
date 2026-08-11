@@ -19,8 +19,6 @@ brew "lazygit"
 brew "btop"
 brew "starship"
 brew "jq"
-brew "switchaudio-osx"  # output-device switching for the bar's sound menu
-brew "blueutil"             # bluetooth control for the bar's bt menu
 
 # Nerd Font for sketchybar (Korren embeds its own)
 cask "font-jetbrains-mono-nerd-font"
