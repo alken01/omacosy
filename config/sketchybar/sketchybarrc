@@ -112,22 +112,33 @@ sketchybar --add item front_app left \
 # --- Media (Spotify) --------------------------------------------------------
 # prev / play-pause / next / track title in one capsule; hides itself
 # when Spotify isn't running. Updates on Spotify's own notification.
+# Docked: centered on the external display (the notch made center
+# unusable on the laptop). Single display: joins the left cluster.
 sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
+MONITOR_COUNT="$(aerospace list-monitors 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${MONITOR_COUNT:-1}" -gt 1 ]; then
+  MEDIA_POS=center
+  MEDIA_DISPLAY=1
+else
+  MEDIA_POS=left
+  MEDIA_DISPLAY=all
+fi
 
-sketchybar --add item media.prev left \
+
+sketchybar --add item media.prev "$MEDIA_POS" \
   --set media.prev icon="󰒮" label.drawing=off icon.padding_left=8 icon.padding_right=5 \
     click_script="osascript -e 'tell application \"Spotify\" to previous track'"
 
-sketchybar --add item media.play left \
+sketchybar --add item media.play "$MEDIA_POS" \
   --set media.play icon="󰐊" label.drawing=off icon.padding_left=5 icon.padding_right=5 \
     click_script="osascript -e 'tell application \"Spotify\" to playpause'"
 
-sketchybar --add item media.next left \
+sketchybar --add item media.next "$MEDIA_POS" \
   --set media.next icon="󰒭" label.drawing=off icon.padding_left=5 icon.padding_right=8 \
     click_script="osascript -e 'tell application \"Spotify\" to next track'"
 
-sketchybar --add item media.title left \
+sketchybar --add item media.title "$MEDIA_POS" \
   --subscribe media.title spotify_change \
   --set media.title icon.drawing=off \
     label.max_chars=28 \
@@ -137,8 +148,17 @@ sketchybar --add item media.title left \
     script="$PLUGIN_DIR/media.sh" \
     click_script="open -a Spotify"
 
+for it in media.prev media.play media.next media.title; do
+  sketchybar --set "$it" display="$MEDIA_DISPLAY"
+done
+
 sketchybar --add bracket media media.prev media.play media.next media.title \
   --set media background.color="$ITEM_BG" background.corner_radius=4 background.height=26
+
+# relayout when displays come and go (docking)
+sketchybar --add item display_watcher left \
+  --subscribe display_watcher display_change \
+  --set display_watcher drawing=off script="$PLUGIN_DIR/display_change.sh"
 
 # --- Right side (first added = rightmost) -----------------------------------
 # activity: system monitor in the corner, opens btop floating in Ghostty
