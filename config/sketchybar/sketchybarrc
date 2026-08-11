@@ -33,7 +33,6 @@ sketchybar --add event aerospace_workspace_change
 # Before AeroSpace has accessibility permission its server isn't up yet;
 # fall back to the standard workspace set so the bar is right either way.
 WORKSPACES="$(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7 8 9')"
-FOCUSED="$(aerospace list-workspaces --focused 2>/dev/null || echo '')"
 
 for sid in $WORKSPACES; do
   sketchybar --add item "space.$sid" left \
@@ -48,13 +47,21 @@ for sid in $WORKSPACES; do
       background.drawing=off \
       click_script="aerospace workspace $sid" \
       script="$PLUGIN_DIR/aerospace.sh $sid"
-  if [ "$sid" = "$FOCUSED" ]; then
-    sketchybar --set "space.$sid" \
-      background.drawing=on \
-      background.color="$ACCENT" \
-      label.color="$BAR_BG_SOLID"
-  fi
 done
+
+# Each monitor's bar shows only its own workspaces (i3/omarchy style).
+# aerospace monitor ids and sketchybar display numbers both follow the
+# arrangement order, so they map 1:1. Without aerospace the items keep
+# display=all (the fallback bar is still usable).
+for mid in $(aerospace list-monitors --format '%{monitor-id}' 2>/dev/null); do
+  for sid in $(aerospace list-workspaces --monitor "$mid" 2>/dev/null); do
+    sketchybar --set "space.$sid" display="$mid"
+  done
+done
+
+# paint initial focus/visibility state through the same plugin path
+sketchybar --trigger aerospace_workspace_change \
+  FOCUSED_WORKSPACE="$(aerospace list-workspaces --focused 2>/dev/null || echo '')"
 
 # --- Front app --------------------------------------------------------------
 sketchybar --add item front_app left \
