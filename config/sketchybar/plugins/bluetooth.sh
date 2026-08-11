@@ -16,18 +16,18 @@ render() {
   POWER="$(blueutil -p 2>/dev/null)"
   if [ -z "$POWER" ]; then
     # no permission / blueutil unavailable
-    sketchybar --set bluetooth icon="󰂲" label.drawing=off
+    sketchybar --set bluetooth icon="󰂲" icon.padding_right=10 label.drawing=off label.padding_right=0
     return
   fi
   if [ "$POWER" = "0" ]; then
-    sketchybar --set bluetooth icon="󰂲" label.drawing=on label="off"
+    sketchybar --set bluetooth icon="󰂲" icon.padding_right=4 label.drawing=on label="off" label.padding_right=10
     return
   fi
   COUNT="$(blueutil --connected --format json 2>/dev/null | jq 'length')"
   if [ "${COUNT:-0}" -gt 0 ]; then
-    sketchybar --set bluetooth icon="󰂱" label.drawing=on label="$COUNT"
+    sketchybar --set bluetooth icon="󰂱" icon.padding_right=4 label.drawing=on label="$COUNT" label.padding_right=10
   else
-    sketchybar --set bluetooth icon="󰂯" label.drawing=off
+    sketchybar --set bluetooth icon="󰂯" icon.padding_right=10 label.drawing=off label.padding_right=0
   fi
 }
 

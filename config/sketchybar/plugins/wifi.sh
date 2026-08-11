@@ -26,14 +26,14 @@ render() {
   SSID="$(ssid)"
   IP="$(ipconfig getifaddr "$DEV" 2>/dev/null)"
   if [ "$POWER" != "On" ]; then
-    sketchybar --set wifi icon="󰖪" label.drawing=on label="off"
+    sketchybar --set wifi icon="󰖪" icon.padding_right=4 label.drawing=on label="off" label.padding_right=10
   elif [ -n "$SSID" ]; then
-    sketchybar --set wifi icon="󰖩" label.drawing=on label="$SSID"
+    sketchybar --set wifi icon="󰖩" icon.padding_right=4 label.drawing=on label="$SSID" label.padding_right=10
   elif [ -n "$IP" ]; then
     # connected but macOS redacts the name: icon-only pill
-    sketchybar --set wifi icon="󰖩" label.drawing=off
+    sketchybar --set wifi icon="󰖩" icon.padding_right=10 label.drawing=off label.padding_right=0
   else
-    sketchybar --set wifi icon="󰖪" label.drawing=off
+    sketchybar --set wifi icon="󰖪" icon.padding_right=10 label.drawing=off label.padding_right=0
   fi
 }
 
