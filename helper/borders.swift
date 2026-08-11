@@ -191,6 +191,7 @@ var missTicks = 0
 var pendingFrame = CGRect.zero
 var pendingApp = ""
 var pendingTicks = 0
+var justHid = true
 var lastFrame = CGRect.zero
 var lastMtime = Date.distantPast
 var lastConfMtime = confMtime()
@@ -218,6 +219,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         if missTicks >= 3, win.isVisible {
             win.orderOut(nil)
             lastFrame = .zero
+            justHid = true
             tlog("hide reason=miss-or-fullscreen")
         }
         return
@@ -232,7 +234,11 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         return
     }
     pendingTicks += 1
-    if pendingTicks < 2 { return }
+    // transitions come in bursts right after a hide: mid-flight frames
+    // can pause a beat, so the first show after hiding needs twice the
+    // stillness before the ring commits
+    if pendingTicks < (justHid ? 4 : 2) { return }
+    justHid = false
     guard f != lastFrame || !win.isVisible else { return }
     // crossing displays: hide for the jump so the ring never visibly
     // travels between screens
