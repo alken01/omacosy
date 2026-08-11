@@ -114,19 +114,19 @@ sketchybar --add item front_app left \
 # when Spotify isn't running. Updates on Spotify's own notification.
 sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
-sketchybar --add item media.prev center \
+sketchybar --add item media.prev q \
   --set media.prev icon="󰒮" label.drawing=off padding_left=6 \
     click_script="osascript -e 'tell application \"Spotify\" to previous track'"
 
-sketchybar --add item media.play center \
+sketchybar --add item media.play q \
   --set media.play icon="󰐊" label.drawing=off \
     click_script="osascript -e 'tell application \"Spotify\" to playpause'"
 
-sketchybar --add item media.next center \
+sketchybar --add item media.next q \
   --set media.next icon="󰒭" label.drawing=off \
     click_script="osascript -e 'tell application \"Spotify\" to next track'"
 
-sketchybar --add item media.title center \
+sketchybar --add item media.title q \
   --subscribe media.title spotify_change \
   --set media.title icon.drawing=off \
     label.max_chars=40 \
