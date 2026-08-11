@@ -64,6 +64,12 @@ func loadColor() -> CGColor {
     return CGColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
 }
 
+let wsSwitchFile = URL(fileURLWithPath: "/tmp/omacosy-ws-switch")
+func wsSwitchMtime() -> Date {
+    (try? FileManager.default.attributesOfItem(atPath: wsSwitchFile.path)[.modificationDate] as? Date)
+        .flatMap { $0 } ?? .distantPast
+}
+
 func themeMtime() -> Date {
     (try? FileManager.default.attributesOfItem(atPath: themeFile.path)[.modificationDate] as? Date)
         .flatMap { $0 } ?? .distantPast
@@ -193,6 +199,7 @@ var pendingApp = ""
 var pendingTicks = 0
 var justHid = true
 var lastFrame = CGRect.zero
+var lastWsSwitch = wsSwitchMtime()
 var lastMtime = Date.distantPast
 var lastConfMtime = confMtime()
 shape.strokeColor = loadColor()
@@ -204,6 +211,22 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         lastMtime = mtime
         shape.strokeColor = loadColor()
     }
+    // aerospace announces workspace switches (exec-on-workspace-change
+    // touches this file): hide instantly instead of waiting out the
+    // stale frontmost/frame data those switches leave behind
+    let ws = wsSwitchMtime()
+    if ws != lastWsSwitch {
+        lastWsSwitch = ws
+        if win.isVisible {
+            win.orderOut(nil)
+            tlog("hide reason=workspace-switch")
+        }
+        lastFrame = .zero
+        justHid = true
+        pendingTicks = 0
+        return
+    }
+
     let cm = confMtime()
     if cm != lastConfMtime {
         lastConfMtime = cm
