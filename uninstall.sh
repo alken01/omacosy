@@ -16,6 +16,7 @@ brew services stop sketchybar 2>/dev/null || true
 brew services stop borders 2>/dev/null || true
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
+rm -rf "$HOME/.config/omacosy"
 
 # aerospace-swipe: unload its launch agent and remove config
 if [ -d "$HOME/.local/share/aerospace-swipe" ]; then

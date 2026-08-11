@@ -41,8 +41,19 @@ func slpsFocus(pid: pid_t, wid: UInt32) {
     bytes.withUnsafeMutableBufferPointer { _ = SLPSPostEvent(&psn, $0.baseAddress!) }
 }
 
+// Apps that hover must never focus (omarchy's JetBrains-style
+// no_follow_mouse). One app name per line, # comments.
+let ignoredApps: Set<String> = {
+    let f = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/omacosy/ffm-ignore")
+    guard let text = try? String(contentsOf: f, encoding: .utf8) else { return [] }
+    return Set(text.split(separator: "\n")
+        .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        .filter { !$0.isEmpty && !$0.hasPrefix("#") })
+}()
+
 let pollSeconds = 0.08
-let dwellTicks = 2
+let dwellTicks = 1
 
 var lastKey = ""
 var pendingKey = ""
@@ -73,6 +84,12 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid
         else { continue }
         let rect = CGRect(x: x, y: y, width: wd, height: h)
         guard rect.contains(p) else { continue }
+        // topmost window is ignore-listed: leave focus alone entirely
+        // (don't fall through to the window beneath)
+        if let owner = w["kCGWindowOwnerName"] as? String,
+            ignoredApps.contains(owner.lowercased()) {
+            return nil
+        }
         // AeroSpace hides inactive-workspace windows mostly offscreen
         // with a sliver visible — ignore anything <30% on-screen
         let visible = screens.reduce(CGFloat(0)) { acc, scr in
@@ -154,9 +171,9 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         pendingTicks += 1
         if pendingTicks >= dwellTicks {
             // cooldown: never two focus changes within 400ms — breaks any
-            // residual feedback loop with the window manager
+            // residual feedback loop with the window manager (250ms)
             let now = CFAbsoluteTimeGetCurrent()
-            if now - lastFocusAt > 0.4 {
+            if now - lastFocusAt > 0.25 {
                 slpsFocus(pid: hit.pid, wid: hit.wid)
                 focus(pid: hit.pid, rect: hit.rect)
                 lastFocusAt = now

@@ -73,6 +73,10 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
 fi
 
+# hover-ignore list (launchd agents can't read ~/Documents — copied)
+mkdir -p "$HOME/.config/omacosy"
+cp "$REPO_DIR/config/ffm-ignore" "$HOME/.config/omacosy/ffm-ignore"
+
 cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
