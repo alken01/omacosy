@@ -10,8 +10,39 @@
 import AppKit
 
 let pollSeconds = 0.08
-let ringWidth: CGFloat = 5
-let cornerRadius: CGFloat = 12
+
+// styling from ~/.config/omacosy/borders.conf (width, radius, per-app
+// radius overrides), re-read when the file changes
+struct Conf {
+    var width: CGFloat = 4
+    var radius: CGFloat = 10
+    var appRadius: [String: CGFloat] = [:]
+}
+let confFile = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent(".config/omacosy/borders.conf")
+
+func loadConf() -> Conf {
+    var c = Conf()
+    guard let text = try? String(contentsOf: confFile, encoding: .utf8) else { return c }
+    for raw in text.split(separator: "\n") {
+        let line = raw.trimmingCharacters(in: .whitespaces)
+        if line.isEmpty || line.hasPrefix("#") { continue }
+        guard let eq = line.firstIndex(of: "=") else { continue }
+        let key = String(line[..<eq]).trimmingCharacters(in: .whitespaces)
+        let val = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+        if key == "width", let v = Double(val) { c.width = CGFloat(v) }
+        else if key == "radius", let v = Double(val) { c.radius = CGFloat(v) }
+        else if key.hasPrefix("radius:"), let v = Double(val) {
+            c.appRadius[String(key.dropFirst(7)).lowercased()] = CGFloat(v)
+        }
+    }
+    return c
+}
+
+func confMtime() -> Date {
+    (try? FileManager.default.attributesOfItem(atPath: confFile.path)[.modificationDate] as? Date)
+        .flatMap { $0 } ?? .distantPast
+}
 
 let themeFile = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".config/omarchy/current/theme/borders.sh")
@@ -39,8 +70,10 @@ func themeMtime() -> Date {
 }
 
 // frontmost app's topmost normal window, in CG (top-left) coordinates
-func focusedWindowFrame() -> CGRect? {
-    guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return nil }
+func focusedWindowFrame() -> (CGRect, String)? {
+    guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
+    let pid = front.processIdentifier
+    let name = (front.localizedName ?? "").lowercased()
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     for w in list { // front-to-back
@@ -51,7 +84,7 @@ func focusedWindowFrame() -> CGRect? {
             let wd = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat,
             wd > 40, h > 40
         else { continue }
-        return CGRect(x: x, y: y, width: wd, height: h)
+        return (CGRect(x: x, y: y, width: wd, height: h), name)
     }
     return nil
 }
@@ -93,13 +126,15 @@ let view = NSView(frame: .zero)
 view.wantsLayer = true
 let shape = CAShapeLayer()
 shape.fillColor = nil
-shape.lineWidth = ringWidth
 view.layer?.addSublayer(shape)
 win.contentView = view
 
+var conf = loadConf()
 var lastFrame = CGRect.zero
 var lastMtime = Date.distantPast
+var lastConfMtime = confMtime()
 shape.strokeColor = loadColor()
+shape.lineWidth = conf.width
 
 let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     let mtime = themeMtime()
@@ -107,8 +142,15 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         lastMtime = mtime
         shape.strokeColor = loadColor()
     }
+    let cm = confMtime()
+    if cm != lastConfMtime {
+        lastConfMtime = cm
+        conf = loadConf()
+        shape.lineWidth = conf.width
+        lastFrame = .zero // force redraw with new geometry
+    }
 
-    guard let f = focusedWindowFrame(), !isFullscreen(f) else {
+    guard let hit = focusedWindowFrame(), case let (f, appName) = hit, !isFullscreen(f) else {
         if win.isVisible { win.orderOut(nil) }
         lastFrame = .zero
         return
@@ -116,7 +158,8 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     guard f != lastFrame || !win.isVisible else { return }
     lastFrame = f
 
-    let pad = ringWidth // ring sits just outside the window edge
+    let radius = conf.appRadius[appName] ?? conf.radius
+    let pad = conf.width // ring sits just outside the window edge
     let outer = cocoaRect(f.insetBy(dx: -pad, dy: -pad))
     // suppress implicit animations so the ring snaps with the window
     CATransaction.begin()
@@ -124,9 +167,9 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     win.setFrame(outer, display: false)
     let bounds = CGRect(origin: .zero, size: outer.size)
     shape.frame = bounds
-    let inset = bounds.insetBy(dx: ringWidth / 2, dy: ringWidth / 2)
-    shape.path = CGPath(roundedRect: inset, cornerWidth: cornerRadius,
-        cornerHeight: cornerRadius, transform: nil)
+    let inset = bounds.insetBy(dx: conf.width / 2, dy: conf.width / 2)
+    shape.path = CGPath(roundedRect: inset, cornerWidth: radius,
+        cornerHeight: radius, transform: nil)
     CATransaction.commit()
     win.orderFrontRegardless()
 }
