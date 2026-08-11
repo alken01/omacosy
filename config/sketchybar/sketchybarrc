@@ -114,18 +114,6 @@ sketchybar --add item front_app left \
 # when Spotify isn't running. Updates on Spotify's own notification.
 sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
-sketchybar --add item media.prev q \
-  --set media.prev icon="󰒮" label.drawing=off padding_left=6 \
-    click_script="osascript -e 'tell application \"Spotify\" to previous track'"
-
-sketchybar --add item media.play q \
-  --set media.play icon="󰐊" label.drawing=off \
-    click_script="osascript -e 'tell application \"Spotify\" to playpause'"
-
-sketchybar --add item media.next q \
-  --set media.next icon="󰒭" label.drawing=off \
-    click_script="osascript -e 'tell application \"Spotify\" to next track'"
-
 sketchybar --add item media.title q \
   --subscribe media.title spotify_change \
   --set media.title icon.drawing=off \
@@ -135,6 +123,18 @@ sketchybar --add item media.title q \
     update_freq=60 \
     script="$PLUGIN_DIR/media.sh" \
     click_script="open -a Spotify"
+
+sketchybar --add item media.next q \
+  --set media.next icon="󰒭" label.drawing=off \
+    click_script="osascript -e 'tell application \"Spotify\" to next track'"
+
+sketchybar --add item media.play q \
+  --set media.play icon="󰐊" label.drawing=off \
+    click_script="osascript -e 'tell application \"Spotify\" to playpause'"
+
+sketchybar --add item media.prev q \
+  --set media.prev icon="󰒮" label.drawing=off padding_left=6 \
+    click_script="osascript -e 'tell application \"Spotify\" to previous track'"
 
 sketchybar --add bracket media media.prev media.play media.next media.title \
   --set media background.color="$ITEM_BG" background.corner_radius=4 background.height=26
