@@ -42,6 +42,11 @@ run = 'layout floating'
 if.app-id = 'com.apple.systempreferences'
 run = 'layout floating'
 
+# TUI utility windows (activity monitor etc.) float like omarchy's
+[[on-window-detected]]
+if.window-title-regex-substring = 'omacosy-activity'
+run = 'layout floating'
+
 # Apps with a fixed home: messengers on 8, music on 9 (laptop display)
 [[on-window-detected]]
 if.app-id = 'com.tinyspeck.slackmacgap'

@@ -203,4 +203,10 @@ sketchybar --add item wifi right \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
 
+# activity: system monitor icon, opens btop floating in Korren
+sketchybar --add item activity right \
+  --set activity icon="󰍛" icon.color="$ACCENT" icon.padding_left=8 icon.padding_right=8 label.drawing=off \
+    padding_left=14 background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=26 \
+    click_script="open -na Ghostty --args --title=omacosy-activity -e btop"
+
 sketchybar --update
