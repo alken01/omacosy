@@ -231,6 +231,14 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         pendingFrame = f
         pendingApp = appName
         pendingTicks = 1
+        // never display stale geometry: the old ring hides the moment
+        // the target changes, and returns once the new one settles
+        if win.isVisible, f != lastFrame {
+            win.orderOut(nil)
+            lastFrame = .zero
+            justHid = true
+            tlog("hide reason=target-changed")
+        }
         return
     }
     pendingTicks += 1
