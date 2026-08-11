@@ -56,7 +56,7 @@ if [ ! -e "$HOME/.zshrc" ] && [ -f "$HOME/Documents/config/.dotfiles/zshrc" ]; t
 fi
 
 # theme-set / theme-next out of ~/.local/bin
-rm -f "$HOME/.local/bin/theme-set" "$HOME/.local/bin/theme-next"
+rm -f "$HOME/.local/bin/theme-set" "$HOME/.local/bin/theme-next" "$HOME/.local/bin/omacosy-helper"
 
 # omarchy theme convention dirs
 [ -L "$HOME/Library/Application Support/omarchy" ] && rm "$HOME/Library/Application Support/omarchy"

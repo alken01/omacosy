@@ -51,6 +51,14 @@ launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_us
 
 # theme scripts on PATH (aerospace's theme chord calls ~/.local/bin/theme-next)
 mkdir -p "$HOME/.local/bin"
+
+# tiny compiled helper (cursor position, wallpaper) — replaces the
+# cliclick and desktoppr dependencies; swiftc ships with the CLT that
+# Homebrew already requires
+if [ ! -x "$HOME/.local/bin/omacosy-helper" ] || [ "$REPO_DIR/helper/main.swift" -nt "$HOME/.local/bin/omacosy-helper" ]; then
+  log "Building omacosy-helper"
+  swiftc -O -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
+fi
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 

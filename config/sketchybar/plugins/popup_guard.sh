@@ -61,7 +61,7 @@ fi
 tick=0
 for _ in $(seq 1 500); do # ~75s ceiling
   sleep 0.12
-  POS="$(cliclick p 2>/dev/null)"
+  POS="$($HOME/.local/bin/omacosy-helper cursor 2>/dev/null)"
   X="${POS%,*}"
   Y="${POS#*,}"
   case "$X$Y" in '' | *[!0-9-]*) continue ;; esac

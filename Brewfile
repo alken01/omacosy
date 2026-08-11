@@ -20,10 +20,7 @@ brew "btop"
 brew "starship"
 brew "jq"
 brew "switchaudio-osx"  # output-device switching for the bar's sound menu
-brew "cliclick"             # cursor position for the popup auto-close guard
 brew "blueutil"             # bluetooth control for the bar's bt menu
-
-cask "desktoppr"            # reliable multi-display wallpaper setting (macOS 14+)
 
 # Nerd Font for sketchybar (Korren embeds its own)
 cask "font-jetbrains-mono-nerd-font"
