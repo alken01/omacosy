@@ -86,6 +86,9 @@ func focus(pid: pid_t, rect: CGRect) {
             dbg("  ax win pos=(\(Int(pos.x)),\(Int(pos.y))) size=(\(Int(size.width))x\(Int(size.height))) vs cg=(\(Int(rect.origin.x)),\(Int(rect.origin.y))) \(Int(rect.width))x\(Int(rect.height))")
             if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
                 abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
+                // raise first — Chromium apps often ignore main/frontmost
+                // without it; z-order changes are moot in tiling
+                AXUIElementPerformAction(win, kAXRaiseAction as CFString)
                 let r = AXUIElementSetAttributeValue(win, kAXMainAttribute as CFString, kCFBooleanTrue)
                 dbg("  -> matched, set main: \(r.rawValue)")
                 matched = true
@@ -114,7 +117,10 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     }
     guard let e = CGEvent(source: nil) else { return }
     guard let hit = topWindowUnder(e.location) else { pendingTicks = 0; return }
-    if hit.key == lastKey { pendingTicks = 0; return }
+    // judge "already focused" by reality, not our own bookkeeping — a
+    // silently failed focus attempt must be retried, not remembered
+    let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
+    if hit.pid == frontPid && hit.key == lastKey { pendingTicks = 0; return }
     if hit.key == pendingKey {
         pendingTicks += 1
         if pendingTicks >= dwellTicks {
