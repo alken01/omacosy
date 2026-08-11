@@ -1,18 +1,20 @@
 // omacosy-borders — focused-window ring, replacing JankyBorders.
 // One click-through overlay window whose CAShapeLayer stroke is
 // rasterized by the WindowServer (no window-sized client bitmaps — the
-// architecture that made JankyBorders cost hundreds of MB). Polls the
-// frontmost window like omacosy-ffm; needs no permissions at all.
+// architecture that made JankyBorders cost hundreds of MB). Needs no
+// permissions at all.
 //
-// Color comes from the active theme's borders.sh (ACTIVE_COLOR=0xAARRGGBB),
-// re-read whenever the file's mtime changes, so theme-set keeps working
-// without talking to this daemon.
+// Hybrid event/poll design: everything that HAS an event is
+// event-driven (kqueue watches on the workspace-switch signal, theme
+// and config; NSWorkspace app-activation notifications); the 120ms
+// poll remains solely as frame truth, because window move/resize has
+// no public event without an Accessibility grant.
 import AppKit
 
-let pollSeconds = 0.08
+let pollSeconds = 0.12
 
 // styling from ~/.config/omacosy/borders.conf (width, radius, per-app
-// radius overrides), re-read when the file changes
+// radius overrides)
 struct Conf {
     var width: CGFloat = 4
     var radius: CGFloat = 10
@@ -39,11 +41,6 @@ func loadConf() -> Conf {
     return c
 }
 
-func confMtime() -> Date {
-    (try? FileManager.default.attributesOfItem(atPath: confFile.path)[.modificationDate] as? Date)
-        .flatMap { $0 } ?? .distantPast
-}
-
 let themeFile = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".config/omarchy/current/theme/borders.sh")
 
@@ -64,17 +61,6 @@ func loadColor() -> CGColor {
     return CGColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
 }
 
-let wsSwitchFile = URL(fileURLWithPath: "/tmp/omacosy-ws-switch")
-func wsSwitchMtime() -> Date {
-    (try? FileManager.default.attributesOfItem(atPath: wsSwitchFile.path)[.modificationDate] as? Date)
-        .flatMap { $0 } ?? .distantPast
-}
-
-func themeMtime() -> Date {
-    (try? FileManager.default.attributesOfItem(atPath: themeFile.path)[.modificationDate] as? Date)
-        .flatMap { $0 } ?? .distantPast
-}
-
 // frontmost app's topmost normal window, in CG (top-left) coordinates
 func focusedWindowFrame() -> (CGRect, String)? {
     guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
@@ -93,7 +79,7 @@ func focusedWindowFrame() -> (CGRect, String)? {
         let rect = CGRect(x: x, y: y, width: wd, height: h)
         // AeroSpace drags windows through offscreen stash positions
         // during workspace switches — ringing those mid-flight frames
-        // is the flicker. Only mostly-onscreen windows qualify.
+        // is flicker. Only mostly-onscreen windows qualify.
         var ids = [CGDirectDisplayID](repeating: 0, count: 8)
         var n: UInt32 = 0
         var visible: CGFloat = 0
@@ -116,20 +102,8 @@ func cocoaRect(_ r: CGRect) -> CGRect {
         width: r.width, height: r.height)
 }
 
-func displayOf(_ r: CGRect) -> CGDirectDisplayID {
-    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
-    var n: UInt32 = 0
-    guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return 0 }
-    let c = CGPoint(x: r.midX, y: r.midY)
-    for i in 0..<Int(n) where CGDisplayBounds(ids[i]).contains(c) {
-        return ids[i]
-    }
-    return 0
-}
-
 // notch height (safe-area top) of the NSScreen matching a CG display —
-// fullscreen windows on notched displays start below the camera strip,
-// not at the display's top edge
+// fullscreen windows on notched displays start below the camera strip
 func safeTop(for d: CGRect) -> CGFloat {
     let primaryH = NSScreen.screens.first?.frame.height ?? 0
     for scr in NSScreen.screens {
@@ -160,6 +134,32 @@ func isFullscreen(_ r: CGRect) -> Bool {
     return false
 }
 
+func displayOf(_ r: CGRect) -> CGDirectDisplayID {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var n: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return 0 }
+    let c = CGPoint(x: r.midX, y: r.midY)
+    for i in 0..<Int(n) where CGDisplayBounds(ids[i]).contains(c) {
+        return ids[i]
+    }
+    return 0
+}
+
+let logURL = URL(fileURLWithPath: "/tmp/omacosy-borders.log")
+let logFmt = ISO8601DateFormatter()
+func tlog(_ m: String) {
+    let line = "\(logFmt.string(from: Date())) \(m)\n"
+    if let h = try? FileHandle(forWritingTo: logURL) {
+        h.seekToEndOfFile()
+        h.write(line.data(using: .utf8)!)
+        try? h.close()
+    } else {
+        try? line.data(using: .utf8)!.write(to: logURL)
+    }
+}
+
+// --- window ------------------------------------------------------------
+
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 
@@ -179,18 +179,7 @@ shape.fillColor = nil
 view.layer?.addSublayer(shape)
 win.contentView = view
 
-let logURL = URL(fileURLWithPath: "/tmp/omacosy-borders.log")
-let logFmt = ISO8601DateFormatter()
-func tlog(_ m: String) {
-    let line = "\(logFmt.string(from: Date())) \(m)\n"
-    if let h = try? FileHandle(forWritingTo: logURL) {
-        h.seekToEndOfFile()
-        h.write(line.data(using: .utf8)!)
-        try? h.close()
-    } else {
-        try? line.data(using: .utf8)!.write(to: logURL)
-    }
-}
+// --- state + tick ------------------------------------------------------
 
 var conf = loadConf()
 var missTicks = 0
@@ -199,69 +188,37 @@ var pendingApp = ""
 var pendingTicks = 0
 var justHid = true
 var lastFrame = CGRect.zero
-var lastWsSwitch = wsSwitchMtime()
-var lastMtime = Date.distantPast
-var lastConfMtime = confMtime()
 shape.strokeColor = loadColor()
 shape.lineWidth = conf.width
 
-let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
-    let mtime = themeMtime()
-    if mtime != lastMtime {
-        lastMtime = mtime
-        shape.strokeColor = loadColor()
+func hideRing(_ reason: String) {
+    if win.isVisible {
+        win.orderOut(nil)
+        tlog("hide reason=\(reason)")
     }
-    // aerospace announces workspace switches (exec-on-workspace-change
-    // touches this file): hide instantly instead of waiting out the
-    // stale frontmost/frame data those switches leave behind
-    let ws = wsSwitchMtime()
-    if ws != lastWsSwitch {
-        lastWsSwitch = ws
-        if win.isVisible {
-            win.orderOut(nil)
-            tlog("hide reason=workspace-switch")
-        }
-        lastFrame = .zero
-        justHid = true
-        pendingTicks = 0
-        return
-    }
+    lastFrame = .zero
+    justHid = true
+    pendingTicks = 0
+}
 
-    let cm = confMtime()
-    if cm != lastConfMtime {
-        lastConfMtime = cm
-        conf = loadConf()
-        shape.lineWidth = conf.width
-        lastFrame = .zero // force redraw with new geometry
-    }
-
+func tick() {
     guard let hit = focusedWindowFrame(), case let (f, appName) = hit, !isFullscreen(f) else {
         // transient misses happen around app switches and popups —
         // only hide after a few consecutive ones, or the ring blinks
         missTicks += 1
-        if missTicks >= 3, win.isVisible {
-            win.orderOut(nil)
-            lastFrame = .zero
-            justHid = true
-            tlog("hide reason=miss-or-fullscreen")
-        }
+        if missTicks >= 3 { hideRing("miss-or-fullscreen") }
         return
     }
     missTicks = 0
+
     // stability gate: mid-flight windows move every tick; only a frame
-    // seen identically twice in a row may be ringed
+    // seen identically across polls may be ringed. The old ring hides
+    // the moment the target changes — never display stale geometry.
     if f != pendingFrame || appName != pendingApp {
         pendingFrame = f
         pendingApp = appName
         pendingTicks = 1
-        // never display stale geometry: the old ring hides the moment
-        // the target changes, and returns once the new one settles
-        if win.isVisible, f != lastFrame {
-            win.orderOut(nil)
-            lastFrame = .zero
-            justHid = true
-            tlog("hide reason=target-changed")
-        }
+        if win.isVisible, f != lastFrame { hideRing("target-changed") }
         return
     }
     pendingTicks += 1
@@ -270,6 +227,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     // stillness before the ring commits
     if pendingTicks < (justHid ? 4 : 2) { return }
     justHid = false
+
     guard f != lastFrame || !win.isVisible else { return }
     // crossing displays: hide for the jump so the ring never visibly
     // travels between screens
@@ -282,7 +240,6 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     let radius = conf.appRadius[appName] ?? conf.radius
     let pad = conf.width // ring sits just outside the window edge
     let outer = cocoaRect(f.insetBy(dx: -pad, dy: -pad))
-    // suppress implicit animations so the ring snaps with the window
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     win.setFrame(outer, display: false)
@@ -297,5 +254,65 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         tlog("show app=\(appName) f=\(Int(f.origin.x)),\(Int(f.origin.y)) \(Int(f.width))x\(Int(f.height))")
     }
 }
+
+// --- event sources -----------------------------------------------------
+
+var sources: [any DispatchSourceFileSystemObject] = []
+
+// kqueue watch with auto re-arm: editors and cp replace files (rename),
+// so a dead vnode watch must recreate itself against the new file
+func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
+    if create, !FileManager.default.fileExists(atPath: path) {
+        FileManager.default.createFile(atPath: path, contents: nil)
+    }
+    let fd = open(path, O_EVTONLY)
+    guard fd >= 0 else {
+        // target missing (e.g. theme not applied yet): retry later
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            watch(path, create: create, handler: handler)
+        }
+        return
+    }
+    let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd,
+        eventMask: [.write, .attrib, .delete, .rename], queue: .main)
+    src.setEventHandler {
+        let ev = src.data
+        handler()
+        if ev.contains(.delete) || ev.contains(.rename) { src.cancel() }
+    }
+    src.setCancelHandler {
+        close(fd)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            watch(path, create: create, handler: handler)
+        }
+    }
+    sources.append(src)
+    src.resume()
+}
+
+// aerospace announces workspace switches by touching this file
+// (exec-on-workspace-change): hide instantly, don't wait for stale
+// frontmost/frame data to catch up
+watch("/tmp/omacosy-ws-switch", create: true) { hideRing("workspace-switch") }
+
+// theme-set swaps the ~/.config/omarchy/current/theme symlink — watch
+// the directory; the file behind the old symlink never changes itself
+watch(FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent(".config/omarchy/current").path, create: false) {
+    shape.strokeColor = loadColor()
+}
+
+watch(confFile.path, create: false) {
+    conf = loadConf()
+    shape.lineWidth = conf.width
+    lastFrame = .zero // force redraw with new geometry
+}
+
+// app activation: react now instead of on the next poll
+NSWorkspace.shared.notificationCenter.addObserver(
+    forName: NSWorkspace.didActivateApplicationNotification,
+    object: nil, queue: .main) { _ in tick() }
+
+let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in tick() }
 RunLoop.current.add(timer, forMode: .common)
 app.run()
