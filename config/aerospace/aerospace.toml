@@ -42,6 +42,23 @@ run = 'layout floating'
 if.app-id = 'com.apple.systempreferences'
 run = 'layout floating'
 
+# Apps with a fixed home: messengers on 8, music on 9 (laptop display)
+[[on-window-detected]]
+if.app-id = 'com.tinyspeck.slackmacgap'
+run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
+if.app-id = 'org.whispersystems.signal-desktop'
+run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
+if.app-id = 'net.whatsapp.WhatsApp'
+run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
+if.app-id = 'com.spotify.client'
+run = 'move-node-to-workspace 9'
+
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
 # omarchy: Super for window management, Super+Shift for moving and apps.
 [mode.main.binding]
