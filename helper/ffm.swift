@@ -18,6 +18,7 @@ let dwellTicks = 2
 var lastKey = ""
 var pendingKey = ""
 var pendingTicks = 0
+var lastFocusAt = 0.0
 
 func displayBounds() -> [CGRect] {
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
@@ -26,7 +27,7 @@ func displayBounds() -> [CGRect] {
     return (0..<Int(n)).map { CGDisplayBounds(ids[$0]) }
 }
 
-func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String)? {
+func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect)? {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     let screens = displayBounds()
@@ -49,24 +50,37 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String)? {
         if rect.width * rect.height > 0, visible / (rect.width * rect.height) < 0.3 {
             continue
         }
-        return (pid, "\(pid):\(num)")
+        return (pid, "\(pid):\(num)", rect)
     }
     return nil
 }
 
-func focus(pid: pid_t, at p: CGPoint) {
-    // element under the cursor -> its window -> make it main
-    let system = AXUIElementCreateSystemWide()
-    var element: AXUIElement?
-    if AXUIElementCopyElementAtPosition(system, Float(p.x), Float(p.y), &element) == .success,
-        let el = element {
-        var winRef: CFTypeRef?
-        if AXUIElementCopyAttributeValue(el, kAXWindowAttribute as CFString, &winRef) == .success {
-            let win = winRef as! AXUIElement
-            AXUIElementSetAttributeValue(win, kAXMainAttribute as CFString, kCFBooleanTrue)
+// Focus exactly the window our filtered hit-test chose: find the AX
+// window whose frame matches the CG rect. Never re-hit-test via AX —
+// AXUIElementCopyElementAtPosition does its own unfiltered lookup and
+// returns AeroSpace's offscreen-stashed slivers, causing focus loops.
+func focus(pid: pid_t, rect: CGRect) {
+    let app = AXUIElementCreateApplication(pid)
+    var winsRef: CFTypeRef?
+    if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &winsRef) == .success,
+        let wins = winsRef as? [AXUIElement] {
+        for win in wins {
+            var posRef: CFTypeRef?
+            var sizeRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(win, kAXPositionAttribute as CFString, &posRef) == .success,
+                AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sizeRef) == .success
+            else { continue }
+            var pos = CGPoint.zero
+            var size = CGSize.zero
+            AXValueGetValue(posRef as! AXValue, .cgPoint, &pos)
+            AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+            if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
+                abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
+                AXUIElementSetAttributeValue(win, kAXMainAttribute as CFString, kCFBooleanTrue)
+                break
+            }
         }
     }
-    let app = AXUIElementCreateApplication(pid)
     AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
 }
 
@@ -91,8 +105,14 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     if hit.key == pendingKey {
         pendingTicks += 1
         if pendingTicks >= dwellTicks {
-            focus(pid: hit.pid, at: e.location)
-            lastKey = hit.key
+            // cooldown: never two focus changes within 400ms — breaks any
+            // residual feedback loop with the window manager
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastFocusAt > 0.4 {
+                focus(pid: hit.pid, rect: hit.rect)
+                lastFocusAt = now
+                lastKey = hit.key
+            }
             pendingTicks = 0
         }
     } else {
