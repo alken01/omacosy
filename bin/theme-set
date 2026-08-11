@@ -38,10 +38,17 @@ if [ -f "$KORREN_CFG" ]; then
   sed -i '' "s/^name = \".*\"/name = \"$korren_theme\"/" "$KORREN_CFG"
 fi
 
-# Wallpaper: first image in the theme's backgrounds/ dir, on every desktop
+# Wallpaper: first image in the theme's backgrounds/ dir, on every screen.
+# desktoppr is the reliable path on macOS 14+ (System Events wallpaper
+# scripting half-broke there: some desktops return "missing value" and
+# silently keep the old picture); the osascript call remains as fallback.
 WALL="$(ls "$THEMES_DIR/$NAME"/backgrounds/* 2>/dev/null | head -1)"
 if [ -n "$WALL" ]; then
-  osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$WALL\"" >/dev/null 2>&1 || true
+  if command -v desktoppr >/dev/null 2>&1; then
+    desktoppr all "$WALL" >/dev/null 2>&1 || true
+  else
+    osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$WALL\"" >/dev/null 2>&1 || true
+  fi
 fi
 
 # sketchybar: full reload so the bar re-reads the palette
