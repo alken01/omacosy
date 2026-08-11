@@ -121,6 +121,20 @@ func displayOf(_ r: CGRect) -> CGDirectDisplayID {
     return 0
 }
 
+// notch height (safe-area top) of the NSScreen matching a CG display —
+// fullscreen windows on notched displays start below the camera strip,
+// not at the display's top edge
+func safeTop(for d: CGRect) -> CGFloat {
+    let primaryH = NSScreen.screens.first?.frame.height ?? 0
+    for scr in NSScreen.screens {
+        let cgY = primaryH - scr.frame.maxY
+        if abs(scr.frame.origin.x - d.origin.x) < 2, abs(cgY - d.origin.y) < 2 {
+            return scr.safeAreaInsets.top
+        }
+    }
+    return 0
+}
+
 func isFullscreen(_ r: CGRect) -> Bool {
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
     var n: UInt32 = 0
@@ -128,10 +142,12 @@ func isFullscreen(_ r: CGRect) -> Bool {
     for i in 0..<Int(n) {
         let d = CGDisplayBounds(ids[i])
         guard d.intersects(r) else { continue }
-        // native fullscreen (incl. split-view halves and notch-adjusted
-        // frames): top-aligned and full display height. Managed windows
-        // never touch the display top — the bar owns that edge.
-        if abs(r.origin.y - d.origin.y) < 2, r.height >= d.height - 4 {
+        // native fullscreen (incl. split-view halves): starts at the
+        // display top or just below the notch strip, and spans the
+        // remaining height. Managed windows never do — the bar owns
+        // that edge.
+        let inset = safeTop(for: d)
+        if r.origin.y - d.origin.y < inset + 3, r.height >= d.height - inset - 6 {
             return true
         }
     }
