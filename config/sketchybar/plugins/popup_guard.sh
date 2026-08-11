@@ -13,6 +13,7 @@ case "$ANCHOR" in
   weather) CHILD_RE='^weather\.pop\.' ;;
   wifi) CHILD_RE='^wifi\.pop\.' ;;
   bluetooth) CHILD_RE='^bt\.pop\.' ;;
+  apple) CHILD_RE='^apple\.pop\.' ;;
   *) exit 0 ;;
 esac
 
@@ -31,6 +32,7 @@ close_popup() {
     weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
     wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
     bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
+    apple) sketchybar --remove '/apple\.pop\..*/' >/dev/null 2>&1 ;;
   esac
 }
 

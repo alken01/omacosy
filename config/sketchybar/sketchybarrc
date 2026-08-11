@@ -26,6 +26,18 @@ sketchybar --default \
   background.corner_radius=4 \
   background.height=24
 
+# --- Apple menu (far left) ---------------------------------------------------
+sketchybar --add item apple left \
+  --subscribe apple mouse.clicked \
+  --set apple icon="" icon.color="$ACCENT" icon.padding_left=10 icon.padding_right=10 label.drawing=off \
+    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 \
+    script="$PLUGIN_DIR/apple.sh" \
+    popup.align=left \
+    popup.background.color="$BAR_BG_SOLID" \
+    popup.background.corner_radius=8 \
+    popup.background.border_width=1 \
+    popup.background.border_color="$ACCENT"
+
 # --- Workspaces (AeroSpace) ------------------------------------------------
 sketchybar --add event aerospace_workspace_change
 

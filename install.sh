@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# omarchy-mac bootstrap — clone this repo anywhere, run this once.
+# omacosy bootstrap — clone this repo anywhere, run this once.
 # Idempotent: safe to re-run after pulling changes.
 
 set -euo pipefail

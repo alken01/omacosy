@@ -159,9 +159,9 @@ if [[ -z "$_comps" ]] && [[ -t 0 ]]; then autoload -Uz compinit && compinit -i -
 [ -f "$HOME/.zsh/completion/_b2" ] && source "$HOME/.zsh/completion/_b2"
 # <<< b2 autocomplete <<<
 
-# >>> omarchy-mac >>>
-export OMARCHY_MAC="$HOME/Documents/paul/repos/omarchy-mac"
-export PATH="$OMARCHY_MAC/bin:$PATH"
+# >>> omacosy >>>
+export OMACOSY="$HOME/Documents/paul/repos/omacosy"
+export PATH="$OMACOSY/bin:$PATH"
 
 # CLI stack
 eval "$(zoxide init zsh)"
@@ -173,4 +173,4 @@ alias la='eza -lah --group-directories-first --icons=auto'
 alias lt='eza --tree --level=2 --icons=auto'
 alias cat='bat --paging=never'
 alias lg='lazygit'
-# <<< omarchy-mac <<<
+# <<< omacosy <<<

@@ -1,4 +1,4 @@
-# omarchy-mac
+# omacosy
 
 An [omarchy](https://omarchy.org)-style setup for macOS: tiling window
 management, a themed status bar, active-window borders, a unified theme
@@ -7,8 +7,8 @@ switcher, and the CLI stack — all bootstrapped from this one repo.
 ## Fresh Mac
 
 ```sh
-git clone git@github.com:paulsp94/omarchy-mac.git ~/Documents/paul/repos/omarchy-mac
-~/Documents/paul/repos/omarchy-mac/install.sh
+git clone git@github.com:paulsp94/omacosy.git ~/Documents/paul/repos/omacosy
+~/Documents/paul/repos/omacosy/install.sh
 ```
 
 The installer is idempotent — re-run it after pulling changes. It installs

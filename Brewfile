@@ -1,4 +1,4 @@
-# omarchy-mac — everything the setup needs, installable via `brew bundle`
+# omacosy — everything the setup needs, installable via `brew bundle`
 
 tap "nikitabobko/tap"        # aerospace
 tap "FelixKratz/formulae"    # sketchybar, borders

@@ -48,7 +48,7 @@ restore "$HOME/.config/borders"
 rm -f "$HOME/.config/karabiner/karabiner.json"
 rmdir "$HOME/.config/karabiner" 2>/dev/null || true
 
-# Pre-omarchy-mac, ~/.zshrc pointed at the old dotbot repo — relink if
+# Pre-omacosy, ~/.zshrc pointed at the old dotbot repo — relink if
 # nothing else restored it and that repo is still around.
 if [ ! -e "$HOME/.zshrc" ] && [ -f "$HOME/Documents/config/.dotfiles/zshrc" ]; then
   log "Relinking ~/.zshrc to the legacy dotfiles repo"
