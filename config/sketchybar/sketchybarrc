@@ -8,12 +8,14 @@ PLUGIN_DIR="$CONFIG_DIR/plugins"
 # scramble the whole bar's item order (observed). A reload arriving
 # while one runs yields; stale locks (>30s) are broken.
 RELOAD_LOCK="${TMPDIR:-/tmp}/omacosy-bar-reload.lock"
-if ! mkdir "$RELOAD_LOCK" 2>/dev/null; then
+for _ in $(seq 1 80); do
+  mkdir "$RELOAD_LOCK" 2>/dev/null && break
   AGE=$(( $(date +%s) - $(stat -f %m "$RELOAD_LOCK" 2>/dev/null || echo 0) ))
-  [ "$AGE" -lt 30 ] && exit 0
-  rmdir "$RELOAD_LOCK" 2>/dev/null
-  mkdir "$RELOAD_LOCK" 2>/dev/null || exit 0
-fi
+  # sketchybar kills superseded rc passes without their traps firing,
+  # so stale locks are normal — break them fast
+  [ "$AGE" -ge 5 ] && rmdir "$RELOAD_LOCK" 2>/dev/null
+  sleep 0.1
+done
 trap 'rmdir "$RELOAD_LOCK" 2>/dev/null' EXIT
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
