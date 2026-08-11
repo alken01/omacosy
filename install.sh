@@ -80,10 +80,22 @@ else
   log "Created Korren config (theme follows omarchy)"
 fi
 
-# --- 5. macOS look ----------------------------------------------------------
+# --- 5. Trackpad workspace swipes (aerospace-swipe) -------------------------
+# Built from source; installs a user launch agent. Config is COPIED (same
+# TCC constraint as Karabiner: launch agents can't read ~/Documents).
+if [ ! -d "$HOME/.local/share/aerospace-swipe" ]; then
+  git clone -q https://github.com/acsandmann/aerospace-swipe.git "$HOME/.local/share/aerospace-swipe"
+fi
+mkdir -p "$HOME/.config/aerospace-swipe"
+cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
+log "Building aerospace-swipe (grant Accessibility when prompted)"
+(cd "$HOME/.local/share/aerospace-swipe" && make install) || \
+  echo "aerospace-swipe install failed — run manually: cd ~/.local/share/aerospace-swipe && make install"
+
+# --- 6. macOS look ----------------------------------------------------------
 "$REPO_DIR/macos-defaults.sh"
 
-# --- 6. Services ------------------------------------------------------------
+# --- 7. Services ------------------------------------------------------------
 log "Starting sketchybar + borders"
 brew services restart sketchybar
 brew services restart borders

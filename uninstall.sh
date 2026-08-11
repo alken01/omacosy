@@ -15,6 +15,12 @@ osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
 brew services stop sketchybar 2>/dev/null || true
 brew services stop borders 2>/dev/null || true
 
+# aerospace-swipe: unload its launch agent and remove config
+if [ -d "$HOME/.local/share/aerospace-swipe" ]; then
+  (cd "$HOME/.local/share/aerospace-swipe" && make uninstall) 2>/dev/null || true
+fi
+rm -rf "$HOME/.config/aerospace-swipe"
+
 # --- 2. Native menu bar back ------------------------------------------------
 defaults delete NSGlobalDomain _HIHideMenuBar 2>/dev/null || true
 killall SystemUIServer 2>/dev/null || true
