@@ -41,6 +41,12 @@ link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
 link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
 link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
 link "$REPO_DIR/config/borders"      "$HOME/.config/borders"
+link "$REPO_DIR/config/karabiner"    "$HOME/.config/karabiner"
+
+# theme scripts on PATH (aerospace's theme chord calls ~/.local/bin/theme-next)
+mkdir -p "$HOME/.local/bin"
+link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
+link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 
 # --- 3. omarchy theme convention -------------------------------------------
 # Canonical theme state lives at ~/.config/omarchy/current/theme (what the
@@ -68,7 +74,10 @@ else
   log "Created Korren config (theme follows omarchy)"
 fi
 
-# --- 5. Services ------------------------------------------------------------
+# --- 5. macOS look ----------------------------------------------------------
+"$REPO_DIR/macos-defaults.sh"
+
+# --- 6. Services ------------------------------------------------------------
 log "Starting sketchybar + borders"
 brew services restart sketchybar
 brew services restart borders
@@ -76,12 +85,18 @@ brew services restart borders
 log "Starting AeroSpace"
 open -a AeroSpace
 
+log "Starting Karabiner-Elements (Caps Lock -> Super)"
+open -a Karabiner-Elements
+
 cat <<'EOF'
 
-Done. Two one-time macOS steps if this is a fresh machine:
-  1. Grant AeroSpace  System Settings -> Privacy & Security -> Accessibility
-  2. Korren isn't in the Brewfile — build it from the korren repo:
+Done. One-time macOS steps if this is a fresh machine:
+  1. Grant AeroSpace   System Settings -> Privacy & Security -> Accessibility
+  2. Karabiner-Elements: approve its driver extension + Input Monitoring
+     when prompted (System Settings -> Privacy & Security)
+  3. Korren isn't in the Brewfile — build it from the korren repo:
        ./packaging/macos/build-app.sh --install
 
-Switch themes any time:  theme-set <tokyo-night|catppuccin|gruvbox>
+Super = hold Caps Lock. Switch themes:  theme-set <name>  or  Super+Shift+T
+Back to a normal Mac any time:  ./uninstall.sh
 EOF

@@ -1,4 +1,6 @@
-# AeroSpace — i3-style tiling for macOS (omarchy-flavored keybindings, alt as mod)
+# AeroSpace — i3-like tiling for macOS with omarchy's keybinding scheme.
+# "Super" = Caps Lock, remapped by Karabiner to cmd+ctrl+alt — a combo
+# nothing on macOS uses, so bindings never collide with typing or apps.
 # Docs: https://nikitabobko.github.io/AeroSpace/guide
 
 config-version = 2
@@ -30,58 +32,75 @@ outer.bottom = 8
 outer.right = 8
 outer.top = 42  # room for sketchybar
 
+# Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
+# omarchy: Super for window management, Super+Shift for moving and apps.
 [mode.main.binding]
-# Terminal
-alt-enter = 'exec-and-forget open -na Korren'
+# Terminal / browser (omarchy: Super+Return, Super+Shift+Return)
+cmd-ctrl-alt-enter = 'exec-and-forget open -na Korren'
+cmd-ctrl-alt-shift-enter = 'exec-and-forget open -a Arc'
 
-# Focus (vim keys)
-alt-h = 'focus left'
-alt-j = 'focus down'
-alt-k = 'focus up'
-alt-l = 'focus right'
+# Launcher (omarchy: Super+Space)
+cmd-ctrl-alt-space = 'exec-and-forget open -a Raycast'
 
-# Move windows
-alt-shift-h = 'move left'
-alt-shift-j = 'move down'
-alt-shift-k = 'move up'
-alt-shift-l = 'move right'
+# Close window (omarchy: Super+W)
+cmd-ctrl-alt-w = 'close'
 
-# Layouts
-alt-slash = 'layout tiles horizontal vertical'
-alt-comma = 'layout accordion horizontal vertical'
-alt-f = 'fullscreen'
-alt-v = 'layout floating tiling'
+# Focus (omarchy: Super+Arrows)
+cmd-ctrl-alt-left = 'focus left'
+cmd-ctrl-alt-down = 'focus down'
+cmd-ctrl-alt-up = 'focus up'
+cmd-ctrl-alt-right = 'focus right'
 
-# Close window
-alt-shift-q = 'close'
+# Move windows (omarchy: Super+Shift+Arrows)
+cmd-ctrl-alt-shift-left = 'move left'
+cmd-ctrl-alt-shift-down = 'move down'
+cmd-ctrl-alt-shift-up = 'move up'
+cmd-ctrl-alt-shift-right = 'move right'
 
-# Workspaces
-alt-1 = 'workspace 1'
-alt-2 = 'workspace 2'
-alt-3 = 'workspace 3'
-alt-4 = 'workspace 4'
-alt-5 = 'workspace 5'
-alt-6 = 'workspace 6'
-alt-7 = 'workspace 7'
-alt-8 = 'workspace 8'
-alt-9 = 'workspace 9'
+# Layout (omarchy: Super+T float toggle, Super+J split toggle, Super+F fullscreen)
+cmd-ctrl-alt-t = 'layout floating tiling'
+cmd-ctrl-alt-j = 'layout tiles horizontal vertical'
+cmd-ctrl-alt-f = 'fullscreen'
 
-alt-shift-1 = 'move-node-to-workspace 1'
-alt-shift-2 = 'move-node-to-workspace 2'
-alt-shift-3 = 'move-node-to-workspace 3'
-alt-shift-4 = 'move-node-to-workspace 4'
-alt-shift-5 = 'move-node-to-workspace 5'
-alt-shift-6 = 'move-node-to-workspace 6'
-alt-shift-7 = 'move-node-to-workspace 7'
-alt-shift-8 = 'move-node-to-workspace 8'
-alt-shift-9 = 'move-node-to-workspace 9'
+# Resize (omarchy: Super+Minus / Super+Equal)
+cmd-ctrl-alt-minus = 'resize smart -50'
+cmd-ctrl-alt-equal = 'resize smart +50'
 
-alt-tab = 'workspace-back-and-forth'
-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+# Workspaces (omarchy: Super+N, Super+Shift+N, Super+Tab)
+cmd-ctrl-alt-1 = 'workspace 1'
+cmd-ctrl-alt-2 = 'workspace 2'
+cmd-ctrl-alt-3 = 'workspace 3'
+cmd-ctrl-alt-4 = 'workspace 4'
+cmd-ctrl-alt-5 = 'workspace 5'
+cmd-ctrl-alt-6 = 'workspace 6'
+cmd-ctrl-alt-7 = 'workspace 7'
+cmd-ctrl-alt-8 = 'workspace 8'
+cmd-ctrl-alt-9 = 'workspace 9'
+
+cmd-ctrl-alt-shift-1 = 'move-node-to-workspace 1'
+cmd-ctrl-alt-shift-2 = 'move-node-to-workspace 2'
+cmd-ctrl-alt-shift-3 = 'move-node-to-workspace 3'
+cmd-ctrl-alt-shift-4 = 'move-node-to-workspace 4'
+cmd-ctrl-alt-shift-5 = 'move-node-to-workspace 5'
+cmd-ctrl-alt-shift-6 = 'move-node-to-workspace 6'
+cmd-ctrl-alt-shift-7 = 'move-node-to-workspace 7'
+cmd-ctrl-alt-shift-8 = 'move-node-to-workspace 8'
+cmd-ctrl-alt-shift-9 = 'move-node-to-workspace 9'
+
+cmd-ctrl-alt-tab = 'workspace-back-and-forth'
+cmd-ctrl-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+
+# Apps (omarchy: Super+Shift+letter)
+cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files
+cmd-ctrl-alt-shift-m = 'exec-and-forget open -a Spotify' # music
+cmd-ctrl-alt-shift-s = 'exec-and-forget open -a Slack'   # slack
+
+# Theme cycle (T for theme; float lives on plain Super+T)
+cmd-ctrl-alt-shift-t = 'exec-and-forget $HOME/.local/bin/theme-next'
 
 # Modes
-alt-r = 'mode resize'
-alt-shift-semicolon = 'mode service'
+cmd-ctrl-alt-r = 'mode resize'
+cmd-ctrl-alt-shift-semicolon = 'mode service'
 
 [mode.resize.binding]
 h = 'resize width -50'
@@ -97,3 +116,16 @@ esc = 'mode main'
 esc = ['reload-config', 'mode main']
 r = ['flatten-workspace-tree', 'mode main']  # reset layout
 backspace = ['close-all-windows-but-current', 'mode main']
+
+# 1-6 live on the external display, 7-9 on the laptop; each falls back
+# to whatever is present so single-display use still works.
+[workspace-to-monitor-force-assignment]
+1 = ['dell', 'main']
+2 = ['dell', 'main']
+3 = ['dell', 'main']
+4 = ['dell', 'main']
+5 = ['dell', 'main']
+6 = ['dell', 'main']
+7 = ['built-in', 'main']
+8 = ['built-in', 'main']
+9 = ['built-in', 'main']

@@ -53,19 +53,42 @@ Themes live in `themes/<name>/`:
 
 To add a theme, copy an existing directory and adjust the colors.
 
-## Keybindings (alt = mod)
+## Keybindings — Super = hold Caps Lock
+
+Karabiner remaps Caps Lock to `cmd+ctrl+alt` (a combo macOS never uses),
+so the omarchy scheme works letter-for-letter without breaking typing or
+app shortcuts. Caps Lock tapped alone is Escape.
 
 | Chord | Action |
 |---|---|
-| `alt+enter` | new Korren window |
-| `alt+h/j/k/l` | focus window |
-| `alt+shift+h/j/k/l` | move window |
-| `alt+1..9` | switch workspace |
-| `alt+shift+1..9` | move window to workspace |
-| `alt+tab` | previous workspace |
-| `alt+f` | fullscreen |
-| `alt+v` | toggle floating |
-| `alt+slash` / `alt+comma` | tiles / accordion layout |
-| `alt+shift+q` | close window |
-| `alt+r` | resize mode (`h/j/k/l`, `-`/`=`, `esc`) |
-| `alt+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
+| `Super+enter` | new Korren window |
+| `Super+shift+enter` | browser (Arc) |
+| `Super+space` | launcher (Raycast) |
+| `Super+w` | close window |
+| `Super+arrows` | focus window |
+| `Super+shift+arrows` | move window |
+| `Super+1..9` | switch workspace |
+| `Super+shift+1..9` | move window to workspace |
+| `Super+tab` | previous workspace |
+| `Super+shift+tab` | throw workspace to other monitor |
+| `Super+f` | fullscreen |
+| `Super+t` | toggle floating |
+| `Super+j` | toggle split direction |
+| `Super+-` / `Super+=` | resize |
+| `Super+shift+f/m/s` | Finder / Spotify / Slack |
+| `Super+shift+t` | next theme |
+| `Super+r` | resize mode (`h/j/k/l`, `-`/`=`, `esc`) |
+| `Super+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
+
+Workspaces 1–6 are pinned to the external display, 7–9 to the built-in
+(each falls back to the main display when only one is connected).
+
+## Back to a normal Mac
+
+```sh
+./uninstall.sh
+```
+
+Stops AeroSpace/sketchybar/borders/Karabiner, restores the native menu
+bar and any backed-up configs, and relinks nothing. Homebrew packages
+stay installed (removal command printed at the end).
