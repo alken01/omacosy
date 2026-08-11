@@ -32,6 +32,16 @@ outer.bottom = 8
 outer.right = 8
 outer.top = 42  # room for sketchybar
 
+# Fixed-size settings windows fight the tiler (resize -> snap back ->
+# relayout flicker); float them instead.
+[[on-window-detected]]
+if.app-id = 'org.pqrs.Karabiner-Elements.Settings'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
+
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
 # omarchy: Super for window management, Super+Shift for moving and apps.
 [mode.main.binding]
