@@ -86,6 +86,11 @@ fi
 if [ ! -d "$HOME/.local/share/aerospace-swipe" ]; then
   git clone -q https://github.com/acsandmann/aerospace-swipe.git "$HOME/.local/share/aerospace-swipe"
 fi
+# macOS 26 fix: accumulate touches across gesture events (upstream counts
+# per-event, which never reaches the finger threshold on 26.3)
+if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-macos26-touch-accumulation.patch" 2>/dev/null; then
+  git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-macos26-touch-accumulation.patch"
+fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
 log "Building aerospace-swipe (grant Accessibility when prompted)"
