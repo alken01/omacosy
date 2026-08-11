@@ -19,9 +19,17 @@ var lastKey = ""
 var pendingKey = ""
 var pendingTicks = 0
 
+func displayBounds() -> [CGRect] {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var n: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return [] }
+    return (0..<Int(n)).map { CGDisplayBounds(ids[$0]) }
+}
+
 func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String)? {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
+    let screens = displayBounds()
     for w in list { // list is front-to-back
         guard (w["kCGWindowLayer"] as? Int) == 0,
             let b = w["kCGWindowBounds"] as? [String: Any],
@@ -30,9 +38,18 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String)? {
             let pid = w["kCGWindowOwnerPID"] as? pid_t,
             let num = w["kCGWindowNumber"] as? Int
         else { continue }
-        if CGRect(x: x, y: y, width: wd, height: h).contains(p) {
-            return (pid, "\(pid):\(num)")
+        let rect = CGRect(x: x, y: y, width: wd, height: h)
+        guard rect.contains(p) else { continue }
+        // AeroSpace hides inactive-workspace windows mostly offscreen
+        // with a sliver visible — ignore anything <30% on-screen
+        let visible = screens.reduce(CGFloat(0)) { acc, scr in
+            let i = rect.intersection(scr)
+            return acc + (i.isNull ? 0 : i.width * i.height)
         }
+        if rect.width * rect.height > 0, visible / (rect.width * rect.height) < 0.3 {
+            continue
+        }
+        return (pid, "\(pid):\(num)")
     }
     return nil
 }
