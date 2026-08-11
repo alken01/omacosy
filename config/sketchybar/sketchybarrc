@@ -131,9 +131,7 @@ sketchybar --add item media.title left \
   --subscribe media.title spotify_change \
   --set media.title icon.drawing=off \
     label.max_chars=28 \
-    scroll_texts=on \
-    label.scroll_duration=180 \
-    label.padding_left=4 \
+    label.padding_left=12 \
     label.padding_right=12 \
     update_freq=60 \
     script="$PLUGIN_DIR/media.sh" \
