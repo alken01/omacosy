@@ -82,9 +82,23 @@ func focusedWindowFrame() -> (CGRect, String)? {
             let b = w["kCGWindowBounds"] as? [String: Any],
             let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
             let wd = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat,
-            wd > 40, h > 40
+            wd > 60, h > 60
         else { continue }
-        return (CGRect(x: x, y: y, width: wd, height: h), name)
+        let rect = CGRect(x: x, y: y, width: wd, height: h)
+        // AeroSpace drags windows through offscreen stash positions
+        // during workspace switches — ringing those mid-flight frames
+        // is the flicker. Only mostly-onscreen windows qualify.
+        var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+        var n: UInt32 = 0
+        var visible: CGFloat = 0
+        if CGGetActiveDisplayList(8, &ids, &n) == .success {
+            for i in 0..<Int(n) {
+                let inter = rect.intersection(CGDisplayBounds(ids[i]))
+                if !inter.isNull { visible += inter.width * inter.height }
+            }
+        }
+        if visible / (rect.width * rect.height) < 0.7 { continue }
+        return (rect, name)
     }
     return nil
 }
