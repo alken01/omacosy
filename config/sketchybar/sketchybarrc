@@ -116,23 +116,25 @@ sketchybar --add event spotify_change "com.spotify.client.PlaybackStateChanged"
 
 
 sketchybar --add item media.prev left \
-  --set media.prev icon="󰒮" label.drawing=off \
+  --set media.prev icon="󰒮" label.drawing=off icon.padding_left=8 icon.padding_right=5 \
     click_script="osascript -e 'tell application \"Spotify\" to previous track'"
 
 sketchybar --add item media.play left \
-  --set media.play icon="󰐊" label.drawing=off \
+  --set media.play icon="󰐊" label.drawing=off icon.padding_left=5 icon.padding_right=5 \
     click_script="osascript -e 'tell application \"Spotify\" to playpause'"
 
 sketchybar --add item media.next left \
-  --set media.next icon="󰒭" label.drawing=off \
+  --set media.next icon="󰒭" label.drawing=off icon.padding_left=5 icon.padding_right=8 \
     click_script="osascript -e 'tell application \"Spotify\" to next track'"
 
 sketchybar --add item media.title left \
   --subscribe media.title spotify_change \
   --set media.title icon.drawing=off \
-    label.max_chars=40 \
+    label.max_chars=28 \
+    scroll_texts=on \
+    label.scroll_duration=180 \
     label.padding_left=4 \
-    label.padding_right=10 \
+    label.padding_right=12 \
     update_freq=60 \
     script="$PLUGIN_DIR/media.sh" \
     click_script="open -a Spotify"
