@@ -20,7 +20,10 @@ hides the native menu bar, applies the default theme, and starts services.
 One-time permission grants on a new machine (System Settings →
 Privacy & Security):
 
-1. **Accessibility**: AeroSpace, AerospaceSwipe (each prompts).
+1. **Accessibility**: AeroSpace, AerospaceSwipe (each prompts), and
+   `omacosy-ffm` (add `~/.local/bin/omacosy-ffm` manually). Binaries are
+   codesigned with your Apple Development identity when present, so
+   rebuilds keep their grants.
 2. **Input Monitoring**: Karabiner (prompts) and AerospaceSwipe
    (add manually: `~/.local/share/aerospace-swipe/AerospaceSwipe.app`).
 3. **Bluetooth**: sketchybar
@@ -40,12 +43,17 @@ Privacy & Security):
 | Window borders | [JankyBorders](https://github.com/FelixKratz/JankyBorders) | `config/borders/bordersrc` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | System glue | `omacosy-helper` (self-compiled, 64KB) | `helper/main.swift` |
+| Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift` |
 | Terminal | [Korren](https://github.com/paulsp94/korren) (built from source) | follows the theme switcher |
 | Prompt | starship | `config/starship.toml` |
 | Shell | zsh + oh-my-zsh | `zsh/zshrc` |
 | CLI stack | fzf, eza, zoxide, ripgrep, bat, lazygit, btop | wired in `zsh/zshrc` |
 
-`omacosy-helper` replaces four would-be dependencies (cliclick, desktoppr,
+`omacosy-ffm` provides focus-follows-mouse (AutoRaise is broken on
+macOS 26 — cooperative activation; and AX focus attributes silently
+no-op for Chromium apps like Arc, so it focuses via the same private
+SkyLight calls AeroSpace uses). `omacosy-helper` replaces four
+would-be dependencies (cliclick, desktoppr,
 switchaudio-osx, blueutil): cursor position for popup auto-close,
 NSWorkspace wallpaper setting, CoreAudio output switching, IOBluetooth
 control. `install.sh` builds it with the swiftc that ships alongside
