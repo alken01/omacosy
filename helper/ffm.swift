@@ -54,11 +54,21 @@ let ignoredApps: Set<String> = {
 
 let pollSeconds = 0.08
 let dwellTicks = 1
+// Focus follows mouse MOVEMENT, not hover position (Hyprland
+// semantics): a focus change may only fire within this window after
+// the cursor last moved. A stationary cursor never steals focus — a
+// freshly launched window (System Settings…) that self-activates
+// under an idle pointer keeps its focus instead of being deactivated
+// mid-launch, which is what made it vanish behind the tiles.
+let moveEpsilonPx: CGFloat = 2
+let moveGraceSeconds = 0.3
 
 var lastKey = ""
 var pendingKey = ""
 var pendingTicks = 0
 var lastFocusAt = 0.0
+var lastCursor = CGPoint(x: -1_000_000, y: -1_000_000)
+var lastMoveAt = 0.0
 
 func displayBounds() -> [CGRect] {
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
@@ -192,6 +202,13 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
         return
     }
     guard let e = CGEvent(source: nil) else { return }
+    let now = CFAbsoluteTimeGetCurrent()
+    if abs(e.location.x - lastCursor.x) > moveEpsilonPx
+        || abs(e.location.y - lastCursor.y) > moveEpsilonPx {
+        lastMoveAt = now
+    }
+    lastCursor = e.location
+    if now - lastMoveAt > moveGraceSeconds { pendingTicks = 0; return }
     guard let hit = topWindowUnder(e.location) else { pendingTicks = 0; return }
     // judge "already focused" by reality, not our own bookkeeping — a
     // silently failed focus attempt must be retried, not remembered
