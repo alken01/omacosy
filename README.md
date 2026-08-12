@@ -79,7 +79,9 @@ Why self-built: on macOS 26, cooperative activation broke AutoRaise
 [#29](https://github.com/acsandmann/aerospace-swipe/pull/29)/[#30](https://github.com/acsandmann/aerospace-swipe/pull/30)),
 and JankyBorders' per-window bitmaps cost hundreds of MB.
 `omacosy-ffm` focuses via the same SkyLight calls AeroSpace uses;
-`omacosy-borders` strokes one CAShapeLayer the WindowServer rasterizes;
+`omacosy-borders` strokes one CAShapeLayer the WindowServer rasterizes,
+driven by the window server's own event stream (SkyLight notifications
+for focus, move and resize — no polling, the ring glides with drags);
 `omacosy-helper` covers wallpaper (System Events scripting half-broke
 in macOS 14+), CoreAudio output switching, IOBluetooth control, cursor
 position, and per-display notch detection.

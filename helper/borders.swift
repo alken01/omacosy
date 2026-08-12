@@ -4,14 +4,54 @@
 // architecture that made JankyBorders cost hundreds of MB). Needs no
 // permissions at all.
 //
-// Hybrid event/poll design: everything that HAS an event is
-// event-driven (kqueue watches on the workspace-switch signal, theme
-// and config; NSWorkspace app-activation notifications); the 120ms
-// poll remains solely as frame truth, because window move/resize has
-// no public event without an Accessibility grant.
+// Event-driven via private SkyLight window-server notifications (the
+// same layer JankyBorders and yabai use, verified on macOS 26.3):
+// front-app changes, window create/destroy, and per-window move/resize
+// all arrive as callbacks the instant the WindowServer processes them.
+// A 0.5s heartbeat remains as a safety net for anything eventless,
+// and kqueue watches cover theme/config changes. Notify procs only
+// fire while the connection's event port is drained — see the
+// CFMachPort pump at the bottom; registrations succeed silently and
+// deliver nothing without it.
 import AppKit
 
-let pollSeconds = 0.12
+// --- SkyLight externs ---------------------------------------------------
+
+typealias NotifyProc = @convention(c) (UInt32, UnsafeMutableRawPointer?, Int, UnsafeMutableRawPointer?) -> Void
+
+@_silgen_name("SLSMainConnectionID")
+func SLSMainConnectionID() -> Int32
+
+@_silgen_name("SLSRegisterNotifyProc")
+func SLSRegisterNotifyProc(_ proc: NotifyProc, _ event: UInt32, _ context: UnsafeMutableRawPointer?) -> CGError
+
+// move/resize are per-window subscriptions; each call replaces the set
+@_silgen_name("SLSRequestNotificationsForWindows")
+func SLSRequestNotificationsForWindows(_ cid: Int32, _ windows: UnsafePointer<UInt32>, _ count: Int32) -> CGError
+
+@_silgen_name("SLSGetEventPort")
+func SLSGetEventPort(_ cid: Int32, _ port: UnsafeMutablePointer<mach_port_t>) -> CGError
+
+@_silgen_name("SLEventCreateNextEvent")
+func SLEventCreateNextEvent(_ cid: Int32) -> Unmanaged<CGEvent>?
+
+@_silgen_name("_CFMachPortSetOptions")
+func _CFMachPortSetOptions(_ port: CFMachPort, _ options: Int32)
+
+// WindowServer-truth frontmost pid — NSWorkspace.frontmostApplication
+// lags aerospace/SLPS focus changes by up to ~1s, which would draw the
+// old app's ring on every event the moment it fires
+struct PSN { var hi: UInt32 = 0, lo: UInt32 = 0 }
+@_silgen_name("_SLPSGetFrontProcess")
+func SLPSGetFrontProcess(_ psn: inout PSN) -> OSStatus
+@_silgen_name("GetProcessPID")
+func GetProcessPID(_ psn: inout PSN, _ pid: inout pid_t) -> OSStatus
+
+let EVENT_WINDOW_MOVE: UInt32 = 806
+let EVENT_WINDOW_RESIZE: UInt32 = 807
+let EVENT_WINDOW_CREATE: UInt32 = 1325
+let EVENT_WINDOW_DESTROY: UInt32 = 1326
+let EVENT_FRONT_CHANGE: UInt32 = 1508
 
 // styling from ~/.config/omacosy/borders.conf (width, radius, per-app
 // radius overrides)
@@ -63,9 +103,10 @@ func loadColor() -> CGColor {
 
 // frontmost app's topmost normal window, in CG (top-left) coordinates
 func focusedWindowFrame() -> (CGRect, String)? {
-    guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
-    let pid = front.processIdentifier
-    let name = (front.localizedName ?? "").lowercased()
+    var psn = PSN()
+    var pid: pid_t = 0
+    guard SLPSGetFrontProcess(&psn) == 0, GetProcessPID(&psn, &pid) == 0 else { return nil }
+    let name = (NSRunningApplication(processIdentifier: pid)?.localizedName ?? "").lowercased()
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     for w in list { // front-to-back
@@ -146,7 +187,11 @@ func displayOf(_ r: CGRect) -> CGDirectDisplayID {
 }
 
 let logURL = URL(fileURLWithPath: "/tmp/omacosy-borders.log")
-let logFmt = ISO8601DateFormatter()
+let logFmt: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions.insert(.withFractionalSeconds)
+    return f
+}()
 func tlog(_ m: String) {
     let line = "\(logFmt.string(from: Date())) \(m)\n"
     if let h = try? FileHandle(forWritingTo: logURL) {
@@ -185,10 +230,11 @@ win.contentView = view
 // --- state + tick ------------------------------------------------------
 
 var conf = loadConf()
-var missTicks = 0
+var missSince: Date? = nil
 var pendingFrame = CGRect.zero
 var pendingApp = ""
-var pendingTicks = 0
+var pendingSince = Date.distantPast
+var shownApp = ""
 var justHid = true
 var lastFrame = CGRect.zero
 var lastWsSwitchAt = Date.distantPast
@@ -201,46 +247,73 @@ func hideRing(_ reason: String) {
         tlog("hide reason=\(reason)")
     }
     lastFrame = .zero
+    shownApp = ""
     justHid = true
-    pendingTicks = 0
+    missSince = nil
+}
+
+// coalesced fast path for event storms (drags fire per-frame): at most
+// one tick per ~16ms, matching display cadence
+var tickArmed = false
+func kickTick() {
+    if tickArmed { return }
+    tickArmed = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
+        tickArmed = false
+        tick()
+    }
+}
+
+// uncoalesced re-check for deferred gates — events won't re-fire for a
+// window that has stopped moving, so a deferral must reschedule itself
+func recheck(after delay: Double) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { tick() }
 }
 
 func tick() {
     guard let hit = focusedWindowFrame(), case let (f, appName) = hit, !isFullscreen(f) else {
         // transient misses happen around app switches and popups —
-        // only hide after a few consecutive ones, or the ring blinks
-        missTicks += 1
-        if missTicks >= 3 { hideRing("miss-or-fullscreen") }
+        // hide only when the miss persists, or the ring blinks. Gates
+        // are wall-clock, not tick counts: event-driven ticks arrive
+        // in millisecond bursts and would rush a counter.
+        if missSince == nil { missSince = Date() }
+        if Date().timeIntervalSince(missSince!) >= 0.35 {
+            hideRing("miss-or-fullscreen")
+        } else {
+            recheck(after: 0.15)
+        }
         return
     }
-    missTicks = 0
+    missSince = nil
 
-    // stability gate — but only where ghosts can exist: mid-flight
-    // frames occur around workspace switches (we get that signal), so
-    // demand stillness for 600ms after one and be instant otherwise.
-    // Ordinary focus changes ring in a single tick, like a compositor.
-    let inSwitchWindow = Date().timeIntervalSince(lastWsSwitchAt) < 0.6
-    let required = inSwitchWindow ? (justHid ? 4 : 2) : 1
     if f != pendingFrame || appName != pendingApp {
         pendingFrame = f
         pendingApp = appName
-        pendingTicks = 1
-        if win.isVisible, f != lastFrame { hideRing("target-changed") }
-        if required > 1 { return }
-    } else {
-        pendingTicks += 1
+        pendingSince = Date()
     }
-    if pendingTicks < required { return }
+    // stability gate — but only where ghosts can exist: mid-flight
+    // frames occur around workspace switches (we get that signal), so
+    // demand stillness for a beat after one and be instant otherwise.
+    if Date().timeIntervalSince(lastWsSwitchAt) < 0.6 {
+        let stableFor = justHid ? 0.35 : 0.15
+        let held = Date().timeIntervalSince(pendingSince)
+        if held < stableFor {
+            recheck(after: stableFor - held + 0.02)
+            return
+        }
+    }
     justHid = false
 
     guard f != lastFrame || !win.isVisible else { return }
-    // crossing displays: hide for the jump so the ring never visibly
-    // travels between screens
-    if win.isVisible, displayOf(f) != displayOf(lastFrame) {
+    // same app moving on the same display glides tick-by-tick; any
+    // other change hides first so the ring never visibly travels
+    // between windows or screens
+    if win.isVisible, appName != shownApp || displayOf(f) != displayOf(lastFrame) {
         win.orderOut(nil)
-        tlog("jump-display app=\(appName)")
+        tlog("retarget app=\(appName)")
     }
     lastFrame = f
+    shownApp = appName
 
     let radius = conf.appRadius[appName] ?? conf.radius
     let pad = conf.width // ring sits just outside the window edge
@@ -296,8 +369,9 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
 }
 
 // aerospace announces workspace switches by touching this file
-// (exec-on-workspace-change): hide instantly, don't wait for stale
-// frontmost/frame data to catch up
+// (exec-on-workspace-change): hide instantly and arm the stability
+// gate — the SLS move-burst alone can't distinguish a switch from a
+// drag until the ghosts are already ringed
 watch("/tmp/omacosy-ws-switch", create: true) {
     lastWsSwitchAt = Date()
     hideRing("workspace-switch")
@@ -316,11 +390,63 @@ watch(confFile.path, create: false) {
     lastFrame = .zero // force redraw with new geometry
 }
 
-// app activation: react now instead of on the next poll
-NSWorkspace.shared.notificationCenter.addObserver(
-    forName: NSWorkspace.didActivateApplicationNotification,
-    object: nil, queue: .main) { _ in tick() }
+// --- SkyLight notifications ---------------------------------------------
 
-let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in tick() }
+let cid = SLSMainConnectionID()
+
+// move/resize only fire for subscribed windows: keep the subscription
+// set equal to every normal window that exists (create/destroy events
+// plus the heartbeat keep it current; each request replaces the set)
+var subscribed = Set<UInt32>()
+func rebuildSubscriptions() {
+    guard let list = CGWindowListCopyWindowInfo([.optionAll],
+        kCGNullWindowID) as? [[String: Any]] else { return }
+    var wids: [UInt32] = []
+    for w in list where (w["kCGWindowLayer"] as? Int) == 0 {
+        if let n = w["kCGWindowNumber"] as? Int { wids.append(UInt32(n)) }
+    }
+    let set = Set(wids)
+    guard set != subscribed, !wids.isEmpty else { return }
+    subscribed = set
+    _ = wids.withUnsafeBufferPointer {
+        SLSRequestNotificationsForWindows(cid, $0.baseAddress!, Int32(wids.count))
+    }
+}
+
+let slsCallback: NotifyProc = { event, _, _, _ in
+    if event == EVENT_WINDOW_CREATE || event == EVENT_WINDOW_DESTROY {
+        rebuildSubscriptions()
+    }
+    kickTick()
+}
+
+for code in [EVENT_WINDOW_MOVE, EVENT_WINDOW_RESIZE, EVENT_WINDOW_CREATE,
+             EVENT_WINDOW_DESTROY, EVENT_FRONT_CHANGE] {
+    _ = SLSRegisterNotifyProc(slsCallback, code, nil)
+}
+rebuildSubscriptions()
+
+// the pump: notify procs dispatch while the connection's event port is
+// drained; wire it as a run-loop source (JankyBorders' recipe)
+let portCallback: CFMachPortCallBack = { _, _, _, _ in
+    while let e = SLEventCreateNextEvent(SLSMainConnectionID()) { e.release() }
+}
+var eventPort: mach_port_t = 0
+if SLSGetEventPort(cid, &eventPort).rawValue == 0,
+    let machPort = CFMachPortCreateWithPort(nil, eventPort, portCallback, nil, nil) {
+    _CFMachPortSetOptions(machPort, 0x40)
+    let source = CFMachPortCreateRunLoopSource(nil, machPort, 0)
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .defaultMode)
+} else {
+    tlog("SLSGetEventPort failed — running on heartbeat only")
+}
+
+// safety net for anything eventless (subscription races, missed
+// events): cheap at this cadence, and the only poll left
+let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
+    rebuildSubscriptions()
+    tick()
+}
 RunLoop.current.add(timer, forMode: .common)
+tick()
 app.run()
