@@ -32,7 +32,10 @@ inner.vertical = 8
 outer.left = 8
 outer.bottom = 8
 outer.right = 8
-outer.top = 42  # room for sketchybar
+# room for sketchybar: measured from the display top on flat monitors,
+# but from below the notch strip on built-in notched displays (macOS
+# reports usable space starting there), so the laptop needs less
+outer.top = [{ monitor.'built-in' = 10 }, 42]
 
 # Fixed-size settings windows fight the tiler (resize -> snap back ->
 # relayout flicker); float them instead.
