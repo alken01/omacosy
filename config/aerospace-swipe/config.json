@@ -4,5 +4,6 @@
   "wrap_around": true,
   "skip_empty": false,
   "fingers": 4,
-  "cursor_monitor": true
+  "cursor_monitor": true,
+  "swipe_up": "open -b com.apple.exposelauncher"
 }

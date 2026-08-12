@@ -1,3 +1,28 @@
+diff --git a/README.md b/README.md
+index f5a813e..8472d4d 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,8 @@ aerospace-swipe detects x-fingered(defaults to 3) swipes on your trackpad and co
+ - haptics on swipe (this is off by default)
+ - customizable swipe directions (natural or inverted)
+ - swipe will wrap around workspaces (ex 1-9 workspaces, swipe right from 9 will go to 1)
++- optional `cursor_monitor` mode: the swipe acts on the monitor under the cursor (native-Spaces semantics) instead of the focused monitor
++- optional vertical swipes: `swipe_up` / `swipe_down` run a shell command (e.g. a workspace overview via Mission Control); empty = disabled
+ - utilizes [yyjson](https://github.com/ibireme/yyjson) for performant json ser/de
+ 
+ ## configuration
+@@ -24,7 +26,10 @@ config file is optional and only needed if you want to change the default settin
+   "natural_swipe": false,
+   "wrap_around": true,
+   "skip_empty": true,
+-  "fingers": 3
++  "cursor_monitor": false,
++  "fingers": 3,
++  "swipe_up": "open -b com.apple.exposelauncher",
++  "swipe_down": ""
+ }
+ ```
+ 
 diff --git a/src/aerospace.c b/src/aerospace.c
 index 7b621db..9ceb2d8 100644
 --- a/src/aerospace.c
@@ -23,11 +48,138 @@ index 311efc3..3e35c9d 100644
 +
 +char* aerospace_exec(aerospace* client, const char** args, int arg_count,
 +	const char* expected_output_field);
+diff --git a/src/config.h b/src/config.h
+index c3fbcbc..60ceb24 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -6,6 +6,7 @@
+ #include <stdbool.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+@@ -14,6 +15,7 @@ typedef struct {
+ 	bool wrap_around;
+ 	bool haptic;
+ 	bool skip_empty;
++	bool cursor_monitor;
+ 	int fingers;
+ 	int swipe_tolerance;
+ 	float distance_pct; // distance
+@@ -28,6 +30,12 @@ typedef struct {
+ 	float palm_velocity;
+ 	const char* swipe_left;
+ 	const char* swipe_right;
++	// Shell commands for vertical 4-finger swipes (workspace
++	// overview etc.). Empty string = gesture disabled. Unlike
++	// swipe_left/right (workspace directions), these run via
++	// /bin/sh so any overview UI can be wired in.
++	const char* swipe_up;
++	const char* swipe_down;
+ } Config;
+ 
+ static Config default_config()
+@@ -37,6 +45,7 @@ static Config default_config()
+ 	config.wrap_around = true;
+ 	config.haptic = false;
+ 	config.skip_empty = true;
++	config.cursor_monitor = false;
+ 	config.fingers = 3;
+ 	config.swipe_tolerance = 0;
+ 	config.distance_pct = 0.08f; // ≥8 % travel triggers
+@@ -51,6 +60,8 @@ static Config default_config()
+ 	config.palm_velocity = 0.1; // 10% of pad dimension per second
+ 	config.swipe_left = "prev";
+ 	config.swipe_right = "next";
++	config.swipe_up = "";
++	config.swipe_down = "";
+ 	return config;
+ }
+ 
+@@ -133,6 +144,10 @@ static Config load_config()
+ 	if (item && yyjson_is_bool(item))
+ 		config.skip_empty = yyjson_get_bool(item);
+ 
++	item = yyjson_obj_get(root, "cursor_monitor");
++	if (item && yyjson_is_bool(item))
++		config.cursor_monitor = yyjson_get_bool(item);
++
+ 	item = yyjson_obj_get(root, "fingers");
+ 	if (item && yyjson_is_int(item))
+ 		config.fingers = (int)yyjson_get_int(item);
+@@ -156,6 +171,16 @@ static Config load_config()
+ 	config.swipe_left = config.natural_swipe ? "next" : "prev";
+ 	config.swipe_right = config.natural_swipe ? "prev" : "next";
+ 
++	// Owned copies: the yyjson doc is freed below, so string values
++	// must be duplicated (left/right above are static literals).
++	item = yyjson_obj_get(root, "swipe_up");
++	if (item && yyjson_is_str(item))
++		config.swipe_up = strdup(yyjson_get_str(item));
++
++	item = yyjson_obj_get(root, "swipe_down");
++	if (item && yyjson_is_str(item))
++		config.swipe_down = strdup(yyjson_get_str(item));
++
+ 	yyjson_doc_free(doc);
+ 	return config;
+ }
+diff --git a/src/event_tap.h b/src/event_tap.h
+index 2d17acd..1f6f40b 100644
+--- a/src/event_tap.h
++++ b/src/event_tap.h
+@@ -26,6 +26,7 @@ typedef struct {
+ 	int phase;
+ 	double timestamp;
+ 	double velocity;
++	double velocity_y;
+ 	bool is_palm;
+ } touch;
+ 
+@@ -47,7 +48,7 @@ typedef struct {
+ 	gesture_state state;
+ 	float start_x, start_y, peak_velx;
+ 	int dir, last_fire_dir;
+-	float prev_x[MAX_TOUCHES], base_x[MAX_TOUCHES];
++	float prev_x[MAX_TOUCHES], base_x[MAX_TOUCHES], base_y[MAX_TOUCHES];
+ } gesture_ctx;
+ 
+ // Palm rejection tracking structure
+diff --git a/src/event_tap.m b/src/event_tap.m
+index cc20b13..dde77e9 100644
+--- a/src/event_tap.m
++++ b/src/event_tap.m
+@@ -31,11 +31,14 @@ struct event_tap g_event_tap = { 0 };
+ 	}
+ 
+ 	double velocity_x = 0.0;
++	double velocity_y = 0.0;
+ 	touch_state* state = (touch_state*)CFDictionaryGetValue(touchStates, (__bridge const void*)(touchIdentity));
+ 	if (state) {
+ 		double dt = nt.timestamp - state->timestamp;
+-		if (dt > 0)
++		if (dt > 0) {
+ 			velocity_x = (nt.x - state->x) / dt;
++			velocity_y = (nt.y - state->y) / dt;
++		}
+ 		state->x = nt.x;
+ 		state->y = nt.y;
+ 		state->timestamp = nt.timestamp;
+@@ -49,6 +52,7 @@ struct event_tap g_event_tap = { 0 };
+ 		}
+ 	}
+ 	nt.velocity = velocity_x;
++	nt.velocity_y = velocity_y;
+ 
+ 	if (nt.phase == 8) {
+ 		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..632f7c2 100644
+index fae40b9..2e71553 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -15,9 +15,133 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
+@@ -15,8 +15,138 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
  static gesture_ctx g_gesture_ctx = { 0 };
  static CFMutableDictionaryRef g_tracks = NULL;
  
@@ -93,10 +245,11 @@ index fae40b9..632f7c2 100644
 +	return 0;
 +}
 +
-+// Step to the neighbouring workspace of the monitor the cursor is on.
-+// The swipe acts where the pointer is (like native Spaces), never on
-+// the other monitor. Falls back to focused-monitor stepping when the
-+// cursor's monitor or its visible workspace can't be resolved.
++// Step to the neighbouring workspace of the monitor the cursor is on
++// (native-Spaces semantics: the swipe acts where the pointer is, never
++// on the other monitor). Returns false so the caller can fall back to
++// focused-monitor stepping when the cursor's monitor or its visible
++// workspace can't be resolved.
 +static bool switch_on_cursor_monitor(const char* ws)
 +{
 +	int mon = monitor_under_cursor();
@@ -156,28 +309,126 @@ index fae40b9..632f7c2 100644
 +
  static void switch_workspace(const char* ws)
  {
--	if (g_config.skip_empty || g_config.wrap_around) {
-+	if (!switch_on_cursor_monitor(ws)) {
-+		// fallback: focused-monitor stepping (upstream behavior)
++	if (g_config.cursor_monitor && switch_on_cursor_monitor(ws)) {
++		if (g_config.haptic && g_haptic)
++			haptic_actuate(g_haptic, 3);
++		return;
++	}
++
+ 	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
- 			fprintf(stderr, "Error: Unable to retrieve workspace list.\n");
-@@ -31,14 +155,6 @@ static void switch_workspace(const char* ws)
- 		}
- 		free(workspaces);
- 		free(result);
--	} else {
--		char* result = aerospace_switch(g_aerospace, ws);
--		if (result) {
--			fprintf(stderr, "Error: Failed to switch workspace: '%s'\n", result);
--		} else {
--			printf("Switched workspace successfully to '%s'.\n", ws);
--		}
--		free(result);
+@@ -64,6 +194,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+ 	});
+ }
+ 
++// Vertical swipes run a user command (workspace overview etc.) instead
++// of a workspace step. One-shot: commits the gesture so nothing re-fires
++// until the fingers lift. Direction codes ±2 keep them distinct from
++// the horizontal ±1 so the committed-state reversal re-arm (an x-axis
++// concept) can tell them apart.
++static void fire_vertical(gesture_ctx* ctx, int direction)
++{
++	const char* cmd = direction > 0 ? g_config.swipe_up : g_config.swipe_down;
++	ctx->last_fire_dir = direction * 2;
++	ctx->state = GS_COMMITTED;
++
++	char* owned = strdup(cmd);
++	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++		FILE* p = popen(owned, "r");
++		if (p)
++			pclose(p);
++		else
++			fprintf(stderr, "Error: failed to run vertical swipe command '%s'.\n", owned);
++		free(owned);
++	});
++
++	if (g_config.haptic && g_haptic)
++		haptic_actuate(g_haptic, 3);
++}
++
+ static void calculate_touch_averages(touch* touches, int count,
+ 	float* avg_x, float* avg_y, float* avg_vel,
+ 	float* min_x, float* max_x, float* min_y, float* max_y)
+@@ -112,7 +267,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+ 		&min_x, &max_x, &min_y, &max_y);
+ 
+ 	float dx = avg_x - ctx->start_x;
+-	if ((dx * ctx->last_fire_dir) < 0 && fabsf(dx) >= g_config.min_travel) {
++	// Reversal re-arm is an x-axis concept — a committed VERTICAL
++	// fire (|dir| == 2) stays committed until the fingers lift.
++	if (abs(ctx->last_fire_dir) == 1 && (dx * ctx->last_fire_dir) < 0
++		&& fabsf(dx) >= g_config.min_travel) {
+ 		ctx->state = GS_ARMED;
+ 		ctx->start_x = avg_x;
+ 		ctx->start_y = avg_y;
+@@ -139,6 +297,42 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+ 	float dx = avg_x - ctx->start_x;
+ 	float dy = avg_y - ctx->start_y;
+ 
++	// Vertical swipe → one-shot user command (workspace overview).
++	// Checked before the horizontal arm: a clearly-vertical motion
++	// either fires here or belongs to no gesture at all (the
++	// horizontal arm requires |dx| > |dy|). Two independent gates
++	// must agree, mirroring the ARMED fire's robustness: (1) the
++	// hardware-reported y velocity crosses the same velocity_pct the
++	// horizontal fire uses (immune to the stale-anchor problem —
++	// base_x/base_y are per-frame steps, refreshed every idle frame,
++	// and undefined on the first full-finger frame), and (2) every
++	// finger's per-frame step is vertical-dominant and above the
++	// step floor. MultitouchSupport's normalized y grows toward the
++	// trackpad's far edge, so positive velocity is a swipe UP.
++	float avg_vel_y = 0;
++	for (int i = 0; i < count; ++i)
++		avg_vel_y += touches[i].velocity_y;
++	avg_vel_y /= count;
++	if (fabsf(avg_vel_y) >= g_config.velocity_pct) {
++		float travel_x = 0, travel_y = 0;
++		bool stepped = true;
++		for (int i = 0; i < count; ++i) {
++			float fdy = touches[i].y - ctx->base_y[i];
++			if (fabsf(fdy) < g_config.min_travel_fast)
++				stepped = false;
++			travel_y += fdy;
++			travel_x += touches[i].x - ctx->base_x[i];
++		}
++		if (stepped && fabsf(travel_y) > fabsf(travel_x)) {
++			int vdir = avg_vel_y > 0 ? 1 : -1;
++			const char* cmd = vdir > 0 ? g_config.swipe_up : g_config.swipe_down;
++			if (cmd && *cmd) {
++				fire_vertical(ctx, vdir);
++				return;
++			}
++		}
++	}
++
+ 	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
+ 		ctx->state = GS_ARMED;
+ 		ctx->start_x = avg_x;
+@@ -201,8 +395,10 @@ static void gestureCallback(touch* touches, int count)
+ 		if (ctx->state == GS_ARMED)
+ 			ctx->state = GS_IDLE;
+ 
+-		for (int i = 0; i < count; ++i)
++		for (int i = 0; i < count; ++i) {
+ 			ctx->prev_x[i] = ctx->base_x[i] = touches[i].x;
++			ctx->base_y[i] = touches[i].y;
++		}
+ 
+ 		goto unlock;
+ 	}
+@@ -219,65 +415,49 @@ static void gestureCallback(touch* touches, int count)
+ 
+ 	for (int i = 0; i < count; ++i) {
+ 		ctx->prev_x[i] = touches[i].x;
+-		if (ctx->state == GS_IDLE)
++		if (ctx->state == GS_IDLE) {
+ 			ctx->base_x[i] = touches[i].x;
++			ctx->base_y[i] = touches[i].y;
++		}
  	}
  
- 	if (g_config.haptic && g_haptic)
-@@ -227,57 +343,38 @@ unlock:
+ unlock:
  	pthread_mutex_unlock(&g_gesture_mutex);
  }
  
@@ -214,8 +465,9 @@ index fae40b9..632f7c2 100644
 +		buf[n].x = data[i].normalized.pos.x;
 +		buf[n].y = data[i].normalized.pos.y;
 +		buf[n].velocity = data[i].normalized.vel.x;
++		buf[n].velocity_y = data[i].normalized.vel.y;
 +		buf[n].timestamp = timestamp;
-+		buf[n].phase = 1 << 1; // moved
++		buf[n].phase = 1 << 1; // moved; lift-off is signaled by count dropping
 +		buf[n].is_palm = false;
 +		n++;
  	}
@@ -260,7 +512,25 @@ index fae40b9..632f7c2 100644
  }
  
  static void acquire_lockfile(void)
-@@ -371,7 +468,23 @@ int main(int argc, const char* argv[])
+@@ -347,13 +527,15 @@ int main(int argc, const char* argv[])
+ 		NSLog(@"Accessibility permission granted. Continuing app initialization...");
+ 
+ 		g_config = load_config();
+-		NSLog(@"Loaded config: fingers=%d, skip_empty=%s, wrap_around=%s, haptic=%s, swipe_left='%s', swipe_right='%s'",
++		NSLog(@"Loaded config: fingers=%d, skip_empty=%s, wrap_around=%s, haptic=%s, swipe_left='%s', swipe_right='%s', swipe_up='%s', swipe_down='%s'",
+ 			g_config.fingers,
+ 			g_config.skip_empty ? "YES" : "NO",
+ 			g_config.wrap_around ? "YES" : "NO",
+ 			g_config.haptic ? "YES" : "NO",
+ 			g_config.swipe_left,
+-			g_config.swipe_right);
++			g_config.swipe_right,
++			g_config.swipe_up,
++			g_config.swipe_down);
+ 
+ 		g_aerospace = aerospace_new(NULL);
+ 		if (!g_aerospace) {
+@@ -371,7 +553,23 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
