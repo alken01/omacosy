@@ -23,6 +23,7 @@ func SLPSSetFrontProcess(_ psn: inout PSN, _ wid: UInt32, _ mode: UInt32) -> Int
 @_silgen_name("SLPSPostEventRecordTo")
 func SLPSPostEvent(_ psn: inout PSN, _ bytes: UnsafeMutablePointer<UInt8>) -> Int32
 
+let kCPSAllWindows: UInt32 = 0x100
 let kCPSUserGenerated: UInt32 = 0x200
 let kCPSNoWindows: UInt32 = 0x400
 
@@ -232,10 +233,12 @@ func axRaise(pid: pid_t, rect: CGRect) {
         AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
         if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
             abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
-            AXUIElementPerformAction(win, kAXRaiseAction as CFString)
+            let r = AXUIElementPerformAction(win, kAXRaiseAction as CFString)
+            dbg("  axRaise matched, result=\(r.rawValue)")
             return
         }
     }
+    dbg("  axRaise: no AX window matched rect \(rect)")
 }
 
 func enforceFloats(_ cands: [Cand], now: Double) {
@@ -256,9 +259,46 @@ func enforceFloats(_ cands: [Cand], now: Double) {
             }
         }
         if buried, now - (lastRaiseAt[w.num] ?? 0) > raiseCooldown {
+            // Never yank the float up mid-interaction: wait for the
+            // keyboard and mouse to go quiet so the focus round-trip
+            // below can't swallow a keystroke or a click.
+            let keyIdle = CGEventSource.secondsSinceLastEventType(
+                .combinedSessionState, eventType: .keyDown)
+            let clickIdle = CGEventSource.secondsSinceLastEventType(
+                .combinedSessionState, eventType: .leftMouseDown)
+            guard keyIdle > 1.0, clickIdle > 0.7 else { continue }
             lastRaiseAt[w.num] = now
             dbg("float keeper: re-raising \(w.owner) #\(w.num)")
-            axRaise(pid: w.pid, rect: w.rect)
+            raiseFloat(w, cands: cands)
+        }
+    }
+}
+
+// Raising another app's window above the ACTIVE app needs activation:
+// AXRaise alone reorders only within the float's own app (verified —
+// returns success, no visual change; this is the wall yabai's
+// scripting addition exists to climb). So: AXRaise the window to its
+// app's front, activate the app to lift it globally, then hand focus
+// straight back to whoever had it — with kCPSNoWindows, so the
+// handback doesn't undo the lift. Net effect: float on top, focus
+// unchanged, one menu-bar blink.
+func raiseFloat(_ w: Cand, cands: [Cand]) {
+    axRaise(pid: w.pid, rect: w.rect)
+    let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
+    // plain 0x200 activation does NOT reorder a background app's
+    // windows (measured) — kCPSAllWindows is what actually lifts it
+    var psn = PSN()
+    if GetProcessForPID(w.pid, &psn) == noErr {
+        _ = SLPSSetFrontProcess(&psn, UInt32(w.num), kCPSAllWindows | kCPSUserGenerated)
+    }
+    // The window server applies the activation ASYNCHRONOUSLY — a
+    // same-instant focus handback races it and the lift never lands.
+    // Give it a beat, then return focus with kCPSNoWindows so the
+    // handback can't undo the lift.
+    if frontPid >= 0, frontPid != w.pid,
+        let fw = cands.first(where: { $0.pid == frontPid }) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            slpsFocus(pid: frontPid, wid: UInt32(fw.num), raise: false)
         }
     }
 }
