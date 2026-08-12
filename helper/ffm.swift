@@ -67,10 +67,17 @@ func displayBounds() -> [CGRect] {
     return (0..<Int(n)).map { CGDisplayBounds(ids[$0]) }
 }
 
-func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid: UInt32)? {
+func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid: UInt32, covered: Bool)? {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     let screens = displayBounds()
+    // Front-to-back candidates that pass the same filters as the
+    // hit-test, kept in z-order so "does anything in front overlap the
+    // hit" is a prefix scan. (Side effect vs the old single pass: an
+    // ignore-listed offscreen-stashed sliver no longer blocks focus —
+    // it's filtered before the ignore check, which is the behaviour we
+    // always wanted.)
+    var cands: [(pid: pid_t, num: Int, rect: CGRect, owner: String)] = []
     for w in list { // list is front-to-back
         guard (w["kCGWindowLayer"] as? Int) == 0,
             let b = w["kCGWindowBounds"] as? [String: Any],
@@ -80,13 +87,6 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid
             let num = w["kCGWindowNumber"] as? Int
         else { continue }
         let rect = CGRect(x: x, y: y, width: wd, height: h)
-        guard rect.contains(p) else { continue }
-        // topmost window is ignore-listed: leave focus alone entirely
-        // (don't fall through to the window beneath)
-        if let owner = w["kCGWindowOwnerName"] as? String,
-            ignoredApps.contains(owner.lowercased()) {
-            return nil
-        }
         // AeroSpace hides inactive-workspace windows mostly offscreen
         // with a sliver visible — ignore anything <30% on-screen
         let visible = screens.reduce(CGFloat(0)) { acc, scr in
@@ -96,7 +96,23 @@ func topWindowUnder(_ p: CGPoint) -> (pid: pid_t, key: String, rect: CGRect, wid
         if rect.width * rect.height > 0, visible / (rect.width * rect.height) < 0.3 {
             continue
         }
-        return (pid, "\(pid):\(num)", rect, UInt32(num))
+        cands.append((pid, num, rect, (w["kCGWindowOwnerName"] as? String) ?? ""))
+    }
+    for (i, c) in cands.enumerated() {
+        guard c.rect.contains(p) else { continue }
+        // topmost window is ignore-listed: leave focus alone entirely
+        // (don't fall through to the window beneath)
+        if ignoredApps.contains(c.owner.lowercased()) { return nil }
+        // Anything in front of the hit that overlaps it is a floating
+        // window (tiles never overlap): raising the hit would drag it
+        // over the float. The caller then focuses WITHOUT raise, which
+        // is what keeps floats always-in-front, omarchy style. Sub-4px
+        // overlaps don't count (border / shadow slop).
+        let covered = cands[..<i].contains { f in
+            let o = f.rect.intersection(c.rect)
+            return !o.isNull && o.width > 4 && o.height > 4
+        }
+        return (c.pid, "\(c.pid):\(c.num)", c.rect, UInt32(c.num), covered)
     }
     return nil
 }
@@ -110,7 +126,13 @@ func dbg(_ m: String) {
     if debug { FileHandle.standardError.write((m + "\n").data(using: .utf8)!) }
 }
 
-func focus(pid: pid_t, rect: CGRect) {
+// `allowRaise: false` = the hovered window sits under a floating
+// window somewhere on screen; focus it (SLPS + AXMain make it key)
+// but leave z-order alone so the float stays in front — omarchy's
+// float layer, emulated. Raising still happens when it's visually a
+// no-op (nothing in front overlaps), which keeps the Chromium
+// focus-needs-raise workaround for plain tile-to-tile hops.
+func focus(pid: pid_t, rect: CGRect, allowRaise: Bool) {
     let app = AXUIElementCreateApplication(pid)
     var matched = false
     var winsRef: CFTypeRef?
@@ -130,8 +152,12 @@ func focus(pid: pid_t, rect: CGRect) {
             if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
                 abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
                 // raise first — Chromium apps often ignore main/frontmost
-                // without it; z-order changes are moot in tiling
-                AXUIElementPerformAction(win, kAXRaiseAction as CFString)
+                // without it; z-order changes are moot BETWEEN tiles
+                // (they don't overlap), but skipped when a float is in
+                // front (allowRaise == false)
+                if allowRaise {
+                    AXUIElementPerformAction(win, kAXRaiseAction as CFString)
+                }
                 let r = AXUIElementSetAttributeValue(win, kAXMainAttribute as CFString, kCFBooleanTrue)
                 dbg("  -> matched, set main: \(r.rawValue)")
                 matched = true
@@ -139,8 +165,15 @@ func focus(pid: pid_t, rect: CGRect) {
             }
         }
     }
-    let fr = AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
-    dbg("focus pid=\(pid) matched=\(matched) frontmost=\(fr.rawValue)")
+    // App-level activation raises the app's key window too, so it is
+    // gated with the raise; the SLPS focus above already moved key
+    // focus (it's the route that works even where AX no-ops).
+    if allowRaise {
+        let fr = AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        dbg("focus pid=\(pid) matched=\(matched) frontmost=\(fr.rawValue)")
+    } else {
+        dbg("focus pid=\(pid) matched=\(matched) no-raise (float in front)")
+    }
 }
 
 guard AXIsProcessTrustedWithOptions(
@@ -172,7 +205,7 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
             let now = CFAbsoluteTimeGetCurrent()
             if now - lastFocusAt > 0.25 {
                 slpsFocus(pid: hit.pid, wid: hit.wid)
-                focus(pid: hit.pid, rect: hit.rect)
+                focus(pid: hit.pid, rect: hit.rect, allowRaise: !hit.covered)
                 lastFocusAt = now
                 lastKey = hit.key
             }
