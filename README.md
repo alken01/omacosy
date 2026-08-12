@@ -65,7 +65,7 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 | Tiling WM | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | `config/aerospace/aerospace.template.toml` |
 | Super key | [Karabiner](https://karabiner-elements.pqrs.org) (Caps Lock → cmd+ctrl+alt) | `config/karabiner/` (copied, not symlinked — TCC) |
 | Status bar | [sketchybar](https://github.com/FelixKratz/SketchyBar) | `config/sketchybar/` |
-| Window borders | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
+| Window borders + fullscreen shroud | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
@@ -125,8 +125,8 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+s` / `Super+shift+s` | scratchpad workspace (toggle / send window) |
 | `Super+tab` | previous workspace |
 | `Super+shift+tab` | throw workspace to other monitor |
-| `Super+f` | fullscreen (tiling-friendly) |
-| `Super+n` | native macOS fullscreen (claims the notch strip) |
+| `Super+f` | fullscreen — on notched displays the camera strip is blacked out so it reads as true fullscreen, while the window stays in its workspace (swipes still reach it) |
+| `Super+n` | native macOS fullscreen (a separate Space — outside the workspace model, avoid unless an app needs it) |
 | `Super+t` | toggle floating |
 | `Super+j` | toggle split direction |
 | `Super+-` / `Super+=` | resize |

@@ -227,6 +227,44 @@ shape.fillColor = nil
 view.layer?.addSublayer(shape)
 win.contentView = view
 
+// fullscreen shroud: macOS reserves the camera strip on notched
+// displays — no normal window may occupy it, so aerospace-fullscreen
+// always leaves the bar strip visible. Blacking the strip out (above
+// the bar) makes Super+F read as true fullscreen while the window
+// stays inside the workspace model, where swipes still reach it.
+let shroud = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 32),
+    styleMask: .borderless, backing: .buffered, defer: false)
+shroud.backgroundColor = .black
+shroud.isOpaque = true
+shroud.ignoresMouseEvents = true
+shroud.hasShadow = false
+shroud.level = .screenSaver // above the bar, which lives in the strip
+shroud.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+shroud.animationBehavior = .none
+
+// show the strip cover when a fullscreen window sits on a notched
+// display; hide it everywhere else (flat displays need no cover —
+// fullscreen already owns every pixel there)
+func syncShroud(_ f: CGRect?) {
+    guard let f = f else {
+        if shroud.isVisible { shroud.orderOut(nil); tlog("shroud hide") }
+        return
+    }
+    let d = CGDisplayBounds(displayOf(f))
+    let inset = safeTop(for: d)
+    guard inset > 0 else {
+        if shroud.isVisible { shroud.orderOut(nil); tlog("shroud hide") }
+        return
+    }
+    let band = cocoaRect(CGRect(x: d.origin.x, y: d.origin.y,
+        width: d.width, height: inset))
+    if shroud.frame != band { shroud.setFrame(band, display: false) }
+    if !shroud.isVisible {
+        shroud.orderFrontRegardless()
+        tlog("shroud show inset=\(Int(inset))")
+    }
+}
+
 // --- state + tick ------------------------------------------------------
 
 var conf = loadConf()
@@ -271,20 +309,31 @@ func recheck(after delay: Double) {
 }
 
 func tick() {
-    guard let hit = focusedWindowFrame(), case let (f, appName) = hit, !isFullscreen(f) else {
+    guard let hit = focusedWindowFrame() else {
         // transient misses happen around app switches and popups —
         // hide only when the miss persists, or the ring blinks. Gates
         // are wall-clock, not tick counts: event-driven ticks arrive
         // in millisecond bursts and would rush a counter.
         if missSince == nil { missSince = Date() }
         if Date().timeIntervalSince(missSince!) >= 0.35 {
-            hideRing("miss-or-fullscreen")
+            hideRing("miss")
+            syncShroud(nil)
         } else {
             recheck(after: 0.15)
         }
         return
     }
+    let (f, appName) = hit
     missSince = nil
+
+    // fullscreen is deliberate, not a transient: drop the ring at once
+    // and cover the notch strip on displays that have one
+    if isFullscreen(f) {
+        hideRing("fullscreen")
+        syncShroud(f)
+        return
+    }
+    syncShroud(nil)
 
     if f != pendingFrame || appName != pendingApp {
         pendingFrame = f
@@ -375,6 +424,7 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
 watch("/tmp/omacosy-ws-switch", create: true) {
     lastWsSwitchAt = Date()
     hideRing("workspace-switch")
+    syncShroud(nil) // the next tick re-covers if the target is fullscreen too
 }
 
 // theme-set swaps the ~/.config/omarchy/current/theme symlink — watch
