@@ -139,8 +139,8 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
 
 Workspaces 1–6 pin to the **main** display, 7–9 to the **secondary**
-(roles, not hardware — a single display gets everything; messengers
-auto-land on 8, music on 9 via window rules).
+(roles, not hardware — a single display gets everything). Windows open
+on the workspace you're on; nothing is auto-assigned by app.
 
 ## Themes
 
