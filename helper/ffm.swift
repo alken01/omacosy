@@ -23,7 +23,6 @@ func SLPSSetFrontProcess(_ psn: inout PSN, _ wid: UInt32, _ mode: UInt32) -> Int
 @_silgen_name("SLPSPostEventRecordTo")
 func SLPSPostEvent(_ psn: inout PSN, _ bytes: UnsafeMutablePointer<UInt8>) -> Int32
 
-let kCPSAllWindows: UInt32 = 0x100
 let kCPSUserGenerated: UInt32 = 0x200
 let kCPSNoWindows: UInt32 = 0x400
 
@@ -89,11 +88,10 @@ func displayBounds() -> [CGRect] {
 
 typealias Cand = (pid: pid_t, num: Int, rect: CGRect, owner: String)
 
-// Front-to-back layer-0 windows that pass the visibility filter —
-// shared by the hover hit-test and the float keeper. (Side effect vs
-// the old single pass: an ignore-listed offscreen-stashed sliver no
-// longer blocks focus — it's filtered before the ignore check, which
-// is the behaviour we always wanted.)
+// Front-to-back layer-0 windows that pass the visibility filter.
+// (Side effect vs the old single pass: an ignore-listed
+// offscreen-stashed sliver no longer blocks focus — it's filtered
+// before the ignore check, which is the behaviour we always wanted.)
 func windowCandidates() -> [Cand] {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return [] }
@@ -201,108 +199,6 @@ func focus(pid: pid_t, rect: CGRect, allowRaise: Bool) {
     }
 }
 
-// --- float keeper: floating windows ALWAYS stay in front ------------
-// Hyprland puts floats on a layer above tiles; macOS has no such layer
-// for other apps' windows (changing their level needs code injection).
-// Emulated instead: every tick, any window that a clearly-bigger
-// window covers is a floating window that got buried — tiles never
-// overlap on the visible workspace, so an overlap pair always
-// contains a float, and the float is the small one. AXRaise restores
-// its z-order without touching key focus, so this never fights the
-// hover-focus logic (whose `covered` check already refuses to raise
-// tiles over floats — the keeper handles what that can't: native
-// click-to-front when a tile is clicked, app self-activation, etc.).
-let raiseCooldown = 0.5
-let clearlySmaller: CGFloat = 0.8
-var lastRaiseAt: [Int: Double] = [:]
-
-func axRaise(pid: pid_t, rect: CGRect) {
-    let app = AXUIElementCreateApplication(pid)
-    var winsRef: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &winsRef) == .success,
-        let wins = winsRef as? [AXUIElement] else { return }
-    for win in wins {
-        var posRef: CFTypeRef?
-        var sizeRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(win, kAXPositionAttribute as CFString, &posRef) == .success,
-            AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sizeRef) == .success
-        else { continue }
-        var pos = CGPoint.zero
-        var size = CGSize.zero
-        AXValueGetValue(posRef as! AXValue, .cgPoint, &pos)
-        AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
-        if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
-            abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
-            let r = AXUIElementPerformAction(win, kAXRaiseAction as CFString)
-            dbg("  axRaise matched, result=\(r.rawValue)")
-            return
-        }
-    }
-    dbg("  axRaise: no AX window matched rect \(rect)")
-}
-
-func enforceFloats(_ cands: [Cand], now: Double) {
-    for (i, w) in cands.enumerated() {
-        guard i > 0 else { continue }
-        let area = w.rect.width * w.rect.height
-        guard area > 0 else { continue }
-        var buried = false
-        for f in cands[..<i] {
-            let o = f.rect.intersection(w.rect)
-            guard !o.isNull, o.width > 4, o.height > 4 else { continue }
-            // only a CLEARLY bigger window in front marks a buried
-            // float; near-equal areas (two stacked floats, a
-            // maximized float) are left alone
-            if area < f.rect.width * f.rect.height * clearlySmaller {
-                buried = true
-                break
-            }
-        }
-        if buried, now - (lastRaiseAt[w.num] ?? 0) > raiseCooldown {
-            // Never yank the float up mid-interaction: wait for the
-            // keyboard and mouse to go quiet so the focus round-trip
-            // below can't swallow a keystroke or a click.
-            let keyIdle = CGEventSource.secondsSinceLastEventType(
-                .combinedSessionState, eventType: .keyDown)
-            let clickIdle = CGEventSource.secondsSinceLastEventType(
-                .combinedSessionState, eventType: .leftMouseDown)
-            guard keyIdle > 1.0, clickIdle > 0.7 else { continue }
-            lastRaiseAt[w.num] = now
-            dbg("float keeper: re-raising \(w.owner) #\(w.num)")
-            raiseFloat(w, cands: cands)
-        }
-    }
-}
-
-// Raising another app's window above the ACTIVE app needs activation:
-// AXRaise alone reorders only within the float's own app (verified —
-// returns success, no visual change; this is the wall yabai's
-// scripting addition exists to climb). So: AXRaise the window to its
-// app's front, activate the app to lift it globally, then hand focus
-// straight back to whoever had it — with kCPSNoWindows, so the
-// handback doesn't undo the lift. Net effect: float on top, focus
-// unchanged, one menu-bar blink.
-func raiseFloat(_ w: Cand, cands: [Cand]) {
-    axRaise(pid: w.pid, rect: w.rect)
-    let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
-    // plain 0x200 activation does NOT reorder a background app's
-    // windows (measured) — kCPSAllWindows is what actually lifts it
-    var psn = PSN()
-    if GetProcessForPID(w.pid, &psn) == noErr {
-        _ = SLPSSetFrontProcess(&psn, UInt32(w.num), kCPSAllWindows | kCPSUserGenerated)
-    }
-    // The window server applies the activation ASYNCHRONOUSLY — a
-    // same-instant focus handback races it and the lift never lands.
-    // Give it a beat, then return focus with kCPSNoWindows so the
-    // handback can't undo the lift.
-    if frontPid >= 0, frontPid != w.pid,
-        let fw = cands.first(where: { $0.pid == frontPid }) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            slpsFocus(pid: frontPid, wid: UInt32(fw.num), raise: false)
-        }
-    }
-}
-
 guard AXIsProcessTrustedWithOptions(
     ["AXTrustedCheckOptionPrompt": true] as CFDictionary) else {
     FileHandle.standardError.write("omacosy-ffm: waiting for Accessibility permission…\n".data(using: .utf8)!)
@@ -320,9 +216,6 @@ let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
     }
     let now = CFAbsoluteTimeGetCurrent()
     let cands = windowCandidates()
-    // floats stay in front even while the cursor is parked — keeper
-    // runs before the movement gate
-    enforceFloats(cands, now: now)
     guard let e = CGEvent(source: nil) else { return }
     if abs(e.location.x - lastCursor.x) > moveEpsilonPx
         || abs(e.location.y - lastCursor.y) > moveEpsilonPx {
