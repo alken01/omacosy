@@ -6,6 +6,7 @@ tap "FelixKratz/formulae"    # sketchybar, borders
 # Window management + bar + borders
 cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
+cask "ghostty"             # default terminal + floating TUI host (btop)
 brew "sketchybar"
 
 # CLI stack

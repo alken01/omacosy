@@ -35,6 +35,13 @@ link() {
   ln -sfn "$src" "$dst"
 }
 
+# generate aerospace.toml from the template + app choices
+source "$REPO_DIR/config/apps.conf"
+[ -f "$REPO_DIR/config/apps.local.conf" ] && source "$REPO_DIR/config/apps.local.conf"
+sed -e "s|@TERMINAL@|$TERMINAL|g" -e "s|@BROWSER@|$BROWSER|g" \
+    -e "s|@MUSIC@|$MUSIC|g" -e "s|@MESSENGER@|$MESSENGER|g" \
+  "$REPO_DIR/config/aerospace/aerospace.template.toml" > "$REPO_DIR/config/aerospace/aerospace.toml"
+
 log "Linking configs"
 link "$REPO_DIR/zsh/zshrc"           "$HOME/.zshrc"
 link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
