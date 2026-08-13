@@ -8,6 +8,8 @@ style workspace overview (live previews included), focused-window
 border rings, and unified theme switching down to the wallpaper —
 bootstrapped from this one repo.
 
+![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
+
 The whole desktop environment idles around **280MB** and is mostly
 self-built: five small signed Swift binaries (plus two shell tools)
 replace what would otherwise be a pile of dependencies (several of which are broken on
@@ -175,6 +177,8 @@ from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 
 ## Tiling: dwindle
 
+![Two windows tiled side by side, accent border ring on the focused one](docs/screenshots/tiling.jpg)
+
 AeroSpace natively inserts new windows as equal siblings (three
 windows = three columns). `omacosy-dwindle` grafts Hyprland's dwindle
 on top: each new tiled window splits the focused window's own slot,
@@ -196,6 +200,8 @@ trackpad. The system's own 4-finger gestures are disabled by
 (`uninstall.sh` restores them).
 
 ## Workspace overview
+
+![Workspace overview — live preview cards over the zoomed-out wallpaper, chips for empty workspaces](docs/screenshots/overview.jpg)
 
 4-finger **swipe up**: the wallpaper breathes in behind a dim wash and
 every non-empty workspace OF THE CURSOR'S MONITOR gets a card (per-
