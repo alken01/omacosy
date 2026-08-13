@@ -52,12 +52,13 @@ One-time permission grants (System Settings → Privacy & Security):
 
 ## App choices
 
-Keybindings launch apps defined in `config/apps.conf` (terminal,
-browser, music, messenger). Override any of them in
-`config/apps.local.conf` (gitignored), then re-run `install.sh`:
+Keybindings launch apps defined in `config/apps.conf` — defaults are
+Ghostty, Safari, Spotify, Slack (terminal, browser, music, messenger).
+Override any of them in `config/apps.local.conf` (gitignored), then
+re-run `install.sh`:
 
 ```sh
-# config/apps.local.conf
+# config/apps.local.conf — your picks win over apps.conf
 TERMINAL=kitty
 BROWSER=Arc
 ```
