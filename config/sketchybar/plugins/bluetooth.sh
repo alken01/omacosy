@@ -73,17 +73,30 @@ case "${1:-}" in
     exit 0
     ;;
   connect)
-    "$HOME/.local/bin/omacosy-helper" bt connect "$2" 2>/dev/null
+    # openConnection blocks up to ~20s when the device doesn't answer
+    # (off / out of range / multipoint slots busy) — run it async so
+    # the popup closes instantly, show progress on the pill, and say
+    # so when the radio comes back empty instead of failing silently
     close_popup
-    sleep 1
-    render
+    sketchybar --set bluetooth icon="󰂯" icon.padding_right=4 label.drawing=on label="connecting…" label.padding_right=10
+    (
+      if "$HOME/.local/bin/omacosy-helper" bt connect "$2" >/dev/null 2>&1; then
+        render
+      else
+        sketchybar --set bluetooth icon="󰂲" label.drawing=on label="no response" label.padding_right=10
+        sleep 3
+        render
+      fi
+    ) &
     exit 0
     ;;
   disconnect)
-    "$HOME/.local/bin/omacosy-helper" bt disconnect "$2" 2>/dev/null
     close_popup
-    sleep 1
-    render
+    (
+      "$HOME/.local/bin/omacosy-helper" bt disconnect "$2" >/dev/null 2>&1
+      sleep 1
+      render
+    ) &
     exit 0
     ;;
 esac
