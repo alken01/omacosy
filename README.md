@@ -137,6 +137,7 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+s` / `Super+shift+s` | scratchpad workspace (toggle / send window) |
 | `Super+tab` | previous workspace |
 | `Super+shift+tab` | throw window to same slot on other monitor |
+| `Super+shift+space` | throw WHOLE workspace to other monitor |
 | `Super+f` | fullscreen — on notched displays the camera strip is blacked out so it reads as true fullscreen, while the window stays in its workspace (swipes still reach it) |
 | `Super+n` | native macOS fullscreen (a separate Space — outside the workspace model, avoid unless an app needs it) |
 | `Super+t` | toggle floating |

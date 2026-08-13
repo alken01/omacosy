@@ -115,6 +115,8 @@ cmd-ctrl-alt-tab = 'workspace-back-and-forth'
 # throw the focused WINDOW to the same slot on the other monitor
 # (whole-workspace moves conflict with the per-monitor assignment)
 cmd-ctrl-alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw'
+# throw the WHOLE workspace (every window) to its twin on the other monitor
+cmd-ctrl-alt-shift-space = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw-all'
 
 # Apps (omarchy: Super+Shift+letter)
 cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files

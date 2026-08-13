@@ -22,6 +22,18 @@ case "$op" in
     ws="$(pick "$mon" "$slot")"
     [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
     ;;
+  throw-all) # EVERY window of the focused workspace to the twin slot
+    cur="$("$A" list-workspaces --focused)"
+    s="${cur: -1}"
+    other="$("$A" list-monitors --format '%{monitor-id}' | grep -vx "$mon" | head -1 || true)"
+    [ -n "$other" ] || exit 0
+    ws="$(pick "$other" "$s")"
+    [ -n "$ws" ] || exit 0
+    "$A" list-windows --workspace "$cur" --format '%{window-id}' | while read -r wid; do
+      [ -n "$wid" ] && "$A" move-node-to-workspace --window-id "$wid" "$ws"
+    done
+    "$A" workspace "$ws"
+    ;;
   throw) # focused WINDOW to the same slot on the other monitor
     cur="$("$A" list-workspaces --focused)"
     s="${cur: -1}"
