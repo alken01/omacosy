@@ -343,11 +343,16 @@ func tick() {
     // stability gate — but only where ghosts can exist: mid-flight
     // frames occur around workspace switches (we get that signal), so
     // demand stillness for a beat after one and be instant otherwise.
-    if Date().timeIntervalSince(lastWsSwitchAt) < 0.6 {
-        let stableFor = justHid ? 0.35 : 0.15
+    // Tuned from the live log (2026-08-13): the old 0.35s stillness in
+    // a 0.6s window put the post-switch ring at p50=488ms / p90=1.5s —
+    // THE felt "borders lag". Ghost frames are also rejected by the
+    // ≥70%-onscreen filter above, so the stillness only has to outlast
+    // one relayout frame, not the whole storm.
+    if Date().timeIntervalSince(lastWsSwitchAt) < 0.35 {
+        let stableFor = justHid ? 0.12 : 0.08
         let held = Date().timeIntervalSince(pendingSince)
         if held < stableFor {
-            recheck(after: stableFor - held + 0.02)
+            recheck(after: stableFor - held + 0.01)
             return
         }
     }
