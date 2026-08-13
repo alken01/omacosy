@@ -112,6 +112,12 @@ if [ ! -x "$HOME/.local/bin/omacosy-dwindle" ] || [ "$REPO_DIR/helper/dwindle.sw
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-dwindle" "$REPO_DIR/helper/dwindle.swift"
 fi
 
+# system-events → bar-triggers daemon (deletes the bar's pollers)
+if [ ! -x "$HOME/.local/bin/omacosy-watcher" ] || [ "$REPO_DIR/helper/watcher.swift" -nt "$HOME/.local/bin/omacosy-watcher" ]; then
+  log "Building omacosy-watcher"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-watcher" "$REPO_DIR/helper/watcher.swift"
+fi
+
 # focus-follows-mouse daemon (own binary so helper rebuilds never
 # invalidate its Accessibility grant); runs as a launchd agent
 if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
@@ -134,6 +140,7 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   # aerospace-swipe too — unsigned, every rebuild invalidated its
   # Accessibility grant and silently killed all trackpad swipes
   codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
+  codesign -f -s "Apple Development" --identifier com.omacosy.watcher "$HOME/.local/bin/omacosy-watcher" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.acsandmann.swipe "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
 fi
@@ -189,6 +196,22 @@ cat > "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" <<PLIST
 PLIST
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
 launchctl load "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist"
+
+cat > "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.omacosy.watcher</string>
+  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-watcher</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/omacosy-watcher.err</string>
+</dict>
+</plist>
+PLIST
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" 2>/dev/null || true
+launchctl load "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist"
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"

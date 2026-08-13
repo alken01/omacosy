@@ -25,6 +25,8 @@ launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null 
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/omacosy-dwindle"
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" "$HOME/.local/bin/omacosy-watcher"
 # overview is self-daemonizing (no launchd agent) — kill by pidfile
 if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
   kill "$(cat "/tmp/omacosy-overview-$(id -u).pid")" 2>/dev/null || true

@@ -85,11 +85,13 @@ for sid in $WORKSPACES; do
 done
 
 # one hidden observer repaints every workspace item in a single pass.
-# front_app_switched + a slow poll keep the single-app icons honest
-# when windows open/close/move without a workspace switch.
+# front_app_switched + windows_changed (omacosy-watcher's SkyLight
+# create/destroy events) keep the single-app icons honest when windows
+# open/close without a workspace switch — no poll.
+sketchybar --add event windows_changed
 sketchybar --add item spaces_observer left \
-  --subscribe spaces_observer aerospace_workspace_change front_app_switched \
-  --set spaces_observer drawing=off updates=on update_freq=10 script="$PLUGIN_DIR/spaces.sh"
+  --subscribe spaces_observer aerospace_workspace_change front_app_switched windows_changed \
+  --set spaces_observer drawing=off updates=on script="$PLUGIN_DIR/spaces.sh"
 
 # Each monitor's bar shows only its own workspaces (i3/omarchy style).
 # aerospace monitor ids and sketchybar display numbers both follow the
