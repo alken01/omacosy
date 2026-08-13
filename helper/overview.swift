@@ -124,7 +124,7 @@ func themeAccent() -> NSColor {
 // --- thumbnails (ScreenCaptureKit) ---------------------------------------
 
 var thumbs: [UInt32: CGImage] = [:]
-var thumbViews: [UInt32: NSImageView] = [:]
+var thumbViews: [UInt32: NSView] = [:]
 
 func refreshThumbs(_ ids: [UInt32]) {
     Task {
@@ -144,7 +144,8 @@ func refreshThumbs(_ ids: [UInt32]) {
             await MainActor.run {
                 thumbs[wid] = img
                 if let v = thumbViews[wid] {
-                    v.image = NSImage(cgImage: img, size: .zero)
+                    v.layer?.contents = img
+                    v.layer?.contentsGravity = .resizeAspectFill
                 }
             }
         }
@@ -188,6 +189,11 @@ func switchTo(_ ws: String) {
 final class ContentView: NSView {
     var cardRects: [(NSRect, String)] = []
     override var acceptsFirstResponder: Bool { true }
+    // every click belongs to the overlay itself — labels and image
+    // views inside cards must never swallow a mouseDown
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        frame.contains(point) ? self : nil
+    }
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         for (r, ws) in cardRects where r.contains(p) {
@@ -299,17 +305,22 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             let canvas = NSRect(x: 12, y: 10, width: cardW - 24, height: previewH)
             let visible = Array(items.prefix(4))
             for (w, slot) in zip(visible, slotRects(visible.count, in: canvas)) {
-                let sv = NSImageView(frame: slot)
+                // layer contents with aspect-FILL, Mission-Control
+                // style — NSImageView only aspect-fits, which
+                // letterboxed the capture inside the slot
+                let sv = NSView(frame: slot)
                 sv.wantsLayer = true
                 sv.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
                 sv.layer?.cornerRadius = 6
                 sv.layer?.masksToBounds = true
-                sv.imageScaling = .scaleProportionallyUpOrDown
                 if let t = thumbs[w.id] {
-                    sv.image = NSImage(cgImage: t, size: .zero)
+                    sv.layer?.contents = t
+                    sv.layer?.contentsGravity = .resizeAspectFill
                 } else {
-                    sv.image = NSWorkspace.shared.icon(forFile: w.bundle)
-                    sv.imageScaling = .scaleNone
+                    var rect = NSRect(origin: .zero, size: NSSize(width: 32, height: 32))
+                    sv.layer?.contents = NSWorkspace.shared.icon(forFile: w.bundle)
+                        .cgImage(forProposedRect: &rect, context: nil, hints: nil)
+                    sv.layer?.contentsGravity = .center
                 }
                 thumbViews[w.id] = sv
                 card.addSubview(sv)
