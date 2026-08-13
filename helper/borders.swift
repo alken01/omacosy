@@ -58,6 +58,10 @@ let EVENT_FRONT_CHANGE: UInt32 = 1508
 struct Conf {
     var width: CGFloat = 4
     var radius: CGFloat = 10
+    // ring offset from the window edge: 0 = inner edge flush with the
+    // frame, positive = breathing room, negative = overlap (hides the
+    // window's own dark edge pixels for a truly flush look)
+    var gap: CGFloat = 0
     var appRadius: [String: CGFloat] = [:]
 }
 let confFile = FileManager.default.homeDirectoryForCurrentUser
@@ -74,6 +78,7 @@ func loadConf() -> Conf {
         let val = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
         if key == "width", let v = Double(val) { c.width = CGFloat(v) }
         else if key == "radius", let v = Double(val) { c.radius = CGFloat(v) }
+        else if key == "gap", let v = Double(val) { c.gap = CGFloat(v) }
         else if key.hasPrefix("radius:"), let v = Double(val) {
             c.appRadius[String(key.dropFirst(7)).lowercased()] = CGFloat(v)
         }
@@ -432,7 +437,7 @@ func tick() {
     shownApp = appName
 
     let radius = conf.appRadius[appName] ?? conf.radius
-    let pad = conf.width // ring sits just outside the window edge
+    let pad = conf.width + conf.gap // ring offset from the window edge
     let outer = cocoaRect(f.insetBy(dx: -pad, dy: -pad))
     CATransaction.begin()
     CATransaction.setDisableActions(true)
