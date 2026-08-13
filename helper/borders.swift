@@ -592,5 +592,19 @@ let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
     tick()
 }
 RunLoop.current.add(timer, forMode: .common)
+
+// display attach/detach moves the CG↔Cocoa flip origin (primary
+// screen height). The ring frame is diffed against lastFrame, so an
+// unchanged window would keep its stale-flip position until the next
+// real event — invalidate and redraw the moment AppKit publishes the
+// new screen table.
+NotificationCenter.default.addObserver(
+    forName: NSApplication.didChangeScreenParametersNotification,
+    object: nil, queue: .main
+) { _ in
+    tlog("screen parameters changed — reframing ring")
+    lastFrame = .zero
+    tick()
+}
 tick()
 app.run()
