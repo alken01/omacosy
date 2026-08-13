@@ -76,10 +76,12 @@ for sid in $WORKSPACES; do
       click_script="aerospace workspace $sid"
 done
 
-# one hidden observer repaints every workspace item in a single pass
+# one hidden observer repaints every workspace item in a single pass.
+# front_app_switched + a slow poll keep the single-app icons honest
+# when windows open/close/move without a workspace switch.
 sketchybar --add item spaces_observer left \
-  --subscribe spaces_observer aerospace_workspace_change \
-  --set spaces_observer drawing=off script="$PLUGIN_DIR/spaces.sh"
+  --subscribe spaces_observer aerospace_workspace_change front_app_switched \
+  --set spaces_observer drawing=off updates=on update_freq=10 script="$PLUGIN_DIR/spaces.sh"
 
 # Each monitor's bar shows only its own workspaces (i3/omarchy style).
 # aerospace monitor ids and sketchybar display numbers both follow the
