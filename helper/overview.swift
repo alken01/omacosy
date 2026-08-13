@@ -137,7 +137,7 @@ struct Win {
     let bundle: String
 }
 
-func snapshotWorkspaces() -> (order: [String], wins: [String: [Win]], focused: String) {
+func snapshotWorkspaces() -> (order: [String], wins: [String: [Win]], focused: String, all: [String]) {
     // one CLI round-trip: windows carry their workspace's focused flag
     var wins: [String: [Win]] = [:]
     var focused = ""
@@ -163,7 +163,11 @@ func snapshotWorkspaces() -> (order: [String], wins: [String: [Win]], focused: S
         default: return a < b
         }
     }
-    return (order, wins, focused)
+    // the full set (empty workspaces included) — digits can jump to a
+    // clean screen even though empty workspaces get no card
+    var all = aerospace(["list-workspaces", "--all"]).split(separator: "\n").map(String.init)
+    if all.isEmpty { all = order }
+    return (order, wins, focused, all)
 }
 
 // --- theme ---------------------------------------------------------------
@@ -264,6 +268,7 @@ final class KeyWindow: NSPanel {
 }
 
 var shownIds: [String] = []
+var allIds: [String] = []
 var overlayVisible = false
 
 let win = KeyWindow(contentRect: NSScreen.main!.frame,
@@ -374,7 +379,7 @@ final class ContentView: NSView {
     override func keyDown(with event: NSEvent) {
         tlog("keyDown code=\(event.keyCode) chars='\(event.charactersIgnoringModifiers ?? "")' shown=\(shownIds)")
         if event.keyCode == 53 { hideOverlay(); return } // esc
-        if let ch = event.charactersIgnoringModifiers, shownIds.contains(ch) {
+        if let ch = event.charactersIgnoringModifiers, allIds.contains(ch) {
             switchTo(ch)
         }
     }
@@ -427,11 +432,12 @@ let headH: CGFloat = 40
 let cardH = headH + previewH + 12
 let gap: CGFloat = 24
 
-func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String), into content: ContentView) {
-    let (order, wins, focused) = snap
+func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String, all: [String]), into content: ContentView) {
+    let (order, wins, focused, all) = snap
     let shown = order.filter { wins[$0] != nil || $0 == focused }
     guard !shown.isEmpty else { return }
     shownIds = shown
+    allIds = all
     thumbViews.removeAll()
     let screen = win.screen ?? NSScreen.main!
 
