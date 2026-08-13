@@ -287,11 +287,15 @@ func applyBackdrop(_ content: ContentView, shot: CGImage?) {
     content.shotReady = true
     if let shot = shot {
         content.shotLayer.contents = shot
+        // the shot covers every pixel at scale 1.0 right now — turn the
+        // floor opaque in the same beat, so the zoom reveals solid dark
+        // instead of the live desktop bleeding in around the edges
+        content.layer?.backgroundColor = NSColor.black.cgColor
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.24)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
         content.shotLayer.setAffineTransform(CGAffineTransform(scaleX: 0.93, y: 0.93))
-        content.dimLayer.opacity = 0.72
+        content.dimLayer.opacity = 0.8
         CATransaction.commit()
     } else {
         // no screenshot (permission missing / capture failed): plain dim
