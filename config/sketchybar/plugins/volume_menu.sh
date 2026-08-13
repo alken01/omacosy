@@ -11,6 +11,22 @@ close() {
   sketchybar --remove volume.slider >/dev/null 2>&1
 }
 
+# LABEL_COLOR at ~60% alpha for the quiet action rows (weather-popup style)
+DIM="0x99${LABEL_COLOR:4}"
+
+# output-device icon from the name — CoreAudio exposes no device class,
+# so heuristics it is
+dev_icon() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    *macbook*) printf '󰌢' ;;
+    *airpods* | *headphone* | *buds* | *momentum* | *wh-1000* | *quietcomfort* | *qc\ *) printf '󰋋' ;;
+    *display* | *tv* | *hdmi* | *lg* | *dell* | *benq*) printf '󰍹' ;;
+    *airplay* | *homepod*) printf '󰀟' ;;
+    *background\ music* | *blackhole* | *loopback* | *soundflower* | *virtual*) printf '󰕾' ;;
+    *) printf '󰓃' ;;
+  esac
+}
+
 case "${1:-toggle}" in
   close)
     close
@@ -35,8 +51,10 @@ fi
 close # clear any leftovers from a previous open
 
 VOL="$(osascript -e 'output volume of (get volume settings)')"
-sketchybar --add slider volume.slider popup.volume 140 \
+sketchybar --add slider volume.slider popup.volume 160 \
   --set volume.slider \
+    icon="󰕾" icon.color="$DIM" icon.padding_left=10 icon.padding_right=8 \
+    label="${VOL}%" label.color="$DIM" label.padding_right=10 \
     slider.percentage="$VOL" \
     slider.highlight_color="$ACCENT" \
     slider.background.height=6 \
@@ -49,21 +67,29 @@ i=0
 while IFS=$'\t' read -r marker dev; do
   [ -z "$dev" ] && continue
   if [ "$marker" = "*" ]; then
-    ICON="󰄬" COLOR="$ACCENT"
+    ICOL="$ACCENT" COLOR="$ACCENT"
   else
-    ICON="·" COLOR="$LABEL_COLOR"
+    ICOL="$MUTED" COLOR="$LABEL_COLOR"
   fi
   sketchybar --add item "volume.menu.$i" popup.volume \
     --set "volume.menu.$i" \
-      icon="$ICON" \
-      icon.color="$COLOR" \
+      icon="$(dev_icon "$dev")" \
+      icon.color="$ICOL" icon.padding_left=10 icon.padding_right=8 \
       label="$dev" \
-      label.color="$COLOR" \
+      label.color="$COLOR" label.padding_left=0 \
       label.padding_right=10 \
       background.drawing=off \
       click_script="$PLUGIN_DIR/volume_menu.sh select \"$dev\""
   i=$((i + 1))
 done < <("$HOME/.local/bin/omacosy-helper" audio list)
+
+# quiet action row — small + dimmed, weather-footer style
+sketchybar --add item "volume.menu.$i" popup.volume \
+  --set "volume.menu.$i" icon.drawing=off \
+    label="sound settings…" label.color="$DIM" \
+    label.font="JetBrainsMono Nerd Font:Regular:12.0" \
+    label.padding_left=10 label.padding_right=10 background.drawing=off \
+    click_script="open 'x-apple.systempreferences:com.apple.Sound-Settings.extension'; sketchybar --set volume popup.drawing=off"
 
 "$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others volume
 sketchybar --set volume popup.drawing=on
