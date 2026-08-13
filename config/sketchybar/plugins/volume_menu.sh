@@ -54,7 +54,7 @@ VOL="$(osascript -e 'output volume of (get volume settings)')"
 sketchybar --add slider volume.slider popup.volume 160 \
   --set volume.slider \
     icon="󰕾" icon.color="$DIM" icon.padding_left=10 icon.padding_right=8 \
-    label="${VOL}%" label.color="$DIM" label.padding_right=10 \
+    label="${VOL}%" label.color="$DIM" label.padding_left=8 label.padding_right=10 \
     slider.percentage="$VOL" \
     slider.highlight_color="$ACCENT" \
     slider.background.height=6 \
@@ -105,7 +105,7 @@ sketchybar --set volume popup.drawing=on
     W="${W%.*}"
     [ "${W:-0}" -gt "$MAXW" ] && MAXW=$W
   done
-  # slider row = icon zone (~33) + slider + label zone (~34)
-  [ "$MAXW" -gt 100 ] && sketchybar --set volume.slider slider.width=$((MAXW - 67)) 2>/dev/null
+  # slider row = icon zone (~33) + slider + label zone (~42)
+  [ "$MAXW" -gt 100 ] && sketchybar --set volume.slider slider.width=$((MAXW - 75)) 2>/dev/null
 ) &
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)
