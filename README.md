@@ -9,8 +9,8 @@ border rings, and unified theme switching down to the wallpaper —
 bootstrapped from this one repo.
 
 The whole desktop environment idles around **280MB** and is mostly
-self-built: six small signed Swift binaries replace what would
-otherwise be a pile of dependencies (several of which are broken on
+self-built: five small signed Swift binaries (plus two shell tools)
+replace what would otherwise be a pile of dependencies (several of which are broken on
 macOS 26 — see below).
 
 > **Posture**: built for macOS 26 (Tahoe) on one desk — a MacBook Pro
@@ -198,7 +198,8 @@ trackpad. The system's own 4-finger gestures are disabled by
 ## Workspace overview
 
 4-finger **swipe up**: the wallpaper breathes in behind a dim wash and
-every non-empty workspace gets a card — live window previews
+every non-empty workspace OF THE CURSOR'S MONITOR gets a card (per-
+display Mission Control semantics) — live window previews
 (ScreenCaptureKit, composed into the tile layout), app icons, the
 focused workspace accent-ringed. Click a card or press its digit to
 jump; empty workspaces show as small chips (digits work for them too —
@@ -217,9 +218,12 @@ stops managing, all daemons and the bar stop) without uninstalling;
 ./uninstall.sh
 ```
 
-Stops everything, restores the native menu bar and any backed-up
-configs, removes the omacosy agents and binaries. Homebrew packages
-stay installed (removal command printed at the end).
+Manifest-driven: `install.sh` records what THIS machine actually
+gained (Homebrew packages that weren't already present, cloned repos,
+every `defaults` key's prior value), and `uninstall.sh` removes and
+restores exactly that — tools and settings you had before omacosy are
+never touched. Pre-manifest installs fall back to a conservative
+teardown that leaves all Homebrew packages in place.
 
 ## License & credits
 
