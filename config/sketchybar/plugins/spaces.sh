@@ -28,9 +28,11 @@ while IFS='|' read -r ws app layout; do
   fi
 done < <(aerospace list-windows --all --format '%{workspace}|%{app-name}|%{window-layout}' 2>/dev/null)
 
-# One fixed slot width for every workspace item, icon or number, so
-# the row's rhythm doesn't shift as apps come and go.
-SLOT_W=24
+# One fixed content-box width for every workspace item, icon or
+# number (item padding 2/2 completes the slot), so the row's rhythm
+# doesn't shift as apps come and go. 20 = the icon image size (32px
+# canvas at scale 0.625); the number label uses the same box.
+BOX_W=20
 
 ARGS=()
 for sid in $(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7 8 9'); do
@@ -40,20 +42,26 @@ for sid in $(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7 
     # icon BACKGROUND component must draw for its image to render —
     # transparent color, so only the image shows. The number label is
     # hidden; the icon carries the slot (keeps the row clear of the
-    # notch).
-    # SLOT_W keeps icon slots and number slots the same width, and
-    # the image centers in the icon's fixed box — uniform pills
-    # either way.
+    # notch). The image is LEFT-ALIGNED in the icon's box (measured:
+    # ink sat (box-image)/2 left of every slot center), so centering
+    # means box == image: BOX_W box, 32px icon canvas at scale
+    # 0.625 = 20px. (Paddings on an empty icon are ignored — also
+    # measured — so the box IS the footprint; item padding spaces it.)
     ARGS+=(--set "space.$sid" \
-      icon.drawing=on icon="" icon.width="$SLOT_W" icon.padding_left=0 icon.padding_right=0 \
+      icon.drawing=on icon="" icon.width="$BOX_W" \
+      icon.padding_left=0 icon.padding_right=0 \
       icon.background.drawing=on icon.background.color=0x00000000 icon.background.height=20 \
       icon.background.image="app.${APPS[$sid]}" \
-      icon.background.image.scale=0.5 icon.background.image.drawing=on \
-      label.drawing=off label.padding_left=0 label.padding_right=0)
+      icon.background.image.scale=0.625 icon.background.image.drawing=on \
+      label.drawing=off label.width=0 label.padding_left=0 label.padding_right=0)
   else
+    # icon.padding_right=0 matters: the bar-wide --default gives every
+    # item icon.padding_right=4, which survives icon.drawing=off and
+    # shoved the digits ~4px right of slot center
     ARGS+=(--set "space.$sid" icon.drawing=off icon.width=0 \
-      icon.background.drawing=off icon.background.image.drawing=off icon.padding_left=0 \
-      label.drawing=on label.width="$SLOT_W" label.align=center \
+      icon.background.drawing=off icon.background.image.drawing=off \
+      icon.padding_left=0 icon.padding_right=0 \
+      label.drawing=on label.width="$BOX_W" label.align=center \
       label.padding_left=0 label.padding_right=0)
   fi
   if [ "$sid" = "$FOCUSED" ]; then
