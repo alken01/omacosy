@@ -1,14 +1,16 @@
 # omacosy
 
 omakase + macOS + cosy. An [omarchy](https://omarchy.org)-style setup for
-macOS: tiling window management with a real Super key, a fully
-interactive themed status bar, focus-follows-mouse, trackpad workspace
-swipes, focused-window border rings, and unified theme switching down to
-the wallpaper — bootstrapped from this one repo.
+macOS: tiling window management with a real Super key and Hyprland's
+dwindle layout, a fully interactive themed status bar,
+focus-follows-mouse, trackpad workspace swipes with a Mission-Control-
+style workspace overview (live previews included), focused-window
+border rings, and unified theme switching down to the wallpaper —
+bootstrapped from this one repo.
 
 The whole desktop environment idles around **280MB** and is mostly
-self-built: four small signed Swift binaries replace what would
-otherwise be seven dependencies (several of which are broken on
+self-built: six small signed Swift binaries replace what would
+otherwise be a pile of dependencies (several of which are broken on
 macOS 26 — see below).
 
 > **Posture**: built for macOS 26 (Tahoe) on one desk — a MacBook Pro
@@ -38,10 +40,13 @@ One-time permission grants (System Settings → Privacy & Security):
    so rebuilds keep their grants; without one, re-grant after rebuilds.
 2. **Input Monitoring**: Karabiner (prompts) and AerospaceSwipe
    (add manually: `~/.local/share/aerospace-swipe/AerospaceSwipe.app`).
-3. **Bluetooth**: sketchybar
+3. **Screen Recording**: `omacosy-overview` (prompts on the first
+   swipe-up) — powers the live window previews in the workspace
+   overview; without the grant the cards fall back to app icons.
+4. **Bluetooth**: sketchybar
    (add manually: `/opt/homebrew/opt/sketchybar/bin/sketchybar`),
    for the bar's bluetooth menu.
-4. Karabiner-Elements: approve its driver extension when prompted.
+5. Karabiner-Elements: approve its driver extension when prompted.
 
 ## App choices
 
@@ -68,6 +73,9 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 | Window borders + fullscreen shroud | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
+| Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
+| Dwindle layout | `omacosy-dwindle` (self-compiled launchd agent) | `helper/dwindle.swift` |
+| Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
 | Prompt | starship | `config/starship.toml` |
 | Shell | zsh | `zsh/zshrc` + your `~/.zshrc.local` |
@@ -84,7 +92,11 @@ driven by the window server's own event stream (SkyLight notifications
 for focus, move and resize — no polling, the ring glides with drags);
 `omacosy-helper` covers wallpaper (System Events scripting half-broke
 in macOS 14+), CoreAudio output switching, IOBluetooth control, cursor
-position, and per-display notch detection.
+position, and per-display notch detection. `omacosy-overview` and
+`omacosy-dwindle` exist because neither a workspace overview nor a
+dwindle layout can be had any other way — Mission Control can't see
+virtual workspaces, and bsp is AeroSpace's most-requested missing
+layout.
 
 ## The bar
 
@@ -155,13 +167,43 @@ Themes: `tokyo-night`, `catppuccin`, `gruvbox`, `osaka-jade`. Each
 theme accent, omarchy's own convention), and `backgrounds/` (wallpapers
 from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 
+## Tiling: dwindle
+
+AeroSpace natively inserts new windows as equal siblings (three
+windows = three columns). `omacosy-dwindle` grafts Hyprland's dwindle
+on top: each new tiled window splits the focused window's own slot,
+alternating direction — the omarchy spiral, automatic. It touches a
+window exactly once (at birth), stands down for floats and while the
+overview is open, and `touch ~/.config/omacosy/no-dwindle` disables it
+live. Manual control (Super+J flips, resize, float) works unchanged.
+
 ## Focus follows mouse & swipes
 
-`omacosy-ffm`: hover focuses (no raise — nothing overlaps in tiling),
-~200ms feel, never during drags, per-app opt-out in `config/ffm-ignore`
-(omarchy's JetBrains-style exception). 4-finger swipes switch
-workspaces on **the display under the cursor** (native-Spaces
-semantics), wrap-around, any trackpad.
+`omacosy-ffm`: hover focuses (no raise over floating windows — floats
+stay in front), event-driven off mouse *movement* so a parked cursor
+never steals focus from a launching window, never during drags,
+per-app opt-out in `config/ffm-ignore` (omarchy's JetBrains-style
+exception). 4-finger swipes left/right switch workspaces on **the
+display under the cursor** (native-Spaces semantics), wrap-around, any
+trackpad. The system's own 4-finger gestures are disabled by
+`macos-defaults.sh` so Mission Control never fights the daemon
+(`uninstall.sh` restores them).
+
+## Workspace overview
+
+4-finger **swipe up**: the wallpaper breathes in behind a dim wash and
+every non-empty workspace gets a card — live window previews
+(ScreenCaptureKit, composed into the tile layout), app icons, the
+focused workspace accent-ringed. Click a card or press its digit to
+jump; empty workspaces show as small chips (digits work for them too —
+straight to a clean screen). **Swipe down**, Esc, or a backdrop click
+dismisses. Resident daemon, so it opens instantly.
+
+## Parking the setup
+
+`omacosy-toggle off` returns to a vanilla Mac in one command (AeroSpace
+stops managing, all daemons and the bar stop) without uninstalling;
+`omacosy-toggle on` brings everything back. No argument flips.
 
 ## Back to a normal Mac
 

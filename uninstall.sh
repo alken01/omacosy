@@ -17,6 +17,15 @@ launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/n
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" "$HOME/.local/bin/omacosy-borders"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/omacosy-dwindle"
+# overview is self-daemonizing (no launchd agent) — kill by pidfile
+if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
+  kill "$(cat "/tmp/omacosy-overview-$(id -u).pid")" 2>/dev/null || true
+fi
+rm -f "$HOME/.local/bin/omacosy-overview" "$HOME/.local/bin/omacosy-toggle"
+rm -f /tmp/omacosy-*.log /tmp/omacosy-*.err "/tmp/omacosy-overview-$(id -u).pid" \
+  "/tmp/omacosy-overlay-active-$(id -u)" /tmp/omacosy-ws-switch
 rm -rf "$HOME/.config/omacosy"
 
 # aerospace-swipe: unload its launch agent and remove config
@@ -25,9 +34,17 @@ if [ -d "$HOME/.local/share/aerospace-swipe" ]; then
 fi
 rm -rf "$HOME/.config/aerospace-swipe"
 
-# --- 2. Native menu bar back ------------------------------------------------
+# --- 2. Native menu bar + system gestures back ------------------------------
 defaults delete NSGlobalDomain _HIHideMenuBar 2>/dev/null || true
 killall SystemUIServer 2>/dev/null || true
+# macos-defaults.sh released the 4-finger swipes to aerospace-swipe;
+# give them back to Mission Control / Spaces
+defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture -int 2
+defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture -int 2
+defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture -int 2 2>/dev/null || true
+defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture -int 2 2>/dev/null || true
+defaults delete com.apple.dock showMissionControlGestureEnabled 2>/dev/null || true
+killall Dock 2>/dev/null || true
 
 # --- 3. Unlink configs, restore backups -------------------------------------
 restore() {
