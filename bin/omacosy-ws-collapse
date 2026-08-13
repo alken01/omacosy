@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# omacosy-ws-collapse <collapse|restore> — fold the second display's
+# workspaces into the primary set when a monitor unplugs, and unfold
+# on replug. Called by display_change.sh on monitor-count changes.
+#
+# collapse: every non-empty guest workspace (two-digit id) empties
+#   into the lowest EMPTY 1-9 slot — used slots are never touched.
+#   Each moved window is recorded with its origin, so restore is
+#   per-window: windows opened while undocked stay wherever the user
+#   put them.
+# restore: recorded windows go back to their origin workspaces
+#   (aerospace's force-assignment has already returned those
+#   workspaces to the secondary monitor); the map is consumed.
+export PATH="/opt/homebrew/bin:$PATH"
+
+STATE_DIR="$HOME/.local/state/omacosy"
+MAP="$STATE_DIR/collapse-map"
+mkdir -p "$STATE_DIR"
+
+case "${1:-}" in
+  collapse)
+    [ "$(aerospace list-monitors 2>/dev/null | wc -l | tr -d ' ')" = 1 ] || exit 0
+    # empty single-digit slots, ascending — the merge targets
+    TARGETS=()
+    for s in 1 2 3 4 5 6 7 8 9; do
+      [ -z "$(aerospace list-windows --workspace "$s" --format '%{window-id}' 2>/dev/null)" ] &&
+        TARGETS+=("$s")
+    done
+    ti=0
+    for gws in $(aerospace list-workspaces --all 2>/dev/null | grep -E '^[0-9]{2}$'); do
+      WINS="$(aerospace list-windows --workspace "$gws" --format '%{window-id}' 2>/dev/null)"
+      [ -z "$WINS" ] && continue
+      # out of empty slots: this guest workspace stays put (the bar
+      # shows it with its full number)
+      [ "$ti" -ge "${#TARGETS[@]}" ] && break
+      T="${TARGETS[$ti]}"
+      ti=$((ti + 1))
+      for wid in $WINS; do
+        aerospace move-node-to-workspace --window-id "$wid" "$T" 2>/dev/null &&
+          printf '%s\t%s\n' "$wid" "$gws" >>"$MAP"
+      done
+      echo "$(date '+%F %T') collapsed $gws -> $T" >>/tmp/omacosy-ws-collapse.log
+    done
+    # moving between two HIDDEN workspaces emits no SkyLight event
+    # (nothing on screen changed), so poke the bar directly
+    sketchybar --trigger windows_changed 2>/dev/null
+    ;;
+  restore)
+    [ -s "$MAP" ] || exit 0
+    # let aerospace finish adopting the reattached monitor (its
+    # force-assignment moves the guest workspaces back first)
+    sleep 1
+    while IFS=$'\t' read -r wid gws; do
+      [ -n "$wid" ] && [ -n "$gws" ] || continue
+      aerospace move-node-to-workspace --window-id "$wid" "$gws" 2>/dev/null &&
+        echo "$(date '+%F %T') restored $wid -> $gws" >>/tmp/omacosy-ws-collapse.log
+    done <"$MAP"
+    rm -f "$MAP"
+    sketchybar --trigger windows_changed 2>/dev/null
+    ;;
+  *)
+    echo "usage: omacosy-ws-collapse <collapse|restore>" >&2
+    exit 2
+    ;;
+esac

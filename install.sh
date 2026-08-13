@@ -221,6 +221,7 @@ link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"
 link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
+link "$REPO_DIR/bin/omacosy-ws-collapse" "$HOME/.local/bin/omacosy-ws-collapse"
 
 # --- 3. omarchy theme convention -------------------------------------------
 # Canonical theme state lives at ~/.config/omarchy/current/theme (what the

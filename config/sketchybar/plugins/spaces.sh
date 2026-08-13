@@ -34,8 +34,19 @@ done < <(aerospace list-windows --all --format '%{workspace}|%{app-name}|%{windo
 # canvas at scale 0.625); the number label uses the same box.
 BOX_W=20
 
+NMON="$(aerospace list-monitors 2>/dev/null | wc -l | tr -d ' ')"
+
 ARGS=()
 for sid in $(aerospace list-workspaces --all 2>/dev/null || echo '1 2 3 4 5 6 7 8 9'); do
+  # single display: EMPTY guest workspaces (two-digit ids) stay off
+  # the bar entirely — collapse moved their windows into 1-9, and an
+  # empty 11-19 row is just noise. Shown again the moment one gains
+  # a window (or focus, reachable via the overview).
+  if [ "$NMON" = 1 ] && [ "${#sid}" -gt 1 ] && [ -z "${APPS[$sid]:-}" ] && [ "$sid" != "$FOCUSED" ]; then
+    ARGS+=(--set "space.$sid" drawing=off)
+    continue
+  fi
+  ARGS+=(--set "space.$sid" drawing=on)
   if [ "${COUNT[$sid]:-0}" = 1 ]; then
     # empty icon text + fixed width: the app-icon image needs a box to
     # draw in (an empty string alone collapses it to zero), and the
