@@ -103,42 +103,27 @@ sketchybar --add item spaces_observer left \
 # display=all (the fallback bar is still usable).
 MONITORS="$(aerospace list-monitors --format '%{monitor-id}' 2>/dev/null)"
 if [ -n "$MONITORS" ]; then
+  NMON="$(printf '%s\n' $MONITORS | wc -l | tr -d ' ')"
   for mid in $MONITORS; do
-    # one capsule per workspace SET (1-9 vs 11-19, keyed on the sid
-    # minus its slot digit). With both displays present each monitor
-    # holds one set, so nothing changes; with one display both sets
-    # land on the same monitor and get SEPARATE capsules side by side
-    # — 1-9 as always, the other display's set appended after — never
-    # one merged run of duplicate digits.
-    WS_ON_MON="$(aerospace list-workspaces --monitor "$mid" 2>/dev/null)"
-    SETS="$(for sid in $WS_ON_MON; do echo "s${sid%?}"; done | sort -u)"
-    HAVE_SET=0
-    for setkey in $SETS; do
-      MEMBERS=""
-      FIRST_SID=""
-      for sid in $WS_ON_MON; do
-        [ "s${sid%?}" = "$setkey" ] || continue
-        sketchybar --set "space.$sid" display="$mid"
-        [ -z "$FIRST_SID" ] && FIRST_SID="$sid"
-        MEMBERS="$MEMBERS space.$sid"
-      done
-      [ -z "$MEMBERS" ] && continue
-      # a plain fixed-width item OUTSIDE both brackets is the gap
-      # between set capsules (bracket backgrounds hug their members,
-      # so member padding can't separate them)
-      if [ "$HAVE_SET" = 1 ]; then
-        sketchybar --add item "space.sep.$mid.$setkey" left \
-          --set "space.sep.$mid.$setkey" width=8 display="$mid" \
-            icon.drawing=off label.drawing=off background.drawing=off \
-          --move "space.sep.$mid.$setkey" before "space.$FIRST_SID"
+    MEMBERS=""
+    for sid in $(aerospace list-workspaces --monitor "$mid" 2>/dev/null); do
+      sketchybar --set "space.$sid" display="$mid"
+      # single display: both sets collapse into this one capsule —
+      # the guest set keeps its FULL number (11-19) so the row never
+      # shows the same digit twice. With two displays each monitor
+      # hosts one set and the slot digit stays. Aerospace's
+      # force-assignment moves 11-19 back to the secondary monitor on
+      # replug, and the display_change reload restores the split bars.
+      if [ "$NMON" = 1 ] && [ "${#sid}" -gt 1 ]; then
+        sketchybar --set "space.$sid" label="$sid"
       fi
-      sketchybar --add bracket "spaces.$mid.$setkey" $MEMBERS \
-        --set "spaces.$mid.$setkey" \
-          background.color="$ITEM_BG" \
-          background.corner_radius=4 \
-          background.height=26
-      HAVE_SET=1
+      MEMBERS="$MEMBERS space.$sid"
     done
+    [ -n "$MEMBERS" ] && sketchybar --add bracket "spaces.$mid" $MEMBERS \
+      --set "spaces.$mid" \
+        background.color="$ITEM_BG" \
+        background.corner_radius=4 \
+        background.height=26
   done
 else
   # no aerospace yet: one capsule around the fallback set
