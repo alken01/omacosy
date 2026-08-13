@@ -74,13 +74,16 @@ let showOnLaunch = CommandLine.arguments.contains("--show")
 
 // --- CLI entry: signal the daemon, or become it --------------------------
 
+let isClose = CommandLine.arguments.contains("close")
+
 if !isDaemon {
     if let old = try? String(contentsOfFile: pidPath, encoding: .utf8),
         let pid = pid_t(old.trimmingCharacters(in: .whitespacesAndNewlines)),
         kill(pid, 0) == 0 {
-        kill(pid, SIGUSR1) // toggle
+        kill(pid, isClose ? SIGUSR2 : SIGUSR1) // close / toggle
         exit(0)
     }
+    if isClose { exit(0) } // nothing to close, nothing to spawn
     // no daemon yet: spawn one detached that shows immediately
     let p = Process()
     p.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
@@ -95,6 +98,7 @@ signal(SIGTERM) { _ in
     exit(0)
 }
 signal(SIGUSR1, SIG_IGN) // delivered via DispatchSource below
+signal(SIGUSR2, SIG_IGN)
 
 let logURL = URL(fileURLWithPath: "/tmp/omacosy-overview.log")
 func tlog(_ m: String) {
@@ -614,6 +618,15 @@ usr1.setEventHandler {
     }
 }
 usr1.resume()
+
+// SIGUSR2 = hide-only (4-finger swipe DOWN, Mission-Control style).
+// The 0.6s guard absorbs the opening swipe's own gesture tail.
+let usr2 = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
+usr2.setEventHandler {
+    tlog("SIGUSR2 visible=\(overlayVisible)")
+    if overlayVisible, Date().timeIntervalSince(lastShowAt) > 0.6 { hideOverlay() }
+}
+usr2.resume()
 
 // losing key (cmd-tab away) hides — an overview you can't see anymore
 // must not linger as an invisible key window
