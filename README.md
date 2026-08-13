@@ -101,7 +101,11 @@ position, and per-display notch detection. `omacosy-overview` and
 `omacosy-dwindle` exist because neither a workspace overview nor a
 dwindle layout can be had any other way — Mission Control can't see
 virtual workspaces, and bsp is AeroSpace's most-requested missing
-layout.
+layout. `omacosy-watcher` turns system events — window churn,
+bluetooth connects, network changes, battery ticks, Spotify's
+lifetime — into bar refreshes, so the bar never polls for anything
+macOS actually announces; its only remaining timers are the weather
+fetch and the clock.
 
 ## The bar
 
