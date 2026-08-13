@@ -93,4 +93,19 @@ sketchybar --add item "volume.menu.$i" popup.volume \
 
 "$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others volume
 sketchybar --set volume popup.drawing=on
+# right-align the % readout: after layout, stretch the slider so its
+# row spans the widest device row (measuring rendered rects beats
+# guessing font metrics)
+(
+  sleep 0.15
+  MAXW=0
+  for it in $(sketchybar --query bar | jq -r '.items[]' | grep '^volume\.menu\.'); do
+    W="$(sketchybar --query "$it" 2>/dev/null | jq -r \
+      '[.bounding_rects // {} | to_entries[] | select(.value.origin[0] > -9000) | .value.size[0]] | max // 0')"
+    W="${W%.*}"
+    [ "${W:-0}" -gt "$MAXW" ] && MAXW=$W
+  done
+  # slider row = icon zone (~33) + slider + label zone (~34)
+  [ "$MAXW" -gt 100 ] && sketchybar --set volume.slider slider.width=$((MAXW - 67)) 2>/dev/null
+) &
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)
