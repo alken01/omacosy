@@ -1,14 +1,16 @@
 // omacosy-ffm — focus follows mouse for the omacosy tiling setup.
-// Polls the cursor (no permission needed), hit-tests the topmost normal
-// window beneath it, and focuses that window via the Accessibility API
-// (needs an Accessibility grant for this binary). Focus only — windows
-// aren't explicitly raised; app activation reorders z, which is
-// irrelevant while everything tiles without overlap.
+// Event-driven: a global mouseMoved monitor (rides the Accessibility
+// grant this binary needs anyway) hit-tests the topmost normal window
+// under the cursor and focuses it via SLPS + the Accessibility API.
+// Floats stay in front — a window covered by one is focused WITHOUT
+// raise (kCPSNoWindows), and a parked cursor generates no events, so
+// it can never steal focus from a launching window.
 //
 // Deliberately boring: no focus changes while any mouse button is down
-// (drags), a two-tick dwell before switching (no flicker when crossing
-// windows), and only layer-0 windows count (menus, popups and the bar
-// never steal focus).
+// (drags deliver mouseDragged, not mouseMoved), a ~100ms dwell before
+// a new window takes focus (no flicker when crossing windows), and
+// only layer-0 windows count (menus, popups and the bar never steal
+// focus).
 import AppKit
 import ApplicationServices
 
@@ -61,23 +63,22 @@ let ignoredApps: Set<String> = {
         .filter { !$0.isEmpty && !$0.hasPrefix("#") })
 }()
 
-let pollSeconds = 0.08
-let dwellTicks = 1
-// Focus follows mouse MOVEMENT, not hover position (Hyprland
-// semantics): a focus change may only fire within this window after
-// the cursor last moved. A stationary cursor never steals focus — a
-// freshly launched window (System Settings…) that self-activates
-// under an idle pointer keeps its focus instead of being deactivated
-// mid-launch, which is what made it vanish behind the tiles.
-let moveEpsilonPx: CGFloat = 2
-let moveGraceSeconds = 0.3
+// Event-driven: a global mouseMoved monitor replaces the old 80ms
+// poll. "Focus follows mouse MOVEMENT, not hover position" (Hyprland
+// semantics) is structural now — a stationary cursor produces no
+// events, so it can never steal focus (a freshly launched window that
+// self-activates under an idle pointer keeps its focus; the poll used
+// to deactivate System Settings mid-launch and sink it behind the
+// tiles). Drags are excluded for free too: dragging delivers
+// mouseDragged, never mouseMoved.
+let processMinInterval = 0.04 // hit-test at most ~25Hz during motion
+let dwellSeconds = 0.10 // hover this long over a new window to focus it
 
 var lastKey = ""
 var pendingKey = ""
-var pendingTicks = 0
 var lastFocusAt = 0.0
-var lastCursor = CGPoint(x: -1_000_000, y: -1_000_000)
-var lastMoveAt = 0.0
+var lastProcessAt = 0.0
+var dwellWork: DispatchWorkItem? = nil
 
 func displayBounds() -> [CGRect] {
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
@@ -207,45 +208,61 @@ guard AXIsProcessTrustedWithOptions(
     exit(2) // relaunch (launchd KeepAlive) so the grant applies cleanly
 }
 
-let timer = Timer(timeInterval: pollSeconds, repeats: true) { _ in
-    // never move focus mid-drag
+// Shared by motion events and the dwell confirmation: hit-test the
+// cursor and either focus (dwell confirmed) or arm the dwell timer.
+// The timer path exists because events stop when the cursor stops —
+// "glide into a window and rest" must still confirm ~100ms later.
+func process(confirmed: Bool) {
+    // never move focus mid-drag (belt — mouseMoved doesn't fire then,
+    // but the dwell timer can)
     if CGEventSource.buttonState(.combinedSessionState, button: .left)
         || CGEventSource.buttonState(.combinedSessionState, button: .right) {
-        pendingTicks = 0
+        pendingKey = ""
         return
     }
-    let now = CFAbsoluteTimeGetCurrent()
-    let cands = windowCandidates()
     guard let e = CGEvent(source: nil) else { return }
-    if abs(e.location.x - lastCursor.x) > moveEpsilonPx
-        || abs(e.location.y - lastCursor.y) > moveEpsilonPx {
-        lastMoveAt = now
+    let cands = windowCandidates()
+    guard let hit = topWindowUnder(e.location, cands) else {
+        pendingKey = ""
+        dwellWork?.cancel()
+        return
     }
-    lastCursor = e.location
-    if now - lastMoveAt > moveGraceSeconds { pendingTicks = 0; return }
-    guard let hit = topWindowUnder(e.location, cands) else { pendingTicks = 0; return }
     // judge "already focused" by reality, not our own bookkeeping — a
     // silently failed focus attempt must be retried, not remembered
     let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
-    if hit.pid == frontPid && hit.key == lastKey { pendingTicks = 0; return }
-    if hit.key == pendingKey {
-        pendingTicks += 1
-        if pendingTicks >= dwellTicks {
-            // cooldown: never two focus changes within 400ms — breaks any
-            // residual feedback loop with the window manager (250ms)
-            let now = CFAbsoluteTimeGetCurrent()
-            if now - lastFocusAt > 0.25 {
-                slpsFocus(pid: hit.pid, wid: hit.wid, raise: !hit.covered)
-                focus(pid: hit.pid, rect: hit.rect, allowRaise: !hit.covered)
-                lastFocusAt = now
-                lastKey = hit.key
-            }
-            pendingTicks = 0
+    if hit.pid == frontPid && hit.key == lastKey {
+        pendingKey = ""
+        dwellWork?.cancel()
+        return
+    }
+    let now = CFAbsoluteTimeGetCurrent()
+    if confirmed, hit.key == pendingKey {
+        // cooldown: never two focus changes within 250ms — breaks any
+        // residual feedback loop with the window manager
+        if now - lastFocusAt > 0.25 {
+            slpsFocus(pid: hit.pid, wid: hit.wid, raise: !hit.covered)
+            focus(pid: hit.pid, rect: hit.rect, allowRaise: !hit.covered)
+            lastFocusAt = now
+            lastKey = hit.key
         }
-    } else {
+        pendingKey = ""
+        return
+    }
+    if hit.key != pendingKey {
         pendingKey = hit.key
-        pendingTicks = 1
+        dwellWork?.cancel()
+        let work = DispatchWorkItem { process(confirmed: true) }
+        dwellWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + dwellSeconds, execute: work)
     }
 }
-RunLoop.current.add(timer, forMode: .common)
-RunLoop.current.run()
+
+let app = NSApplication.shared
+app.setActivationPolicy(.prohibited)
+NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in
+    let now = CFAbsoluteTimeGetCurrent()
+    if now - lastProcessAt < processMinInterval { return }
+    lastProcessAt = now
+    process(confirmed: false)
+}
+app.run()
