@@ -205,5 +205,22 @@ for name in [NSWorkspace.didLaunchApplicationNotification,
     }
 }
 
+// --- activation forensics ------------------------------------------------
+// Every app activation, stamped with the age of the last deliberate
+// user input. A self-activation (the WhatsApp-style workspace yank)
+// shows as an activation with STALE input — this log answers "who
+// yanked the desktop"; the focus guard does the actual bouncing.
+
+wsnc.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                 object: nil, queue: .main) { n in
+    guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+    let types: [CGEventType] = [.keyDown, .leftMouseDown, .rightMouseDown,
+        .otherMouseDown, .scrollWheel]
+    let age = types
+        .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
+        .min() ?? -1
+    tlog(String(format: "activated: %@ (input %.1fs ago)", app.localizedName ?? "?", age))
+}
+
 tlog("omacosy-watcher up")
 RunLoop.current.run()
