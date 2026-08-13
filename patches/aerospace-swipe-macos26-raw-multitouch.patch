@@ -176,7 +176,7 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..2e71553 100644
+index fae40b9..2c0de8c 100644
 --- a/src/main.m
 +++ b/src/main.m
 @@ -15,8 +15,138 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -318,7 +318,33 @@ index fae40b9..2e71553 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -64,6 +194,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -51,10 +181,25 @@ static void reset_gesture_state(gesture_ctx* ctx)
+ 	ctx->last_fire_dir = 0;
+ }
+ 
++static bool overlay_active(void)
++{
++	char path[128];
++	snprintf(path, sizeof path, "/tmp/omacosy-overlay-active-%d", getuid());
++	return access(path, F_OK) == 0;
++}
++
+ static void fire_gesture(gesture_ctx* ctx, int direction)
+ {
+ 	if (direction == ctx->last_fire_dir)
+ 		return;
++	// the workspace overview is up: finger lift-off after the vertical
++	// swipe reads as a horizontal flick and switched workspaces UNDER
++	// the overlay (killing its focus). Consume, don't switch.
++	if (overlay_active()) {
++		ctx->last_fire_dir = direction;
++		ctx->state = GS_COMMITTED;
++		return;
++	}
+ 
+ 	ctx->last_fire_dir = direction;
+ 	ctx->state = GS_COMMITTED;
+@@ -64,6 +209,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -350,7 +376,7 @@ index fae40b9..2e71553 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -112,7 +267,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -112,7 +282,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		&min_x, &max_x, &min_y, &max_y);
  
  	float dx = avg_x - ctx->start_x;
@@ -362,7 +388,7 @@ index fae40b9..2e71553 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +297,42 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +312,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -382,7 +408,15 @@ index fae40b9..2e71553 100644
 +	for (int i = 0; i < count; ++i)
 +		avg_vel_y += touches[i].velocity_y;
 +	avg_vel_y /= count;
-+	if (fabsf(avg_vel_y) >= g_config.velocity_pct) {
++	// post-click finger lifts read as single-frame vertical spikes and
++	// re-fired the overview seconds after a card click: demand TWO
++	// consecutive qualifying frames and a click-free half second
++	static int vert_streak = 0;
++	bool vert_ok = fabsf(avg_vel_y) >= g_config.velocity_pct
++		&& CGEventSourceSecondsSinceLastEventType(
++			kCGEventSourceStateCombinedSessionState, kCGEventLeftMouseDown) > 0.5;
++	vert_streak = vert_ok ? vert_streak + 1 : 0;
++	if (vert_streak >= 2) {
 +		float travel_x = 0, travel_y = 0;
 +		bool stepped = true;
 +		for (int i = 0; i < count; ++i) {
@@ -405,7 +439,7 @@ index fae40b9..2e71553 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -201,8 +395,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +418,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -417,7 +451,7 @@ index fae40b9..2e71553 100644
  
  		goto unlock;
  	}
-@@ -219,65 +415,49 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +438,49 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -478,7 +512,7 @@ index fae40b9..2e71553 100644
  		free(buf);
  	});
 -}
- 
+-
 -static CGEventRef key_handler(__unused CGEventTapProxy proxy, CGEventType type,
 -	CGEventRef event, void* ref)
 -{
@@ -498,7 +532,7 @@ index fae40b9..2e71553 100644
 -
 -	if (type != NSEventTypeGesture)
 -		return event;
--
+ 
 -	NSEvent* ev = [NSEvent eventWithCGEvent:event];
 -	NSSet<NSTouch*>* touches = ev.allTouches;
 -
@@ -512,7 +546,7 @@ index fae40b9..2e71553 100644
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +527,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +550,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -530,7 +564,7 @@ index fae40b9..2e71553 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +553,23 @@ int main(int argc, const char* argv[])
+@@ -371,7 +576,23 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  

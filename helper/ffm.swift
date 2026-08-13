@@ -212,7 +212,17 @@ guard AXIsProcessTrustedWithOptions(
 // cursor and either focus (dwell confirmed) or arm the dwell timer.
 // The timer path exists because events stop when the cursor stops —
 // "glide into a window and rest" must still confirm ~100ms later.
+let overlayFlag = "/tmp/omacosy-overlay-active-\(getuid())"
+
 func process(confirmed: Bool) {
+    // the workspace overview is up: it holds key focus deliberately,
+    // and it floats above layer 0 so the hit-test would tunnel through
+    // it and focus the tile underneath — stealing key out from under
+    // the user's click. Stand down entirely.
+    if FileManager.default.fileExists(atPath: overlayFlag) {
+        pendingKey = ""
+        return
+    }
     // never move focus mid-drag (belt — mouseMoved doesn't fire then,
     // but the dwell timer can)
     if CGEventSource.buttonState(.combinedSessionState, button: .left)

@@ -18,7 +18,57 @@
 import AppKit
 import ScreenCaptureKit
 
+// Private SkyLight focus — same primitive omacosy-ffm uses. Keyboard
+// events only reach the ACTIVE app's key window, and cooperative
+// activation silently refuses a background daemon poked from the
+// swipe helper — so the overlay focuses ITSELF the way the window
+// managers do, and hands focus back on plain dismissal.
+struct PSN { var hi: UInt32 = 0, lo: UInt32 = 0 }
+@_silgen_name("GetProcessForPID")
+func GetProcessForPID(_ pid: pid_t, _ psn: inout PSN) -> OSStatus
+@_silgen_name("_SLPSSetFrontProcessWithOptions")
+func SLPSSetFrontProcess(_ psn: inout PSN, _ wid: UInt32, _ mode: UInt32) -> Int32
+@_silgen_name("SLPSPostEventRecordTo")
+func SLPSPostEvent(_ psn: inout PSN, _ bytes: UnsafeMutablePointer<UInt8>) -> Int32
+
+func slpsFocus(pid: pid_t, wid: UInt32) {
+    var psn = PSN()
+    guard GetProcessForPID(pid, &psn) == noErr else { return }
+    _ = SLPSSetFrontProcess(&psn, wid, 0x200)
+    var w = wid
+    var bytes = [UInt8](repeating: 0, count: 0xf8)
+    bytes[0x04] = 0xf8
+    bytes[0x3a] = 0x10
+    withUnsafeBytes(of: &w) { src in
+        for i in 0..<4 { bytes[0x3c + i] = src[i] }
+    }
+    for i in 0x20..<0x30 { bytes[i] = 0xff }
+    bytes[0x08] = 0x01
+    bytes.withUnsafeMutableBufferPointer { _ = SLPSPostEvent(&psn, $0.baseAddress!) }
+    bytes[0x08] = 0x02
+    bytes.withUnsafeMutableBufferPointer { _ = SLPSPostEvent(&psn, $0.baseAddress!) }
+}
+
+var previousFront: (pid: pid_t, wid: UInt32)? = nil
+
+func rememberFront() {
+    guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID) as? [[String: Any]] else { previousFront = nil; return }
+    for w in list where (w["kCGWindowLayer"] as? Int) == 0
+        && (w["kCGWindowOwnerPID"] as? pid_t) == pid {
+        if let n = w["kCGWindowNumber"] as? Int {
+            previousFront = (pid, UInt32(n))
+            return
+        }
+    }
+    previousFront = nil
+}
+
 let pidPath = "/tmp/omacosy-overview-\(getuid()).pid"
+// raised while the overlay is on screen — omacosy-ffm stands down so
+// hover-focus can't steal key from under the user's click
+let activeFlag = "/tmp/omacosy-overlay-active-\(getuid())"
 let isDaemon = CommandLine.arguments.contains("--daemon")
 let showOnLaunch = CommandLine.arguments.contains("--show")
 
@@ -45,6 +95,18 @@ signal(SIGTERM) { _ in
     exit(0)
 }
 signal(SIGUSR1, SIG_IGN) // delivered via DispatchSource below
+
+let logURL = URL(fileURLWithPath: "/tmp/omacosy-overview.log")
+func tlog(_ m: String) {
+    let line = "\(Date()) \(m)\n"
+    if let h = try? FileHandle(forWritingTo: logURL) {
+        h.seekToEndOfFile()
+        h.write(line.data(using: .utf8)!)
+        try? h.close()
+    } else {
+        try? line.data(using: .utf8)!.write(to: logURL)
+    }
+}
 
 // --- aerospace ----------------------------------------------------------
 
@@ -123,6 +185,31 @@ func themeAccent() -> NSColor {
 
 // --- thumbnails (ScreenCaptureKit) ---------------------------------------
 
+func croppedToContent(_ img: CGImage) -> CGImage {
+    let w = img.width, h = img.height
+    guard w > 0, h > 0,
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8,
+            bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return img }
+    ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+    guard let data = ctx.data?.assumingMemoryBound(to: UInt8.self) else { return img }
+    var minX = w, maxX = -1, minY = h, maxY = -1
+    let step = max(1, min(w, h) / 256)
+    for y in stride(from: 0, to: h, by: step) {
+        for x in stride(from: 0, to: w, by: step) {
+            if data[(y * w + x) * 4 + 3] > 10 {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+    }
+    guard maxX > minX + 40, maxY > minY + 40,
+        maxX - minX < w - step || maxY - minY < h - step,
+        let cropped = img.cropping(to: CGRect(x: minX, y: minY,
+            width: maxX - minX + 1, height: maxY - minY + 1)) else { return img }
+    return cropped
+}
+
 var thumbs: [UInt32: CGImage] = [:]
 var thumbViews: [UInt32: NSView] = [:]
 
@@ -139,8 +226,12 @@ func refreshThumbs(_ ids: [UInt32]) {
             cfg.height = Int(scw.frame.height)
             cfg.showsCursor = false
             let filter = SCContentFilter(desktopIndependentWindow: scw)
-            guard let img = try? await SCScreenshotManager.captureImage(
+            guard var img = try? await SCScreenshotManager.captureImage(
                 contentFilter: filter, configuration: cfg) else { continue }
+            // captures racing AeroSpace's stash/settle move come back
+            // with the content in a corner of a padded canvas — crop
+            // to the opaque bounding box so slots always fill
+            img = croppedToContent(img)
             await MainActor.run {
                 thumbs[wid] = img
                 if let v = thumbViews[wid] {
@@ -158,15 +249,24 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let accent = themeAccent()
 
-final class KeyWindow: NSWindow {
+// A NON-ACTIVATING panel (the Spotlight/Raycast recipe): it becomes
+// key — keyboard + clicks work instantly — WITHOUT activating our
+// app. Crucial because cooperative activation silently refuses a
+// background daemon poked from the swipe helper: a plain NSWindow
+// showed but never became key, so clicks were swallowed by the
+// activation attempt and digits went to the previously active app.
+final class KeyWindow: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
 var shownIds: [String] = []
 var overlayVisible = false
 
-let win = KeyWindow(contentRect: NSScreen.main!.frame, styleMask: .borderless,
+let win = KeyWindow(contentRect: NSScreen.main!.frame,
+    styleMask: [.borderless, .nonactivatingPanel],
     backing: .buffered, defer: false)
+win.becomesKeyOnlyIfNeeded = false
+win.isFloatingPanel = true
 win.level = .popUpMenu
 win.isOpaque = false
 win.backgroundColor = NSColor.black.withAlphaComponent(0.72)
@@ -174,20 +274,92 @@ win.hasShadow = false
 win.animationBehavior = .none
 win.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
+func revealIfReady(_ content: ContentView) {
+    guard content.shotReady, content.cardsReady else { return }
+    NSAnimationContext.runAnimationGroup { ctx in
+        ctx.duration = 0.22
+        content.cards.animator().alphaValue = 1
+    }
+}
+
+func applyBackdrop(_ content: ContentView, shot: CGImage?) {
+    guard !content.shotReady else { return }
+    content.shotReady = true
+    if let shot = shot {
+        content.shotLayer.contents = shot
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.24)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        content.shotLayer.setAffineTransform(CGAffineTransform(scaleX: 0.93, y: 0.93))
+        content.dimLayer.opacity = 0.72
+        CATransaction.commit()
+    } else {
+        // no screenshot (permission missing / capture failed): plain dim
+        content.dimLayer.opacity = 0.72
+    }
+    revealIfReady(content)
+}
+
+func captureBackdrop(screen: NSScreen, into content: ContentView) {
+    let did = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+        .uint32Value ?? 0
+    Task {
+        var shot: CGImage? = nil
+        if let sc = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
+            let disp = sc.displays.first(where: { $0.displayID == did }) ?? sc.displays.first {
+            let cfg = SCStreamConfiguration()
+            cfg.width = disp.width
+            cfg.height = disp.height
+            cfg.showsCursor = false
+            let filter = SCContentFilter(display: disp, excludingWindows: [])
+            shot = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
+        }
+        let s = shot
+        await MainActor.run {
+            guard overlayVisible, win.contentView === content else { return }
+            applyBackdrop(content, shot: s)
+        }
+    }
+    // capture running late must not hold the whole overlay hostage
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak content] in
+        if let c = content, overlayVisible, win.contentView === c {
+            applyBackdrop(c, shot: nil)
+        }
+    }
+}
+
 func hideOverlay() {
+    tlog("hideOverlay visible=\(overlayVisible) winVisible=\(win.isVisible)")
     guard overlayVisible else { return }
     overlayVisible = false
+    try? FileManager.default.removeItem(atPath: activeFlag)
     win.orderOut(nil)
-    NSApp.deactivate()
+    tlog("  after orderOut winVisible=\(win.isVisible)")
+    if let prev = previousFront {
+        previousFront = nil
+        slpsFocus(pid: prev.pid, wid: prev.wid)
+    }
 }
 
 func switchTo(_ ws: String) {
+    tlog("switchTo \(ws)")
+    previousFront = nil // aerospace assigns focus; nothing to restore
     hideOverlay()
-    DispatchQueue.global().async { _ = aerospace(["workspace", ws]) }
+    DispatchQueue.global().async {
+        let out = aerospace(["workspace", ws])
+        tlog("aerospace workspace \(ws) -> '\(out.trimmingCharacters(in: .whitespacesAndNewlines))'")
+    }
 }
 
 final class ContentView: NSView {
     var cardRects: [(NSRect, String)] = []
+    // MC-style backdrop: screenshot of the desktop zooming back under
+    // a dim wash while the cards fade in
+    let shotLayer = CALayer()
+    let dimLayer = CALayer()
+    let cards = NSView()
+    var shotReady = false
+    var cardsReady = false
     override var acceptsFirstResponder: Bool { true }
     // every click belongs to the overlay itself — labels and image
     // views inside cards must never swallow a mouseDown
@@ -196,13 +368,17 @@ final class ContentView: NSView {
     }
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        tlog("mouseDown at \(Int(p.x)),\(Int(p.y)) cards=\(cardRects.count)")
         for (r, ws) in cardRects where r.contains(p) {
+            tlog("  hit card \(ws)")
             switchTo(ws)
             return
         }
+        tlog("  backdrop -> hide")
         hideOverlay()
     }
     override func keyDown(with event: NSEvent) {
+        tlog("keyDown code=\(event.keyCode) chars='\(event.charactersIgnoringModifiers ?? "")' shown=\(shownIds)")
         if event.keyCode == 53 { hideOverlay(); return } // esc
         if let ch = event.charactersIgnoringModifiers, shownIds.contains(ch) {
             switchTo(ch)
@@ -257,17 +433,13 @@ let headH: CGFloat = 40
 let cardH = headH + previewH + 12
 let gap: CGFloat = 24
 
-func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String)) {
+func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String), into content: ContentView) {
     let (order, wins, focused) = snap
     let shown = order.filter { wins[$0] != nil || $0 == focused }
     guard !shown.isEmpty else { return }
     shownIds = shown
     thumbViews.removeAll()
-
     let screen = win.screen ?? NSScreen.main!
-    let content = ContentView(frame: NSRect(origin: .zero, size: screen.frame.size))
-    content.wantsLayer = true
-    win.contentView = content
 
     let cols = min(shown.count, shown.count <= 4 ? shown.count : 3)
     let rows = stride(from: 0, to: shown.count, by: cols).map {
@@ -331,7 +503,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
                 more.frame = NSRect(x: canvas.maxX - 34, y: canvas.minY + 6, width: 30, height: 16)
                 card.addSubview(more)
             }
-            content.addSubview(card)
+            content.cards.addSubview(card)
             content.cardRects.append((rect, ws))
             x += cardW + gap
         }
@@ -343,9 +515,11 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
     hint.alignment = .center
     hint.frame = NSRect(x: 0, y: max((screen.frame.height - gridH) / 2 - 44, 12),
         width: screen.frame.width, height: 18)
-    content.addSubview(hint)
+    content.cards.addSubview(hint)
 
     win.makeFirstResponder(content)
+    content.cardsReady = true
+    revealIfReady(content)
     refreshThumbs(shown.flatMap { (wins[$0] ?? []).prefix(4).map(\.id) })
 }
 
@@ -360,27 +534,60 @@ func showOverlay() {
     win.setFrame(screen.frame, display: false)
     let placeholder = ContentView(frame: NSRect(origin: .zero, size: screen.frame.size))
     placeholder.wantsLayer = true
+    // transparent window + layered backdrop: the first frames look
+    // exactly like the desktop, then the screenshot zooms back
+    win.backgroundColor = .clear
+    placeholder.layer?.backgroundColor = NSColor.clear.cgColor
+    placeholder.shotLayer.frame = placeholder.bounds
+    placeholder.shotLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+    placeholder.shotLayer.position = CGPoint(x: placeholder.bounds.midX, y: placeholder.bounds.midY)
+    placeholder.layer?.addSublayer(placeholder.shotLayer)
+    placeholder.dimLayer.frame = placeholder.bounds
+    placeholder.dimLayer.backgroundColor = NSColor.black.cgColor
+    placeholder.dimLayer.opacity = 0
+    placeholder.layer?.addSublayer(placeholder.dimLayer)
+    placeholder.cards.frame = placeholder.bounds
+    placeholder.cards.alphaValue = 0
+    placeholder.addSubview(placeholder.cards)
     win.contentView = placeholder
+    captureBackdrop(screen: screen, into: placeholder)
+    FileManager.default.createFile(atPath: activeFlag, contents: nil)
+    rememberFront()
+    tlog("show: screen=\(win.frame) mouse=\(NSEvent.mouseLocation) winNum=\(win.windowNumber)")
     win.makeKeyAndOrderFront(nil)
     win.makeFirstResponder(placeholder)
-    app.activate(ignoringOtherApps: true)
+    slpsFocus(pid: getpid(), wid: UInt32(win.windowNumber))
     DispatchQueue.global().async {
         let snap = snapshotWorkspaces()
         DispatchQueue.main.async {
-            guard overlayVisible else { return }
-            buildOverlay(snap)
+            guard overlayVisible, let c = win.contentView as? ContentView else { return }
+            buildOverlay(snap, into: c)
         }
     }
 }
 
+var lastShowAt = Date.distantPast
 let usr1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
-usr1.setEventHandler { overlayVisible ? hideOverlay() : showOverlay() }
+usr1.setEventHandler {
+    tlog("SIGUSR1 visible=\(overlayVisible)")
+    if overlayVisible {
+        // lift-off noise after the opening swipe can re-fire the
+        // vertical gesture — a close-toggle within 1.2s of showing is
+        // not a human asking to close
+        if Date().timeIntervalSince(lastShowAt) > 1.2 { hideOverlay() }
+    } else {
+        lastShowAt = Date()
+        showOverlay()
+    }
+}
 usr1.resume()
 
 // losing key (cmd-tab away) hides — an overview you can't see anymore
 // must not linger as an invisible key window
 NotificationCenter.default.addObserver(
     forName: NSWindow.didResignKeyNotification, object: win, queue: .main) { _ in
+    let front = NSWorkspace.shared.frontmostApplication
+    tlog("didResignKey -> frontmost now: \(front?.localizedName ?? "?") pid=\(front?.processIdentifier ?? -1)")
     hideOverlay()
 }
 

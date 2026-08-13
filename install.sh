@@ -77,7 +77,7 @@ fi
 # workspace overview overlay (4-finger swipe up)
 if [ ! -x "$HOME/.local/bin/omacosy-overview" ] || [ "$REPO_DIR/helper/overview.swift" -nt "$HOME/.local/bin/omacosy-overview" ]; then
   log "Building omacosy-overview"
-  swiftc -O -o "$HOME/.local/bin/omacosy-overview" "$REPO_DIR/helper/overview.swift"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-overview" "$REPO_DIR/helper/overview.swift"
 fi
 
 # focus-follows-mouse daemon (own binary so helper rebuilds never
