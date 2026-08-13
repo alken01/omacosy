@@ -510,7 +510,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
         y -= cardH + gap
     }
 
-    let hint = label("click / 1-9 to switch · esc or swipe up to close",
+    let hint = label("click / 1-9 to switch · esc or swipe down to close",
         size: 12, weight: .regular, color: NSColor(calibratedWhite: 0.5, alpha: 1))
     hint.alignment = .center
     hint.frame = NSRect(x: 0, y: max((screen.frame.height - gridH) / 2 - 44, 12),
