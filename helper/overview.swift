@@ -680,7 +680,8 @@ func showOverlay() {
     placeholder.cards.alphaValue = 0
     placeholder.addSubview(placeholder.cards)
     win.contentView = placeholder
-    FileManager.default.createFile(atPath: activeFlag, contents: nil)
+    FileManager.default.createFile(atPath: activeFlag,
+        contents: "\(getpid())".data(using: .utf8))
     rememberFront()
     tlog("show: screen=\(win.frame) mouse=\(NSEvent.mouseLocation) winNum=\(win.windowNumber)")
     win.makeKeyAndOrderFront(nil)
