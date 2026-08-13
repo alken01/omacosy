@@ -450,8 +450,11 @@ func slotRects(_ n: Int, in r: NSRect) -> [NSRect] {
 
 func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String, all: [String]), into content: ContentView) {
     let (order, wins, focused, all) = snap
-    let shown = order.filter { wins[$0] != nil || $0 == focused }
-    guard !shown.isEmpty else { return }
+    // cards only for workspaces that HOLD something — a card for an
+    // empty workspace is a hollow rectangle. The focused-but-empty
+    // workspace lives in the chip row, accent-marked.
+    let shown = order.filter { wins[$0] != nil }
+    guard !shown.isEmpty || !all.isEmpty else { return }
     shownIds = shown
     allIds = all
     thumbViews.removeAll()
@@ -459,7 +462,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
 
     // adaptive card sizing: few workspaces get big readable previews,
     // many still fit inside the width and height budgets
-    let cols = shown.count <= 4 ? shown.count : 3
+    let cols = max(1, shown.count <= 4 ? shown.count : 3)
     let rowsArr = stride(from: 0, to: shown.count, by: cols).map {
         Array(shown[$0..<min($0 + cols, shown.count)])
     }
@@ -476,7 +479,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
     }
     let previewH = (cardW - 24) * 0.5625
     let cardH = cardHeight(cardW)
-    let gridH = nRows * cardH + (nRows - 1) * gap
+    let gridH = rowsArr.isEmpty ? 0 : nRows * cardH + (nRows - 1) * gap
 
     // grid + empty-chips + hint centered as ONE block
     let empty = all.filter { ws in !shown.contains(ws) }
@@ -564,8 +567,12 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             chip.wantsLayer = true
             chip.layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1).cgColor
             chip.layer?.cornerRadius = 6
+            if ws == focused { // you-are-here, even without a card
+                chip.layer?.borderColor = accent.cgColor
+                chip.layer?.borderWidth = 1.5
+            }
             let d = label(ws, size: 12, weight: .semibold,
-                color: NSColor(calibratedWhite: 0.55, alpha: 1))
+                color: ws == focused ? accent : NSColor(calibratedWhite: 0.55, alpha: 1))
             d.alignment = .center
             d.frame = NSRect(x: 0, y: 4, width: chipW, height: 16)
             chip.addSubview(d)
