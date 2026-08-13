@@ -280,8 +280,25 @@ win.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
 func revealIfReady(_ content: ContentView) {
     guard content.shotReady, content.cardsReady else { return }
+    // cards settle from a slight over-scale while fading in — reads as
+    // one motion with the receding desktop
+    content.cards.wantsLayer = true
+    if let l = content.cards.layer {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        l.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        l.position = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
+        l.setAffineTransform(CGAffineTransform(scaleX: 1.04, y: 1.04))
+        CATransaction.commit()
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.32)
+        CATransaction.setAnimationTimingFunction(
+            CAMediaTimingFunction(controlPoints: 0.19, 1.0, 0.22, 1.0))
+        l.setAffineTransform(.identity)
+        CATransaction.commit()
+    }
     NSAnimationContext.runAnimationGroup { ctx in
-        ctx.duration = 0.22
+        ctx.duration = 0.3
         content.cards.animator().alphaValue = 1
     }
 }
@@ -301,8 +318,9 @@ func applyBackdrop(_ content: ContentView, shot: CGImage?) {
         // live desktop bleeding in around the edges
         content.layer?.backgroundColor = NSColor.black.cgColor
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.24)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        CATransaction.setAnimationDuration(0.34)
+        CATransaction.setAnimationTimingFunction(
+            CAMediaTimingFunction(controlPoints: 0.19, 1.0, 0.22, 1.0)) // ease-out-expo
         content.shotLayer.setAffineTransform(CGAffineTransform(scaleX: 0.93, y: 0.93))
         content.dimLayer.opacity = 0.5
         CATransaction.commit()
@@ -324,7 +342,10 @@ func captureBackdrop(screen: NSScreen, into content: ContentView) {
             cfg.width = disp.width
             cfg.height = disp.height
             cfg.showsCursor = false
-            let filter = SCContentFilter(display: disp, excludingWindows: [])
+            // exclude OUR overlay — a slow capture otherwise photographs
+            // the half-drawn overlay itself (recursive, undimmed mess)
+            let mine = sc.windows.filter { $0.windowID == CGWindowID(win.windowNumber) }
+            let filter = SCContentFilter(display: disp, excludingWindows: mine)
             shot = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
         }
         let s = shot
