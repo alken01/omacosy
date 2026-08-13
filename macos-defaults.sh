@@ -3,6 +3,29 @@
 
 set -euo pipefail
 
+# Record each key's PRE-omacosy value (type + value, ABSENT if unset)
+# into the install manifest, once — uninstall.sh restores exactly that
+# instead of guessing Apple's defaults.
+MANIFEST="${MANIFEST:-$HOME/.local/state/omacosy/manifest}"
+mkdir -p "$(dirname "$MANIFEST")"
+touch "$MANIFEST"
+record_default() { # domain key
+  grep -q "^default $1 $2 " "$MANIFEST" && return 0
+  local t v
+  if v="$(defaults read "$1" "$2" 2>/dev/null)"; then
+    t="$(defaults read-type "$1" "$2" 2>/dev/null | awk '{print $3}')"
+    printf 'default %s %s %s %s\n' "$1" "$2" "${t:-string}" "$v" >> "$MANIFEST"
+  else
+    printf 'default %s %s ABSENT ABSENT\n' "$1" "$2" >> "$MANIFEST"
+  fi
+}
+record_default NSGlobalDomain _HIHideMenuBar
+record_default com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture
+record_default com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture
+record_default com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture
+record_default com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture
+record_default com.apple.dock showMissionControlGestureEnabled
+
 # One bar, not two: auto-hide the native menu bar (sketchybar takes the top).
 # cfprefsd must be killed so the OS re-reads the pref without a logout.
 defaults write NSGlobalDomain _HIHideMenuBar -bool true

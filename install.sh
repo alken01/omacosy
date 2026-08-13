@@ -7,9 +7,21 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
+# --- 0. Manifest: record what THIS machine gains ----------------------------
+# uninstall.sh removes only what is recorded here, so tools and settings
+# the user had before omacosy are never touched. First run wins for
+# recorded prior values; re-runs never duplicate entries.
+STATE_DIR="$HOME/.local/state/omacosy"
+MANIFEST="$STATE_DIR/manifest"
+mkdir -p "$STATE_DIR"
+touch "$MANIFEST"
+mark() { grep -qxF "$1" "$MANIFEST" || printf '%s\n' "$1" >> "$MANIFEST"; }
+export MANIFEST
+
 # --- 1. Homebrew ------------------------------------------------------------
 if ! command -v brew >/dev/null 2>&1; then
   log "Installing Homebrew"
+  mark "installed-homebrew"
   NONINTERACTIVE=1 /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -20,7 +32,14 @@ brew trust nikitabobko/tap 2>/dev/null || true
 brew trust felixkratz/formulae 2>/dev/null || true
 
 log "Installing packages (brew bundle)"
+PRE_FORMULAE="$(brew list --formula 2>/dev/null | sort)"
+PRE_CASKS="$(brew list --cask 2>/dev/null | sort)"
 brew bundle --file="$REPO_DIR/Brewfile"
+# record only packages that brew bundle ACTUALLY added
+comm -13 <(printf '%s\n' "$PRE_FORMULAE") <(brew list --formula 2>/dev/null | sort) \
+  | while read -r f; do [ -n "$f" ] && mark "brew-formula $f"; done
+comm -13 <(printf '%s\n' "$PRE_CASKS") <(brew list --cask 2>/dev/null | sort) \
+  | while read -r c; do [ -n "$c" ] && mark "brew-cask $c"; done
 
 # --- 2. Symlinks ------------------------------------------------------------
 # Existing non-symlink targets are backed up, never deleted.
@@ -52,6 +71,13 @@ link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
 # configs living under ~/Documents (TCC folder protection) without Full
 # Disk Access. The repo copy is the source of truth on install.
 mkdir -p "$HOME/.config/karabiner"
+# preserve a pre-omacosy karabiner config once, for uninstall to restore
+if [ -f "$HOME/.config/karabiner/karabiner.json" ] \
+  && [ ! -f "$HOME/.config/karabiner/karabiner.json.bak.omacosy" ] \
+  && ! cmp -s "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"; then
+  cp "$HOME/.config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json.bak.omacosy"
+  mark "had-karabiner-config"
+fi
 cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
 launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
 # Karabiner's Menu and NotificationWindow helper apps idle at ~135MB
@@ -198,6 +224,7 @@ fi
 # TCC constraint as Karabiner: launch agents can't read ~/Documents).
 if [ ! -d "$HOME/.local/share/aerospace-swipe" ]; then
   git clone -q https://github.com/acsandmann/aerospace-swipe.git "$HOME/.local/share/aerospace-swipe"
+  mark "cloned-aerospace-swipe"
 fi
 # macOS 26 fix: read raw MultitouchSupport frames on all devices —
 # event taps no longer carry multi-touch data on 26.3
