@@ -12,6 +12,8 @@
 //                           (headphones/speaker/mic/keyboard/pointer/
 //                           combo/phone/watch/device) for popup icons
 //   bt connect <address> / bt disconnect <address>
+//   input-age               seconds since the last deliberate user input
+//                           (keys/clicks/scroll), for the focus guard
 // Built by install.sh with swiftc (present wherever Homebrew is).
 // Bluetooth subcommands need the Bluetooth privacy permission of the
 // *responsible* process (sketchybar, for bar plugins).
@@ -98,6 +100,18 @@ case "wallpaper":
         catch { failures += 1 }
     }
     exit(failures == 0 ? 0 : 1)
+
+case "input-age":
+    // seconds since the last DELIBERATE user input (keys, clicks,
+    // scroll — not mouse motion). The focus guard uses this to tell a
+    // user-driven workspace switch from an app yanking focus to
+    // itself.
+    let types: [CGEventType] = [.keyDown, .leftMouseDown, .rightMouseDown,
+        .otherMouseDown, .scrollWheel]
+    let age = types
+        .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
+        .min() ?? .infinity
+    print(String(format: "%.2f", age))
 
 case "audio":
     let sub = args.count > 2 ? args[2] : "list"

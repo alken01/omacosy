@@ -176,10 +176,10 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..dc50328 100644
+index fae40b9..8fb3213 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -7,16 +7,207 @@
+@@ -7,16 +7,221 @@
  #include <AppKit/AppKit.h>
  #import <ApplicationServices/ApplicationServices.h>
  #include <pthread.h>
@@ -374,8 +374,22 @@ index fae40b9..dc50328 100644
 +	return ok;
 +}
 +
++// Raw multitouch contacts emit no CGEvents, so omacosy's focus guard
++// (which bounces workspace switches made without recent user input)
++// can't see a swipe. Stamp a file it checks instead. O_TRUNC on an
++// existing file refreshes its mtime — that IS the timestamp.
++static void stamp_user_intent(void)
++{
++	char path[128];
++	snprintf(path, sizeof path, "/tmp/omacosy-user-intent-%d", getuid());
++	int fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
++	if (fd >= 0)
++		close(fd);
++}
++
  static void switch_workspace(const char* ws)
  {
++	stamp_user_intent();
 +	if (g_config.cursor_monitor) {
 +		// on a transient resolve failure (mid-switch races) CONSUME
 +		// the swipe: the old global fallback walked the combined
@@ -388,7 +402,7 @@ index fae40b9..dc50328 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -51,10 +242,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
+@@ -51,10 +256,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
  	ctx->last_fire_dir = 0;
  }
  
@@ -426,7 +440,7 @@ index fae40b9..dc50328 100644
  
  	ctx->last_fire_dir = direction;
  	ctx->state = GS_COMMITTED;
-@@ -64,6 +282,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -64,6 +296,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -458,7 +472,7 @@ index fae40b9..dc50328 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -107,12 +350,26 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -107,12 +364,26 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		return true;
  	}
  
@@ -486,7 +500,7 @@ index fae40b9..dc50328 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +396,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +410,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -537,7 +551,7 @@ index fae40b9..dc50328 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -186,11 +487,61 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -186,11 +501,61 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
  	}
  }
  
@@ -601,7 +615,7 @@ index fae40b9..dc50328 100644
  
  	if (ctx->state == GS_COMMITTED) {
  		if (handle_committed_state(ctx, touches, count))
-@@ -201,8 +552,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +566,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -613,7 +627,7 @@ index fae40b9..dc50328 100644
  
  		goto unlock;
  	}
-@@ -219,65 +572,48 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +586,48 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -690,7 +704,7 @@ index fae40b9..dc50328 100644
 -		CGEventTapEnable(event_tap_ref->handle, true);
 -		return event;
 -	}
- 
+-
 -	if (type != NSEventTypeGesture)
 -		return event;
 -
@@ -701,13 +715,13 @@ index fae40b9..dc50328 100644
 -		return event;
 -
 -	process_touches(touches);
--
+ 
 -	return event;
 +	return 0;
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +683,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +697,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -725,7 +739,7 @@ index fae40b9..dc50328 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +709,33 @@ int main(int argc, const char* argv[])
+@@ -371,7 +723,33 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
