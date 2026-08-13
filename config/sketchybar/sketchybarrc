@@ -4,6 +4,12 @@
 export PATH="/opt/homebrew/bin:$PATH"
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 
+# App choices (the activity item launches btop in $TERMINAL). CONFIG_DIR
+# is a symlink into the repo — resolve it to reach ../apps.conf.
+OMACOSY_CONFIG="$(dirname "$(readlink -f "$CONFIG_DIR")")"
+source "$OMACOSY_CONFIG/apps.conf"
+[ -f "$OMACOSY_CONFIG/apps.local.conf" ] && source "$OMACOSY_CONFIG/apps.local.conf"
+
 # serialize reloads: two rc passes interleaving their --add calls
 # scramble the whole bar's item order (observed). A reload arriving
 # while one runs yields; stale locks (>30s) are broken.
@@ -177,11 +183,12 @@ sketchybar --add item display_watcher left \
   --set display_watcher drawing=off script="$PLUGIN_DIR/display_change.sh"
 
 # --- Right side (first added = rightmost) -----------------------------------
-# activity: system monitor in the corner, opens btop floating in Ghostty
+# activity: system monitor in the corner, opens btop floating in the
+# configured terminal (Ghostty and Korren share the --title=/-e flags)
 sketchybar --add item activity right \
   --set activity icon="󰍛" icon.color="$ACCENT" icon.padding_left=8 icon.padding_right=8 label.drawing=off \
     background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=26 \
-    click_script="open -na Ghostty --args --title=omacosy-activity -e btop"
+    click_script="open -na $TERMINAL --args --title=omacosy-activity -e btop"
 
 # clock: click toggles a calendar popup
 sketchybar --add item clock right \
