@@ -281,6 +281,7 @@ win.isOpaque = false
 win.backgroundColor = NSColor.black.withAlphaComponent(0.72)
 win.hasShadow = false
 win.animationBehavior = .none
+win.acceptsMouseMovedEvents = true
 win.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
 func revealCards(_ content: ContentView) {
@@ -354,6 +355,10 @@ func switchTo(_ ws: String) {
 
 final class ContentView: NSView {
     var cardRects: [(NSRect, String)] = []
+    // hover feedback: (rect, ws, view, isChip); focusedWs keeps its ring
+    var hoverItems: [(NSRect, String, NSView, Bool)] = []
+    var focusedWs = ""
+    var hovered: String? = nil
     // MC-style backdrop: screenshot of the desktop zooming back under
     // a dim wash while the cards fade in
     let wallLayer = CALayer() // wallpaper backdrop
@@ -375,6 +380,22 @@ final class ContentView: NSView {
         }
         tlog("  backdrop -> hide")
         hideOverlay()
+    }
+    override func mouseMoved(with event: NSEvent) {
+        let pt = convert(event.locationInWindow, from: nil)
+        let key = hoverItems.first { $0.0.contains(pt) }?.1
+        guard key != hovered else { return }
+        hovered = key
+        for (_, ws, v, isChip) in hoverItems {
+            let isHover = ws == key
+            if isChip {
+                v.layer?.backgroundColor = NSColor(
+                    calibratedWhite: isHover ? 0.2 : 0.09, alpha: 1).cgColor
+            } else if ws != focusedWs {
+                v.layer?.borderColor = accent.withAlphaComponent(0.55).cgColor
+                v.layer?.borderWidth = isHover ? 1.5 : 0
+            }
+        }
     }
     override func keyDown(with event: NSEvent) {
         tlog("keyDown code=\(event.keyCode) chars='\(event.charactersIgnoringModifiers ?? "")' shown=\(shownIds)")
@@ -426,11 +447,6 @@ func slotRects(_ n: Int, in r: NSRect) -> [NSRect] {
     }
 }
 
-let cardW: CGFloat = 320
-let previewH: CGFloat = 180
-let headH: CGFloat = 40
-let cardH = headH + previewH + 12
-let gap: CGFloat = 24
 
 func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: String, all: [String]), into content: ContentView) {
     let (order, wins, focused, all) = snap
@@ -441,14 +457,36 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
     thumbViews.removeAll()
     let screen = win.screen ?? NSScreen.main!
 
-    let cols = min(shown.count, shown.count <= 4 ? shown.count : 3)
-    let rows = stride(from: 0, to: shown.count, by: cols).map {
+    // adaptive card sizing: few workspaces get big readable previews,
+    // many still fit inside the width and height budgets
+    let cols = shown.count <= 4 ? shown.count : 3
+    let rowsArr = stride(from: 0, to: shown.count, by: cols).map {
         Array(shown[$0..<min($0 + cols, shown.count)])
     }
-    let gridH = CGFloat(rows.count) * cardH + CGFloat(rows.count - 1) * gap
-    var y = (screen.frame.height + gridH) / 2
+    let gap: CGFloat = 28
+    let headH: CGFloat = 42
+    let availW = screen.frame.width * 0.84
+    let availH = screen.frame.height * 0.68
+    var cardW = min(500, (availW - CGFloat(cols - 1) * gap) / CGFloat(cols))
+    func cardHeight(_ w: CGFloat) -> CGFloat { headH + (w - 24) * 0.5625 + 12 }
+    let nRows = CGFloat(rowsArr.count)
+    if nRows * cardHeight(cardW) + (nRows - 1) * gap > availH {
+        let per = (availH - (nRows - 1) * gap) / nRows
+        cardW = min(cardW, (per - headH - 12) / 0.5625 + 24)
+    }
+    let previewH = (cardW - 24) * 0.5625
+    let cardH = cardHeight(cardW)
+    let gridH = nRows * cardH + (nRows - 1) * gap
 
-    for row in rows {
+    // grid + empty-chips + hint centered as ONE block
+    let empty = all.filter { ws in !shown.contains(ws) }
+    let chipsH: CGFloat = empty.isEmpty ? 0 : 24
+    let chipsGap: CGFloat = empty.isEmpty ? 0 : 22
+    let blockH = gridH + chipsGap + chipsH + 16 + 18
+    var y = (screen.frame.height + blockH) / 2
+
+    content.focusedWs = focused
+    for row in rowsArr {
         let rowW = CGFloat(row.count) * cardW + CGFloat(row.count - 1) * gap
         var x = (screen.frame.width - rowW) / 2
         for ws in row {
@@ -464,12 +502,12 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             }
             let num = label(ws, size: 20, weight: .bold,
                 color: ws == focused ? accent : NSColor(calibratedWhite: 0.85, alpha: 1))
-            num.frame = NSRect(x: 14, y: cardH - 32, width: 40, height: 24)
+            num.frame = NSRect(x: 14, y: cardH - 34, width: 40, height: 24)
             card.addSubview(num)
             // app icons beside the number, right-aligned
             for (i, w) in items.prefix(6).enumerated() {
                 let iv = NSImageView(frame: NSRect(
-                    x: cardW - 14 - CGFloat(i + 1) * 24, y: cardH - 31, width: 20, height: 20))
+                    x: cardW - 14 - CGFloat(i + 1) * 24, y: cardH - 33, width: 20, height: 20))
                 iv.image = NSWorkspace.shared.icon(forFile: w.bundle)
                 card.addSubview(iv)
             }
@@ -505,15 +543,44 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             }
             content.cards.addSubview(card)
             content.cardRects.append((rect, ws))
+            content.hoverItems.append((rect, ws, card, false))
             x += cardW + gap
         }
         y -= cardH + gap
     }
 
+    // dimmed chips for empty workspaces — the numbering gap stops
+    // looking like a bug, and the jump-to-empty digits get a face.
+    // Clickable like the cards.
+    if !empty.isEmpty {
+        let chipW: CGFloat = 30
+        let chipGap: CGFloat = 10
+        let rowY = (screen.frame.height + blockH) / 2 - gridH - chipsGap - chipsH
+        let totalW = CGFloat(empty.count) * chipW + CGFloat(empty.count - 1) * chipGap
+        var cx = (screen.frame.width - totalW) / 2
+        for ws in empty {
+            let rect = NSRect(x: cx, y: rowY, width: chipW, height: chipsH)
+            let chip = NSView(frame: rect)
+            chip.wantsLayer = true
+            chip.layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1).cgColor
+            chip.layer?.cornerRadius = 6
+            let d = label(ws, size: 12, weight: .semibold,
+                color: NSColor(calibratedWhite: 0.55, alpha: 1))
+            d.alignment = .center
+            d.frame = NSRect(x: 0, y: 4, width: chipW, height: 16)
+            chip.addSubview(d)
+            content.cards.addSubview(chip)
+            content.cardRects.append((rect, ws))
+            content.hoverItems.append((rect, ws, chip, true))
+            cx += chipW + chipGap
+        }
+    }
+
     let hint = label("click / 1-9 to switch · esc or swipe down to close",
         size: 12, weight: .regular, color: NSColor(calibratedWhite: 0.5, alpha: 1))
     hint.alignment = .center
-    hint.frame = NSRect(x: 0, y: max((screen.frame.height - gridH) / 2 - 44, 12),
+    hint.frame = NSRect(x: 0,
+        y: (screen.frame.height + blockH) / 2 - blockH,
         width: screen.frame.width, height: 18)
     content.cards.addSubview(hint)
 
