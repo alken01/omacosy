@@ -115,7 +115,10 @@ func focusedWindowFrame() -> (CGRect, String)? {
     var psn = PSN()
     var pid: pid_t = 0
     guard SLPSGetFrontProcess(&psn) == 0, GetProcessPID(&psn, &pid) == 0 else { return nil }
-    let name = (NSRunningApplication(processIdentifier: pid)?.localizedName ?? "").lowercased()
+    // strip invisible format characters (WhatsApp's name starts with a
+    // left-to-right mark) so per-app conf overrides actually match
+    let name = String((NSRunningApplication(processIdentifier: pid)?.localizedName ?? "")
+        .lowercased().unicodeScalars.filter { $0.properties.generalCategory != .format })
     let now = Date()
     let storm = now.timeIntervalSince(lastTickAt) < 0.1
     lastTickAt = now
