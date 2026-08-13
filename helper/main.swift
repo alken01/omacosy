@@ -7,7 +7,10 @@
 //   audio set <name>        make <name> the default output device
 //   bt power                print bluetooth power state (0/1)
 //   bt power <on|off|toggle>
-//   bt devices              paired devices: "<1|0 connected><TAB>address<TAB>name"
+//   bt devices              paired devices: "<1|0 connected><TAB>address<TAB>name<TAB>kind"
+//                           kind is a coarse class-of-device keyword
+//                           (headphones/speaker/mic/keyboard/pointer/
+//                           combo/phone/watch/device) for popup icons
 //   bt connect <address> / bt disconnect <address>
 // Built by install.sh with swiftc (present wherever Homebrew is).
 // Bluetooth subcommands need the Bluetooth privacy permission of the
@@ -135,10 +138,33 @@ case "bt":
         }
         print(BTGetPower())
     case "devices":
+        // Coarse class-of-device keyword from the CoD major/minor
+        // fields (Bluetooth Assigned Numbers). Only buckets the popup
+        // can pick an icon for — everything else is "device".
+        func kind(_ d: IOBluetoothDevice) -> String {
+            switch d.deviceClassMajor {
+            case 0x04: // audio/video
+                switch d.deviceClassMinor {
+                case 0x04: return "mic"
+                case 0x05, 0x07, 0x08, 0x0A: return "speaker" // loudspeaker / portable / car / hifi
+                default: return "headphones" // headset / hands-free / headphones
+                }
+            case 0x05: // peripheral: bits 4-5 of the minor field
+                switch d.deviceClassMinor & 0x30 {
+                case 0x10: return "keyboard"
+                case 0x20: return "pointer"
+                case 0x30: return "combo"
+                default: return "device"
+                }
+            case 0x02: return "phone"
+            case 0x07: return "watch"
+            default: return "device"
+            }
+        }
         for d in (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? [] {
             let name = d.name ?? "unknown"
             let addr = d.addressString ?? "?"
-            print("\(d.isConnected() ? 1 : 0)\t\(addr)\t\(name)")
+            print("\(d.isConnected() ? 1 : 0)\t\(addr)\t\(name)\t\(kind(d))")
         }
     case "connect", "disconnect":
         guard args.count > 3 else { fail("usage: bt \(sub) <address>") }

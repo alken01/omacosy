@@ -13,6 +13,38 @@ close_popup() {
   sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1
 }
 
+# LABEL_COLOR at ~60% alpha for the quiet action rows (weather-popup style)
+DIM="0x99${LABEL_COLOR:4}"
+
+# class-of-device keyword (helper column 4) → Nerd Font glyph
+kind_icon() {
+  case "$1" in
+    headphones) printf '󰋋' ;;
+    speaker) printf '󰓃' ;;
+    mic) printf '󰍬' ;;
+    keyboard | combo) printf '󰌌' ;;
+    pointer) printf '󰍽' ;;
+    phone) printf '󰏲' ;;
+    watch) printf '󰖉' ;;
+    gamepad) printf '󰊴' ;;
+    *) printf '󰂯' ;;
+  esac
+}
+
+# BLE devices carry no class-of-device — refine "device" from the name
+refine_kind() { # $1 kind, $2 name
+  [ "$1" != "device" ] && { printf '%s' "$1"; return; }
+  case "$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')" in
+    *iphone* | *phone*) printf 'phone' ;;
+    *mouse* | *trackpad*) printf 'pointer' ;;
+    *keyboard* | *keychron*) printf 'keyboard' ;;
+    *controller*) printf 'gamepad' ;;
+    *watch*) printf 'watch' ;;
+    *bud* | *headphone*) printf 'headphones' ;;
+    *) printf 'device' ;;
+  esac
+}
+
 render() {
   POWER="$("$HOME/.local/bin/omacosy-helper" bt power 2>/dev/null)"
   if [ -z "$POWER" ]; then
@@ -66,37 +98,53 @@ case "$SENDER" in
     POWER="$("$HOME/.local/bin/omacosy-helper" bt power 2>/dev/null)"
     i=0
     if [ "$POWER" = "1" ]; then
-      # connected devices: accent, click to disconnect
-      while IFS=$'\t' read -r addr name; do
+      DEVICES="$("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null)"
+      # battery per HID product name (trackpads, keyboards, some
+      # headphones) — best-effort enrichment for connected rows
+      BATT="$(ioreg -r -c AppleDeviceManagementHIDEventService -l 2>/dev/null \
+        | awk '/^[[:space:]]*\+-o/{p="";b=""}
+               /"Product" =/{s=$0; gsub(/.*= |"/,"",s); p=s}
+               /"BatteryPercent" =/{s=$0; gsub(/.*= /,"",s); b=s}
+               p!=""&&b!=""{print p"\t"b; p="";b=""}')"
+      # connected devices: type icon + accent, click to disconnect
+      while IFS=$'\t' read -r addr name kind; do
         [ -z "$addr" ] && continue
+        PCT="$(printf '%s\n' "$BATT" | awk -F'\t' -v n="$name" '$1==n{print $2; exit}')"
+        LBL="$name"
+        [ -n "$PCT" ] && LBL="$name · ${PCT}%"
         sketchybar --add item "bt.pop.$i" popup.bluetooth \
-          --set "bt.pop.$i" icon="󰄬" icon.color="$ACCENT" \
-            label="$name" label.color="$ACCENT" \
+          --set "bt.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
+            icon.color="$ACCENT" icon.padding_left=10 icon.padding_right=8 \
+            label="$LBL" label.color="$ACCENT" label.padding_left=0 \
             label.padding_right=10 background.drawing=off \
             click_script="$PLUGIN_DIR/bluetooth.sh disconnect $addr"
         i=$((i + 1))
-      done < <("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null | awk -F'\t' '$1==1 {print $2 "\t" $3}')
-      # paired but not connected: muted, click to connect (first 6)
-      while IFS=$'\t' read -r addr name; do
+      done < <(printf '%s\n' "$DEVICES" | awk -F'\t' '$1==1 {print $2 "\t" $3 "\t" $4}')
+      # paired but not connected: muted type icon, click to connect (first 6)
+      while IFS=$'\t' read -r addr name kind; do
         [ -z "$addr" ] && continue
         sketchybar --add item "bt.pop.$i" popup.bluetooth \
-          --set "bt.pop.$i" icon="·" icon.color="$MUTED" \
-            label="$name" label.color="$LABEL_COLOR" \
+          --set "bt.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
+            icon.color="$MUTED" icon.padding_left=10 icon.padding_right=8 \
+            label="$name" label.color="$LABEL_COLOR" label.padding_left=0 \
             label.padding_right=10 background.drawing=off \
             click_script="$PLUGIN_DIR/bluetooth.sh connect $addr"
         i=$((i + 1))
-      done < <("$HOME/.local/bin/omacosy-helper" bt devices 2>/dev/null | awk -F'\t' '$1==0 {print $2 "\t" $3}' | head -6)
+      done < <(printf '%s\n' "$DEVICES" | awk -F'\t' '$1==0 {print $2 "\t" $3 "\t" $4}' | head -6)
     fi
-    [ "$POWER" = "1" ] && TOGGLE_LABEL="turn Bluetooth off" || TOGGLE_LABEL="turn Bluetooth on"
+    # quiet action rows — small + dimmed, weather-footer style
+    [ "$POWER" = "1" ] && TOGGLE_LABEL="turn bluetooth off" || TOGGLE_LABEL="turn bluetooth on"
     sketchybar --add item "bt.pop.$i" popup.bluetooth \
       --set "bt.pop.$i" icon.drawing=off \
-        label="$TOGGLE_LABEL" label.color="$LABEL_COLOR" \
+        label="$TOGGLE_LABEL" label.color="$DIM" \
+        label.font="JetBrainsMono Nerd Font:Regular:12.0" \
         label.padding_left=10 label.padding_right=10 background.drawing=off \
         click_script="$PLUGIN_DIR/bluetooth.sh toggle_power"
     i=$((i + 1))
     sketchybar --add item "bt.pop.$i" popup.bluetooth \
       --set "bt.pop.$i" icon.drawing=off \
-        label="Bluetooth settings…" label.color="$LABEL_COLOR" \
+        label="bluetooth settings…" label.color="$DIM" \
+        label.font="JetBrainsMono Nerd Font:Regular:12.0" \
         label.padding_left=10 label.padding_right=10 background.drawing=off \
         click_script="open 'x-apple.systempreferences:com.apple.BluetoothSettings'; sketchybar --set bluetooth popup.drawing=off"
     sketchybar --set bluetooth popup.drawing=on
