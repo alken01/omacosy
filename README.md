@@ -136,7 +136,7 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+shift+1..9` | move window to workspace (and follow) |
 | `Super+s` / `Super+shift+s` | scratchpad workspace (toggle / send window) |
 | `Super+tab` | previous workspace |
-| `Super+shift+tab` | throw workspace to other monitor |
+| `Super+shift+tab` | throw window to same slot on other monitor |
 | `Super+f` | fullscreen — on notched displays the camera strip is blacked out so it reads as true fullscreen, while the window stays in its workspace (swipes still reach it) |
 | `Super+n` | native macOS fullscreen (a separate Space — outside the workspace model, avoid unless an app needs it) |
 | `Super+t` | toggle floating |
@@ -150,9 +150,14 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+r` | resize mode (`h/j/k/l`, `-`/`=`, `esc`) |
 | `Super+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
 
-Workspaces 1–6 pin to the **main** display, 7–9 to the **secondary**
-(roles, not hardware — a single display gets everything). Windows open
-on the workspace you're on; nothing is auto-assigned by app.
+Each display owns an independent set of NINE workspaces, omarchy
+style: main holds 1–9, secondary holds 11–19 — same last digit = same
+slot, and the bar and overview render only the slot digit. `Super+N`
+switches the focused monitor's slot N (via `omacosy-ws`);
+`Super+Shift+N` moves the window to that slot; `Super+Shift+Tab`
+throws the window to the same slot on the other monitor. On a single
+display the secondary set falls back to main and sits empty. Windows
+open on the workspace you're on; nothing is auto-assigned by app.
 
 ## Themes
 

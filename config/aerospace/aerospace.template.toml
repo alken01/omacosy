@@ -6,7 +6,8 @@
 # Docs: https://nikitabobko.github.io/AeroSpace/guide
 
 config-version = 2
-persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8', '9',
+  '11', '12', '13', '14', '15', '16', '17', '18', '19']
 
 start-at-login = true
 after-login-command = []
@@ -90,28 +91,30 @@ cmd-ctrl-alt-minus = 'resize smart -50'
 cmd-ctrl-alt-equal = 'resize smart +50'
 
 # Workspaces (omarchy: Super+N, Super+Shift+N, Super+Tab)
-cmd-ctrl-alt-1 = 'workspace 1'
-cmd-ctrl-alt-2 = 'workspace 2'
-cmd-ctrl-alt-3 = 'workspace 3'
-cmd-ctrl-alt-4 = 'workspace 4'
-cmd-ctrl-alt-5 = 'workspace 5'
-cmd-ctrl-alt-6 = 'workspace 6'
-cmd-ctrl-alt-7 = 'workspace 7'
-cmd-ctrl-alt-8 = 'workspace 8'
-cmd-ctrl-alt-9 = 'workspace 9'
+cmd-ctrl-alt-1 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 1'
+cmd-ctrl-alt-2 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 2'
+cmd-ctrl-alt-3 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 3'
+cmd-ctrl-alt-4 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 4'
+cmd-ctrl-alt-5 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 5'
+cmd-ctrl-alt-6 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 6'
+cmd-ctrl-alt-7 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 7'
+cmd-ctrl-alt-8 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 8'
+cmd-ctrl-alt-9 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 9'
 
-cmd-ctrl-alt-shift-1 = 'move-node-to-workspace --focus-follows-window 1'
-cmd-ctrl-alt-shift-2 = 'move-node-to-workspace --focus-follows-window 2'
-cmd-ctrl-alt-shift-3 = 'move-node-to-workspace --focus-follows-window 3'
-cmd-ctrl-alt-shift-4 = 'move-node-to-workspace --focus-follows-window 4'
-cmd-ctrl-alt-shift-5 = 'move-node-to-workspace --focus-follows-window 5'
-cmd-ctrl-alt-shift-6 = 'move-node-to-workspace --focus-follows-window 6'
-cmd-ctrl-alt-shift-7 = 'move-node-to-workspace --focus-follows-window 7'
-cmd-ctrl-alt-shift-8 = 'move-node-to-workspace --focus-follows-window 8'
-cmd-ctrl-alt-shift-9 = 'move-node-to-workspace --focus-follows-window 9'
+cmd-ctrl-alt-shift-1 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 1 move'
+cmd-ctrl-alt-shift-2 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 2 move'
+cmd-ctrl-alt-shift-3 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 3 move'
+cmd-ctrl-alt-shift-4 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 4 move'
+cmd-ctrl-alt-shift-5 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 5 move'
+cmd-ctrl-alt-shift-6 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 6 move'
+cmd-ctrl-alt-shift-7 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 7 move'
+cmd-ctrl-alt-shift-8 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 8 move'
+cmd-ctrl-alt-shift-9 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 9 move'
 
 cmd-ctrl-alt-tab = 'workspace-back-and-forth'
-cmd-ctrl-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+# throw the focused WINDOW to the same slot on the other monitor
+# (whole-workspace moves conflict with the per-monitor assignment)
+cmd-ctrl-alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw'
 
 # Apps (omarchy: Super+Shift+letter)
 cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files
@@ -140,10 +143,11 @@ esc = ['reload-config', 'mode main']
 r = ['flatten-workspace-tree', 'mode main']  # reset layout
 backspace = ['close-all-windows-but-current', 'mode main']
 
-# Portable monitor roles instead of hardware names: 1-6 on the main
-# display, 7-9 on the secondary. On a single display everything falls
-# back to main; on any two-display setup the split follows the user's
-# primary-display choice rather than specific hardware.
+# Independent NINE workspaces per display, omarchy-style: the main
+# display owns 1-9, the secondary owns 11-19 (same LAST digit = same
+# slot; the bar and overview render only the slot digit). Super+N is
+# monitor-aware via omacosy-ws. On a single display the secondary set
+# falls back to main and just sits empty.
 [workspace-to-monitor-force-assignment]
 1 = ['main']
 2 = ['main']
@@ -151,6 +155,15 @@ backspace = ['close-all-windows-but-current', 'mode main']
 4 = ['main']
 5 = ['main']
 6 = ['main']
-7 = ['secondary', 'main']
-8 = ['secondary', 'main']
-9 = ['secondary', 'main']
+7 = ['main']
+8 = ['main']
+9 = ['main']
+11 = ['secondary', 'main']
+12 = ['secondary', 'main']
+13 = ['secondary', 'main']
+14 = ['secondary', 'main']
+15 = ['secondary', 'main']
+16 = ['secondary', 'main']
+17 = ['secondary', 'main']
+18 = ['secondary', 'main']
+19 = ['secondary', 'main']

@@ -192,6 +192,7 @@ launchctl load "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist"
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"
+link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 
 # --- 3. omarchy theme convention -------------------------------------------
 # Canonical theme state lives at ~/.config/omarchy/current/theme (what the

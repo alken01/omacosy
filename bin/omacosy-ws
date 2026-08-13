@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Monitor-aware workspace slots: each display owns nine workspaces
+# (main: 1-9, secondary: 11-19 — same LAST digit = same slot). Super+N
+# acts on the focused monitor's slot N, omarchy-style.
+set -euo pipefail
+A="$(command -v aerospace || echo /opt/homebrew/bin/aerospace)"
+slot="${1:-}"
+op="${2:-switch}"
+
+pick() { # monitor-id, slot -> that monitor's workspace ending in slot
+  "$A" list-workspaces --monitor "$1" \
+    | awk -v s="$2" 'substr($0, length($0)) == s { print; exit }'
+}
+
+mon="$("$A" list-monitors --focused --format '%{monitor-id}')"
+case "$op" in
+  switch)
+    ws="$(pick "$mon" "$slot")"
+    [ -n "$ws" ] && "$A" workspace "$ws"
+    ;;
+  move)
+    ws="$(pick "$mon" "$slot")"
+    [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
+    ;;
+  throw) # focused WINDOW to the same slot on the other monitor
+    cur="$("$A" list-workspaces --focused)"
+    s="${cur: -1}"
+    other="$("$A" list-monitors --format '%{monitor-id}' | grep -vx "$mon" | head -1 || true)"
+    [ -n "$other" ] || exit 0
+    ws="$(pick "$other" "$s")"
+    [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
+    ;;
+esac

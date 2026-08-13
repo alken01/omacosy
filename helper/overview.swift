@@ -137,7 +137,22 @@ struct Win {
     let bundle: String
 }
 
-func snapshotWorkspaces() -> (order: [String], wins: [String: [Win]], focused: String, all: [String]) {
+// aerospace monitor ids follow left-to-right arrangement order, same
+// as sorting CG displays by x-origin (the swipe daemon's rule)
+func monitorUnderCursor() -> Int {
+    guard let e = CGEvent(source: nil) else { return 1 }
+    let pt = e.location
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var n: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &n) == .success, n > 0 else { return 1 }
+    let sorted = (0..<Int(n)).map { ids[$0] }.sorted {
+        CGDisplayBounds($0).origin.x < CGDisplayBounds($1).origin.x
+    }
+    for (i, d) in sorted.enumerated() where CGDisplayBounds(d).contains(pt) { return i + 1 }
+    return 1
+}
+
+func snapshotWorkspaces(mon: Int) -> (order: [String], wins: [String: [Win]], focused: String, all: [String]) {
     // one CLI round-trip: windows carry their workspace's focused flag
     var wins: [String: [Win]] = [:]
     var focused = ""
@@ -163,10 +178,19 @@ func snapshotWorkspaces() -> (order: [String], wins: [String: [Win]], focused: S
         default: return a < b
         }
     }
-    // the full set (empty workspaces included) — digits can jump to a
-    // clean screen even though empty workspaces get no card
-    var all = aerospace(["list-workspaces", "--all"]).split(separator: "\n").map(String.init)
+    // per-monitor sets: the overview shows the CURSOR monitor's nine
+    // workspaces only (main: 1-9, secondary: 11-19); digits address
+    // slots (the name's last digit)
+    var all = aerospace(["list-workspaces", "--monitor", String(mon)])
+        .split(separator: "\n").map(String.init)
     if all.isEmpty { all = order }
+    let monSet = Set(all)
+    for k in wins.keys where !monSet.contains(k) { wins.removeValue(forKey: k) }
+    order = order.filter { monSet.contains($0) }
+    // "you are here" on THIS monitor = its visible workspace
+    let vis = aerospace(["list-workspaces", "--monitor", String(mon), "--visible"])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if !vis.isEmpty { focused = vis }
     return (order, wins, focused, all)
 }
 
@@ -400,8 +424,9 @@ final class ContentView: NSView {
     override func keyDown(with event: NSEvent) {
         tlog("keyDown code=\(event.keyCode) chars='\(event.charactersIgnoringModifiers ?? "")' shown=\(shownIds)")
         if event.keyCode == 53 { hideOverlay(); return } // esc
-        if let ch = event.charactersIgnoringModifiers, allIds.contains(ch) {
-            switchTo(ch)
+        if let ch = event.charactersIgnoringModifiers,
+            let ws = allIds.first(where: { $0.hasSuffix(ch) }) {
+            switchTo(ws)
         }
     }
 }
@@ -503,7 +528,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
                 card.layer?.borderColor = accent.cgColor
                 card.layer?.borderWidth = 2
             }
-            let num = label(ws, size: 20, weight: .bold,
+            let num = label(String(ws.suffix(1)), size: 20, weight: .bold,
                 color: ws == focused ? accent : NSColor(calibratedWhite: 0.85, alpha: 1))
             num.frame = NSRect(x: 14, y: cardH - 34, width: 40, height: 24)
             card.addSubview(num)
@@ -571,7 +596,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
                 chip.layer?.borderColor = accent.cgColor
                 chip.layer?.borderWidth = 1.5
             }
-            let d = label(ws, size: 12, weight: .semibold,
+            let d = label(String(ws.suffix(1)), size: 12, weight: .semibold,
                 color: ws == focused ? accent : NSColor(calibratedWhite: 0.55, alpha: 1))
             d.alignment = .center
             d.frame = NSRect(x: 0, y: 4, width: chipW, height: 16)
@@ -661,8 +686,9 @@ func showOverlay() {
     win.makeKeyAndOrderFront(nil)
     win.makeFirstResponder(placeholder)
     slpsFocus(pid: getpid(), wid: UInt32(win.windowNumber))
+    let mon = monitorUnderCursor()
     DispatchQueue.global().async {
-        let snap = snapshotWorkspaces()
+        let snap = snapshotWorkspaces(mon: mon)
         DispatchQueue.main.async {
             guard overlayVisible, let c = win.contentView as? ContentView else { return }
             buildOverlay(snap, into: c)
