@@ -283,19 +283,24 @@ func revealIfReady(_ content: ContentView) {
 }
 
 func applyBackdrop(_ content: ContentView, shot: CGImage?) {
-    guard !content.shotReady else { return }
+    // the dim fallback (0.25s) may win the race against a slow SCK
+    // capture — a LATE real shot still lands (with its zoom), it just
+    // must not re-apply once the shot itself is in
+    if shot == nil, content.shotReady { return }
+    if shot != nil, content.shotLayer.contents != nil { return }
     content.shotReady = true
     if let shot = shot {
         content.shotLayer.contents = shot
         // the shot covers every pixel at scale 1.0 right now — turn the
-        // floor opaque in the same beat, so the zoom reveals solid dark
-        // instead of the live desktop bleeding in around the edges
+        // floor opaque in the same beat, so the zoom reveals the
+        // wallpaper (black where it failed to load) instead of the
+        // live desktop bleeding in around the edges
         content.layer?.backgroundColor = NSColor.black.cgColor
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.24)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
         content.shotLayer.setAffineTransform(CGAffineTransform(scaleX: 0.93, y: 0.93))
-        content.dimLayer.opacity = 0.8
+        content.dimLayer.opacity = 0.5
         CATransaction.commit()
     } else {
         // no screenshot (permission missing / capture failed): plain dim
@@ -359,6 +364,7 @@ final class ContentView: NSView {
     var cardRects: [(NSRect, String)] = []
     // MC-style backdrop: screenshot of the desktop zooming back under
     // a dim wash while the cards fade in
+    let wallLayer = CALayer() // wallpaper floor the zoom recedes onto
     let shotLayer = CALayer()
     let dimLayer = CALayer()
     let cards = NSView()
@@ -542,6 +548,29 @@ func showOverlay() {
     // exactly like the desktop, then the screenshot zooms back
     win.backgroundColor = .clear
     placeholder.layer?.backgroundColor = NSColor.clear.cgColor
+    placeholder.wallLayer.frame = placeholder.bounds
+    placeholder.wallLayer.contentsGravity = .resizeAspectFill
+    placeholder.wallLayer.masksToBounds = true
+    placeholder.layer?.addSublayer(placeholder.wallLayer)
+    // resolve the wallpaper the way theme-set sets it — the system's
+    // recorded desktop-picture path goes stale when theme repos move
+    // (macOS keeps showing a cached copy of a file that's gone)
+    let bgDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/omarchy/current/theme/backgrounds")
+    let themeWall = (try? FileManager.default.contentsOfDirectory(
+        at: bgDir, includingPropertiesForKeys: nil))?
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }.first
+    if let url = themeWall ?? NSWorkspace.shared.desktopImageURL(for: screen) {
+        DispatchQueue.global().async {
+            // proposedRect nil = natural size (a small rect rasterizes
+            // the whole wallpaper down to that size — 1x1 black pixel)
+            let cg = NSImage(contentsOf: url)?
+                .cgImage(forProposedRect: nil, context: nil, hints: nil)
+            DispatchQueue.main.async {
+                if win.contentView === placeholder { placeholder.wallLayer.contents = cg }
+            }
+        }
+    }
     placeholder.shotLayer.frame = placeholder.bounds
     placeholder.shotLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
     placeholder.shotLayer.position = CGPoint(x: placeholder.bounds.midX, y: placeholder.bounds.midY)
