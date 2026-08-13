@@ -176,10 +176,10 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..f427001 100644
+index fae40b9..4168d4f 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -7,6 +7,7 @@
+@@ -7,16 +7,207 @@
  #include <AppKit/AppKit.h>
  #import <ApplicationServices/ApplicationServices.h>
  #include <pthread.h>
@@ -187,8 +187,9 @@ index fae40b9..f427001 100644
  
  static aerospace* g_aerospace = NULL;
  static CFTypeRef g_haptic = NULL;
-@@ -15,8 +16,199 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
- static gesture_ctx g_gesture_ctx = { 0 };
+ static Config g_config;
+ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
+-static gesture_ctx g_gesture_ctx = { 0 };
  static CFMutableDictionaryRef g_tracks = NULL;
  
 +// --- raw MultitouchSupport detection -----------------------------------
@@ -387,7 +388,7 @@ index fae40b9..f427001 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -51,10 +243,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
+@@ -51,10 +242,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
  	ctx->last_fire_dir = 0;
  }
  
@@ -425,7 +426,7 @@ index fae40b9..f427001 100644
  
  	ctx->last_fire_dir = direction;
  	ctx->state = GS_COMMITTED;
-@@ -64,6 +283,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -64,6 +282,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -457,7 +458,7 @@ index fae40b9..f427001 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -112,7 +356,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -112,7 +355,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		&min_x, &max_x, &min_y, &max_y);
  
  	float dx = avg_x - ctx->start_x;
@@ -469,7 +470,7 @@ index fae40b9..f427001 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +386,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +385,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -520,35 +521,69 @@ index fae40b9..f427001 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -186,12 +477,27 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -186,11 +476,59 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
  	}
  }
  
-+static double g_last_frame_ts = 0;
+-static void gestureCallback(touch* touches, int count)
++// One gesture context PER DEVICE. With two trackpads registered
++// (built-in + Magic Trackpad), a shared context let a stray palm on
++// the idle pad interleave its frames into the active pad's gesture:
++// finger counts oscillated (missed fires) and the idle pad's frames
++// kept the frame-gap timestamp fresh, so the lift-off reset below
++// never triggered (the direction latch came back). Keyed on the MT
++// callback's device word — identity only; one slot per registered
++// device, and registration is deduped by hardware id, so the table
++// can't grow past the register cap.
++typedef struct {
++	int key;
++	bool used;
++	gesture_ctx ctx;
++	double last_frame_ts;
++} device_gesture;
++#define MAX_GESTURE_DEVICES 16
++static device_gesture g_device_gestures[MAX_GESTURE_DEVICES];
 +
- static void gestureCallback(touch* touches, int count)
++// call with g_gesture_mutex held
++static device_gesture* gesture_for_device(int key)
++{
++	for (int i = 0; i < MAX_GESTURE_DEVICES; ++i)
++		if (g_device_gestures[i].used && g_device_gestures[i].key == key)
++			return &g_device_gestures[i];
++	for (int i = 0; i < MAX_GESTURE_DEVICES; ++i)
++		if (!g_device_gestures[i].used) {
++			g_device_gestures[i].used = true;
++			g_device_gestures[i].key = key;
++			return &g_device_gestures[i];
++		}
++	return &g_device_gestures[0]; // unreachable: register cap == table size
++}
++
++static void gestureCallback(int device, touch* touches, int count)
  {
  	pthread_mutex_lock(&g_gesture_mutex);
  
- 	gesture_ctx* ctx = &g_gesture_ctx;
- 
+-	gesture_ctx* ctx = &g_gesture_ctx;
++	device_gesture* dg = gesture_for_device(device);
++	gesture_ctx* ctx = &dg->ctx;
++
 +	// Lift-off doesn't reliably deliver a zero-finger frame on the raw
 +	// MT path, so GS_COMMITTED (with last_fire_dir latched) could
 +	// survive between gestures — repeated same-direction swipes were
 +	// then consumed until an opposite swipe re-armed. Contact frames
 +	// stream ~8ms apart while touching; a gap means the fingers left:
-+	// any new touch after silence is a NEW gesture.
++	// any new touch after silence is a NEW gesture. Per-device: the
++	// other pad's frames must not mask this device's silence.
 +	if (count > 0) {
 +		double ts = touches[0].timestamp;
-+		if (g_last_frame_ts > 0 && ts - g_last_frame_ts > 0.25 && ctx->state != GS_IDLE)
++		if (dg->last_frame_ts > 0 && ts - dg->last_frame_ts > 0.25 && ctx->state != GS_IDLE)
 +			reset_gesture_state(ctx);
-+		g_last_frame_ts = ts;
++		dg->last_frame_ts = ts;
 +	}
-+
+ 
  	if (ctx->state == GS_COMMITTED) {
  		if (handle_committed_state(ctx, touches, count))
- 			goto unlock;
-@@ -201,8 +507,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +539,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -560,7 +595,7 @@ index fae40b9..f427001 100644
  
  		goto unlock;
  	}
-@@ -219,65 +527,49 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +559,48 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -595,7 +630,6 @@ index fae40b9..f427001 100644
 -			}
 -			buf[i++] = [TouchConverter convert_nstouch:touch];
 -		}
-+	(void)device;
 +	(void)frame;
 +
 +	int cap = nFingers > 0 ? nFingers : 1;
@@ -617,7 +651,7 @@ index fae40b9..f427001 100644
  
  	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 -		gestureCallback(buf, (int)i);
-+		gestureCallback(buf, n);
++		gestureCallback(device, buf, n);
  		free(buf);
  	});
 -}
@@ -655,7 +689,7 @@ index fae40b9..f427001 100644
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +639,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +670,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -673,7 +707,7 @@ index fae40b9..f427001 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +665,33 @@ int main(int argc, const char* argv[])
+@@ -371,7 +696,33 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
