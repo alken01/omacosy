@@ -362,23 +362,46 @@ func captureBackdrop(screen: NSScreen, into content: ContentView) {
     }
 }
 
-func hideOverlay() {
-    tlog("hideOverlay visible=\(overlayVisible) winVisible=\(win.isVisible)")
+func hideOverlay(animated: Bool = true) {
     guard overlayVisible else { return }
     overlayVisible = false
     try? FileManager.default.removeItem(atPath: activeFlag)
-    win.orderOut(nil)
-    tlog("  after orderOut winVisible=\(win.isVisible)")
-    if let prev = previousFront {
-        previousFront = nil
-        slpsFocus(pid: prev.pid, wid: prev.wid)
+    tlog("hideOverlay animated=\(animated)")
+    let finish = {
+        // a re-show may have started during the out-animation — the
+        // completion must not yank the fresh overlay away
+        guard !overlayVisible else { return }
+        win.orderOut(nil)
+        if let prev = previousFront {
+            previousFront = nil
+            slpsFocus(pid: prev.pid, wid: prev.wid)
+        }
+    }
+    guard animated, let content = win.contentView as? ContentView, content.shotReady else {
+        finish()
+        return
+    }
+    // mirror of the open: desktop zooms back forward, dim lifts,
+    // cards recede
+    CATransaction.begin()
+    CATransaction.setAnimationDuration(0.22)
+    CATransaction.setAnimationTimingFunction(
+        CAMediaTimingFunction(controlPoints: 0.4, 0.0, 0.6, 1.0))
+    CATransaction.setCompletionBlock(finish)
+    content.shotLayer.setAffineTransform(.identity)
+    content.dimLayer.opacity = 0
+    content.cards.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.04, y: 1.04))
+    CATransaction.commit()
+    NSAnimationContext.runAnimationGroup { ctx in
+        ctx.duration = 0.16
+        content.cards.animator().alphaValue = 0
     }
 }
 
 func switchTo(_ ws: String) {
     tlog("switchTo \(ws)")
     previousFront = nil // aerospace assigns focus; nothing to restore
-    hideOverlay()
+    hideOverlay(animated: false) // switching should snap
     DispatchQueue.global().async {
         let out = aerospace(["workspace", ws])
         tlog("aerospace workspace \(ws) -> '\(out.trimmingCharacters(in: .whitespacesAndNewlines))'")
