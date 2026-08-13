@@ -51,7 +51,26 @@ fi
 close # clear any leftovers from a previous open
 
 VOL="$(osascript -e 'output volume of (get volume settings)')"
-sketchybar --add slider volume.slider popup.volume 160 \
+
+# Slider width must be RIGHT at creation or the bar visibly jumps when
+# the post-layout measure corrects it. Rendered row widths can't be
+# known before drawing, so: reuse the measured width from the last
+# open (cached per device-list; the list rarely changes), and fall
+# back to a monospace estimate only on a cold cache. The async pass
+# below then just refreshes the cache.
+DEVLIST="$("$HOME/.local/bin/omacosy-helper" audio list)"
+WCACHE="${TMPDIR:-/tmp}/sketchybar-volwidth"
+DEVHASH="$(printf '%s' "$DEVLIST" | /sbin/md5 -q)"
+read -r CHASH CMAXW <"$WCACHE" 2>/dev/null
+if [ "$CHASH" = "$DEVHASH" ] && [ "${CMAXW:-0}" -gt 100 ]; then
+  MAXROW="$CMAXW"
+else
+  MAXLEN="$(printf '%s\n' "$DEVLIST" | awk -F'\t' '{ if (length($2) > m) m = length($2) } END { print m + 0 }')"
+  MAXROW=$((41 + MAXLEN * 8))
+fi
+SLIDER_W=$((MAXROW - 75))
+
+sketchybar --add slider volume.slider popup.volume "$SLIDER_W" \
   --set volume.slider \
     icon="󰕾" icon.color="$DIM" icon.padding_left=10 icon.padding_right=8 \
     label="${VOL}%" label.color="$DIM" label.padding_left=8 label.padding_right=10 \
@@ -81,7 +100,7 @@ while IFS=$'\t' read -r marker dev; do
       background.drawing=off \
       click_script="$PLUGIN_DIR/volume_menu.sh select \"$dev\""
   i=$((i + 1))
-done < <("$HOME/.local/bin/omacosy-helper" audio list)
+done < <(printf '%s\n' "$DEVLIST")
 
 # quiet action row — small + dimmed, weather-footer style
 sketchybar --add item "volume.menu.$i" popup.volume \
@@ -93,9 +112,9 @@ sketchybar --add item "volume.menu.$i" popup.volume \
 
 "$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others volume
 sketchybar --set volume popup.drawing=on
-# right-align the % readout: after layout, stretch the slider so its
-# row spans the widest device row (measuring rendered rects beats
-# guessing font metrics)
+# measure the real rendered row widths and refresh the width cache —
+# the slider only gets touched when the cached/estimated width was
+# actually wrong (first open with a changed device list)
 (
   sleep 0.15
   MAXW=0
@@ -105,7 +124,10 @@ sketchybar --set volume popup.drawing=on
     W="${W%.*}"
     [ "${W:-0}" -gt "$MAXW" ] && MAXW=$W
   done
-  # slider row = icon zone (~33) + slider + label zone (~42)
-  [ "$MAXW" -gt 100 ] && sketchybar --set volume.slider slider.width=$((MAXW - 75)) 2>/dev/null
+  if [ "$MAXW" -gt 100 ]; then
+    printf '%s %s\n' "$DEVHASH" "$MAXW" >"$WCACHE"
+    # slider row = icon zone (~33) + slider + label zone (~42)
+    [ "$MAXW" != "$MAXROW" ] && sketchybar --set volume.slider slider.width=$((MAXW - 75)) 2>/dev/null
+  fi
 ) &
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)
