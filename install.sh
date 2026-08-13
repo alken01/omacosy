@@ -112,10 +112,14 @@ if [ ! -x "$HOME/.local/bin/omacosy-dwindle" ] || [ "$REPO_DIR/helper/dwindle.sw
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-dwindle" "$REPO_DIR/helper/dwindle.swift"
 fi
 
-# system-events → bar-triggers daemon (deletes the bar's pollers)
+# system-events → bar-triggers daemon (deletes the bar's pollers).
+# The embedded Info.plist carries the Bluetooth usage description an
+# unbundled binary otherwise can't declare.
 if [ ! -x "$HOME/.local/bin/omacosy-watcher" ] || [ "$REPO_DIR/helper/watcher.swift" -nt "$HOME/.local/bin/omacosy-watcher" ]; then
   log "Building omacosy-watcher"
-  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-watcher" "$REPO_DIR/helper/watcher.swift"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/watcher-info.plist" \
+    -o "$HOME/.local/bin/omacosy-watcher" "$REPO_DIR/helper/watcher.swift"
 fi
 
 # focus-follows-mouse daemon (own binary so helper rebuilds never

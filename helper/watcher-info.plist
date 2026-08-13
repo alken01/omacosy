@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.omacosy.watcher</string>
+  <key>CFBundleName</key><string>omacosy-watcher</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>omacosy-watcher updates the status bar's bluetooth pill the moment devices connect or disconnect.</string>
+</dict>
+</plist>

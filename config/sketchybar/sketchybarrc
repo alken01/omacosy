@@ -88,7 +88,11 @@ done
 # front_app_switched + windows_changed (omacosy-watcher's SkyLight
 # create/destroy events) keep the single-app icons honest when windows
 # open/close without a workspace switch — no poll.
-sketchybar --add event windows_changed
+# custom events fired by omacosy-watcher (system listeners → triggers)
+sketchybar --add event windows_changed \
+  --add event bluetooth_change \
+  --add event net_change \
+  --add event battery_change
 sketchybar --add item spaces_observer left \
   --subscribe spaces_observer aerospace_workspace_change front_app_switched windows_changed \
   --set spaces_observer drawing=off updates=on script="$PLUGIN_DIR/spaces.sh"
@@ -176,8 +180,10 @@ while IFS=$'\t' read -r idx notched; do
 done < <("$HOME/.local/bin/omacosy-helper" displays 2>/dev/null || printf '1\t0\n')
 
 # one title item carries the update wiring; the plugin repaints all sets
+# spotify_change: Spotify's own PlaybackStateChanged broadcast, plus
+# omacosy-watcher re-triggering it on Spotify launch/quit — no poll
 [ -n "$FIRST_MEDIA" ] && sketchybar --subscribe "$FIRST_MEDIA.title" spotify_change \
-  --set "$FIRST_MEDIA.title" update_freq=60 script="$PLUGIN_DIR/media.sh"
+  --set "$FIRST_MEDIA.title" script="$PLUGIN_DIR/media.sh"
 
 # relayout when displays come and go (docking)
 sketchybar --add item display_watcher left \
@@ -204,8 +210,8 @@ sketchybar --add item clock right \
 
 # battery: click opens the Battery settings pane
 sketchybar --add item battery right \
-  --subscribe battery system_woke power_source_change \
-  --set battery background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 update_freq=120 script="$PLUGIN_DIR/battery.sh" \
+  --subscribe battery system_woke power_source_change battery_change \
+  --set battery background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 script="$PLUGIN_DIR/battery.sh" \
     click_script="open 'x-apple.systempreferences:com.apple.Battery-Settings.extension'"
 
 # volume: scroll adjusts, click opens the sound menu, right-click mutes
@@ -220,9 +226,8 @@ sketchybar --add item volume right \
 
 # bluetooth: state pill, click for devices + power toggle + settings
 sketchybar --add item bluetooth right \
-  --subscribe bluetooth mouse.clicked \
+  --subscribe bluetooth mouse.clicked bluetooth_change \
   --set bluetooth background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
-    update_freq=30 \
     script="$PLUGIN_DIR/bluetooth.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \
@@ -232,9 +237,8 @@ sketchybar --add item bluetooth right \
 
 # wifi: SSID pill, click for details + power toggle + settings
 sketchybar --add item wifi right \
-  --subscribe wifi wifi_change mouse.clicked \
+  --subscribe wifi wifi_change net_change mouse.clicked \
   --set wifi background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 \
-    update_freq=30 \
     script="$PLUGIN_DIR/wifi.sh" \
     popup.align=right \
     popup.background.color="$BAR_BG_SOLID" \

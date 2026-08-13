@@ -11,7 +11,7 @@ bootstrapped from this one repo.
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
 The whole desktop environment idles around **280MB** and is mostly
-self-built: five small signed Swift binaries (plus two shell tools)
+self-built: six small signed Swift binaries (plus two shell tools)
 replace what would otherwise be a pile of dependencies (several of which are broken on
 macOS 26 — see below).
 
@@ -47,7 +47,8 @@ One-time permission grants (System Settings → Privacy & Security):
    overview; without the grant the cards fall back to app icons.
 4. **Bluetooth**: sketchybar
    (add manually: `/opt/homebrew/opt/sketchybar/bin/sketchybar`),
-   for the bar's bluetooth menu.
+   for the bar's bluetooth menu; `omacosy-watcher` (prompts at first
+   start) — instant bluetooth pill updates on connect/disconnect.
 5. Karabiner-Elements: approve its driver extension when prompted.
 
 ## App choices
@@ -78,6 +79,7 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
 | Dwindle layout | `omacosy-dwindle` (self-compiled launchd agent) | `helper/dwindle.swift` |
+| System events → bar triggers | `omacosy-watcher` (self-compiled launchd agent) | `helper/watcher.swift` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
 | Prompt | starship | `config/starship.toml` |
