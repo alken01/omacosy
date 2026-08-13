@@ -176,7 +176,7 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..4168d4f 100644
+index fae40b9..dc50328 100644
 --- a/src/main.m
 +++ b/src/main.m
 @@ -7,16 +7,207 @@
@@ -458,7 +458,23 @@ index fae40b9..4168d4f 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -112,7 +355,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -107,12 +350,26 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+ 		return true;
+ 	}
+ 
++	// Lift-off in progress: the raw MT path rarely delivers the final
++	// zero-finger frame, but the count still collapses on the way out
++	// (4→3→2→1, ~8ms apart). Once it falls to half the required
++	// fingers, the hand is leaving — re-arm now so a quick same-
++	// direction repeat (air time shorter than the frame-gap window)
++	// registers as a fresh gesture instead of being consumed.
++	if (count <= g_config.fingers / 2) {
++		reset_gesture_state(ctx);
++		return true;
++	}
++
+ 	float avg_x, avg_y, avg_vel, min_x, max_x, min_y, max_y;
+ 	calculate_touch_averages(touches, count, &avg_x, &avg_y, &avg_vel,
  		&min_x, &max_x, &min_y, &max_y);
  
  	float dx = avg_x - ctx->start_x;
@@ -470,7 +486,7 @@ index fae40b9..4168d4f 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +385,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +396,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -521,7 +537,7 @@ index fae40b9..4168d4f 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -186,11 +476,59 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -186,11 +487,61 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
  	}
  }
  
@@ -573,17 +589,19 @@ index fae40b9..4168d4f 100644
 +	// then consumed until an opposite swipe re-armed. Contact frames
 +	// stream ~8ms apart while touching; a gap means the fingers left:
 +	// any new touch after silence is a NEW gesture. Per-device: the
-+	// other pad's frames must not mask this device's silence.
++	// other pad's frames must not mask this device's silence. 0.12s
++	// (≈15 missed frames) — a quick flick-lift-flick spends less air
++	// time than the old 0.25s window, which ate the second swipe.
 +	if (count > 0) {
 +		double ts = touches[0].timestamp;
-+		if (dg->last_frame_ts > 0 && ts - dg->last_frame_ts > 0.25 && ctx->state != GS_IDLE)
++		if (dg->last_frame_ts > 0 && ts - dg->last_frame_ts > 0.12 && ctx->state != GS_IDLE)
 +			reset_gesture_state(ctx);
 +		dg->last_frame_ts = ts;
 +	}
  
  	if (ctx->state == GS_COMMITTED) {
  		if (handle_committed_state(ctx, touches, count))
-@@ -201,8 +539,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +552,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -595,7 +613,7 @@ index fae40b9..4168d4f 100644
  
  		goto unlock;
  	}
-@@ -219,65 +559,48 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +572,48 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -689,7 +707,7 @@ index fae40b9..4168d4f 100644
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +670,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +683,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -707,7 +725,7 @@ index fae40b9..4168d4f 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +696,33 @@ int main(int argc, const char* argv[])
+@@ -371,7 +709,33 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
