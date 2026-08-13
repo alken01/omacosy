@@ -67,8 +67,10 @@ for sid in $WORKSPACES; do
       padding_right=2 \
       label.color="$MUTED" \
       icon.drawing=off \
-      label.padding_left=8 \
-      label.padding_right=8 \
+      label.width=24 \
+      label.align=center \
+      label.padding_left=0 \
+      label.padding_right=0 \
       background.color="$ACCENT" \
       background.drawing=off \
       background.corner_radius=4 \
