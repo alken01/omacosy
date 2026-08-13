@@ -316,25 +316,25 @@ func hideRing(_ reason: String) {
     missSince = nil
 }
 
-// coalesced fast path for event storms (drags fire per-frame):
-// LEADING-edge — the first event ticks immediately (the old
-// trailing-edge version added 16ms+scheduler slop to every ring
-// update, the visible drag trail), and the 16ms window swallows the
-// burst tail into one follow-up tick.
-var tickArmed = false
-var tickAgain = false
+// Storm handling (drags fire ~90 events/s): tick SYNCHRONOUSLY on the
+// event, capped at 250Hz. Anything scheduler-based here is a trap —
+// asyncAfter's main-queue slop stretched a "16ms" coalescing window
+// to ~50ms and capped the ring at ~19fps during drags (measured via
+// the stats lines). A suppressed event still arms one trailing tick
+// so the ring can't end a drag one frame stale.
+var lastTickKick = Date.distantPast
+var trailArmed = false
 func kickTick() {
-    if tickArmed {
-        tickAgain = true
-        return
-    }
-    tickArmed = true
-    tick()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
-        tickArmed = false
-        if tickAgain {
-            tickAgain = false
-            kickTick()
+    let now = Date()
+    if now.timeIntervalSince(lastTickKick) >= 0.004 {
+        lastTickKick = now
+        tick()
+    } else if !trailArmed {
+        trailArmed = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.008) {
+            trailArmed = false
+            lastTickKick = Date()
+            tick()
         }
     }
 }
