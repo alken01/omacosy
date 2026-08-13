@@ -176,10 +176,10 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..2c0de8c 100644
+index fae40b9..1934d84 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -15,8 +15,138 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
+@@ -15,8 +15,175 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
  static gesture_ctx g_gesture_ctx = { 0 };
  static CFMutableDictionaryRef g_tracks = NULL;
  
@@ -214,6 +214,43 @@ index fae40b9..2c0de8c 100644
 +extern bool IOHIDRequestAccess(IOHIDRequestType);
 +
 +static CFArrayRef g_mt_devices = NULL;
++
++// Trackpads HOTPLUG (docking, bluetooth): MTDeviceCreateList returns
++// fresh refs each call, so device identity is the hardware id. New
++// devices get the contact callback; known ones are left alone (a
++// double registration would double every gesture).
++extern OSStatus MTDeviceGetDeviceID(MTDeviceRef, uint64_t*);
++static int mt_contact_callback(int device, MTFinger* data, int nFingers,
++	double timestamp, int frame);
++static uint64_t g_dev_ids[16];
++static int g_dev_count = 0;
++
++static int register_new_devices(void)
++{
++	CFArrayRef list = MTDeviceCreateList();
++	if (!list)
++		return 0;
++	int added = 0;
++	for (CFIndex i = 0; i < CFArrayGetCount(list); ++i) {
++		MTDeviceRef dev = (MTDeviceRef)CFArrayGetValueAtIndex(list, i);
++		uint64_t did = 0;
++		if (MTDeviceGetDeviceID(dev, &did) != 0 || did == 0)
++			did = (uint64_t)(uintptr_t)dev;
++		bool seen = false;
++		for (int j = 0; j < g_dev_count; ++j)
++			if (g_dev_ids[j] == did) { seen = true; break; }
++		if (seen)
++			continue;
++		if (g_dev_count < 16)
++			g_dev_ids[g_dev_count++] = did;
++		CFRetain(dev);
++		MTRegisterContactFrameCallback(dev, mt_contact_callback);
++		MTDeviceStart(dev, 0);
++		added++;
++	}
++	CFRelease(list);
++	return added;
++}
 +
 +// AeroSpace numbers monitors by arrangement (left to right), so sorting
 +// CG displays by x-origin gives the same ids. Returns 0 on failure.
@@ -318,7 +355,7 @@ index fae40b9..2c0de8c 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -51,10 +181,25 @@ static void reset_gesture_state(gesture_ctx* ctx)
+@@ -51,10 +218,25 @@ static void reset_gesture_state(gesture_ctx* ctx)
  	ctx->last_fire_dir = 0;
  }
  
@@ -344,7 +381,7 @@ index fae40b9..2c0de8c 100644
  
  	ctx->last_fire_dir = direction;
  	ctx->state = GS_COMMITTED;
-@@ -64,6 +209,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -64,6 +246,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -376,7 +413,7 @@ index fae40b9..2c0de8c 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -112,7 +282,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -112,7 +319,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		&min_x, &max_x, &min_y, &max_y);
  
  	float dx = avg_x - ctx->start_x;
@@ -388,7 +425,7 @@ index fae40b9..2c0de8c 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +312,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +349,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -439,7 +476,7 @@ index fae40b9..2c0de8c 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -201,8 +418,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +455,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -451,7 +488,7 @@ index fae40b9..2c0de8c 100644
  
  		goto unlock;
  	}
-@@ -219,65 +438,49 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +475,49 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -529,10 +566,10 @@ index fae40b9..2c0de8c 100644
 -		CGEventTapEnable(event_tap_ref->handle, true);
 -		return event;
 -	}
--
+ 
 -	if (type != NSEventTypeGesture)
 -		return event;
- 
+-
 -	NSEvent* ev = [NSEvent eventWithCGEvent:event];
 -	NSSet<NSTouch*>* touches = ev.allTouches;
 -
@@ -546,7 +583,7 @@ index fae40b9..2c0de8c 100644
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +550,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +587,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -564,7 +601,7 @@ index fae40b9..2c0de8c 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +576,23 @@ int main(int argc, const char* argv[])
+@@ -371,7 +613,28 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
@@ -574,18 +611,23 @@ index fae40b9..2c0de8c 100644
 +		// NSApplicationMain provides below.
 +		IOHIDRequestAccess(kIOHIDRequestTypeListenEvent);
 +
-+		g_mt_devices = MTDeviceCreateList();
-+		CFIndex mt_count = g_mt_devices ? CFArrayGetCount(g_mt_devices) : 0;
-+		if (!mt_count) {
++		if (!register_new_devices()) {
 +			fprintf(stderr, "Error: no multitouch devices found.\n");
 +			exit(EXIT_FAILURE);
 +		}
-+		for (CFIndex i = 0; i < mt_count; ++i) {
-+			MTDeviceRef dev = (MTDeviceRef)CFArrayGetValueAtIndex(g_mt_devices, i);
-+			MTRegisterContactFrameCallback(dev, mt_contact_callback);
-+			MTDeviceStart(dev, 0);
-+		}
-+		NSLog(@"Raw multitouch detection active on %ld device(s).", (long)mt_count);
++		NSLog(@"Raw multitouch detection active on %d device(s).", g_dev_count);
++		// docking / bluetooth trackpads appear AFTER launch — rescan
++		static dispatch_source_t rescan;
++		rescan = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
++			dispatch_get_main_queue());
++		dispatch_source_set_timer(rescan, DISPATCH_TIME_NOW,
++			10ull * NSEC_PER_SEC, NSEC_PER_SEC);
++		dispatch_source_set_event_handler(rescan, ^{
++			int n = register_new_devices();
++			if (n)
++				NSLog(@"Multitouch rescan: %d new device(s), %d total.", n, g_dev_count);
++		});
++		dispatch_resume(rescan);
  
  		return NSApplicationMain(argc, argv);
  	}
