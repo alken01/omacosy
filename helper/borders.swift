@@ -101,12 +101,36 @@ func loadColor() -> CGColor {
     return CGColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
 }
 
+// Drag storms tick at display cadence; a full window-list walk per
+// tick is wasted main-thread time there. Mid-storm (ticks <100ms
+// apart) the previous hit's window id is re-queried directly, with a
+// full re-scan forced every 250ms so a same-app topmost change can't
+// go stale for more than a beat.
+var lastWid: UInt32 = 0
+var lastTickAt = Date.distantPast
+var lastFullScanAt = Date.distantPast
+
 // frontmost app's topmost normal window, in CG (top-left) coordinates
 func focusedWindowFrame() -> (CGRect, String)? {
     var psn = PSN()
     var pid: pid_t = 0
     guard SLPSGetFrontProcess(&psn) == 0, GetProcessPID(&psn, &pid) == 0 else { return nil }
     let name = (NSRunningApplication(processIdentifier: pid)?.localizedName ?? "").lowercased()
+    let now = Date()
+    let storm = now.timeIntervalSince(lastTickAt) < 0.1
+    lastTickAt = now
+    if storm, lastWid != 0, now.timeIntervalSince(lastFullScanAt) < 0.25,
+        let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, lastWid) as? [[String: Any]],
+        let w = list.first,
+        (w["kCGWindowLayer"] as? Int) == 0,
+        (w["kCGWindowOwnerPID"] as? pid_t) == pid,
+        let b = w["kCGWindowBounds"] as? [String: Any],
+        let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
+        let wd = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat,
+        wd > 60, h > 60 {
+        return (CGRect(x: x, y: y, width: wd, height: h), name)
+    }
+    lastFullScanAt = now
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID) as? [[String: Any]] else { return nil }
     for w in list { // front-to-back
@@ -131,8 +155,10 @@ func focusedWindowFrame() -> (CGRect, String)? {
             }
         }
         if visible / (rect.width * rect.height) < 0.7 { continue }
+        if let n = w["kCGWindowNumber"] as? Int { lastWid = UInt32(n) }
         return (rect, name)
     }
+    lastWid = 0
     return nil
 }
 
@@ -290,15 +316,47 @@ func hideRing(_ reason: String) {
     missSince = nil
 }
 
-// coalesced fast path for event storms (drags fire per-frame): at most
-// one tick per ~16ms, matching display cadence
+// coalesced fast path for event storms (drags fire per-frame):
+// LEADING-edge — the first event ticks immediately (the old
+// trailing-edge version added 16ms+scheduler slop to every ring
+// update, the visible drag trail), and the 16ms window swallows the
+// burst tail into one follow-up tick.
 var tickArmed = false
+var tickAgain = false
 func kickTick() {
-    if tickArmed { return }
+    if tickArmed {
+        tickAgain = true
+        return
+    }
     tickArmed = true
+    tick()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
         tickArmed = false
-        tick()
+        if tickAgain {
+            tickAgain = false
+            kickTick()
+        }
+    }
+}
+
+// drag diagnostics: one log line per chatty second (drags, relayouts)
+// so "the ring lags" is answerable from /tmp/omacosy-borders.log —
+// events/s ≈ 60 means the pipeline flows and any trail is compositor
+// latency; events/s ≈ 2 means the heartbeat is carrying a window the
+// move-subscription lost.
+var statWindowStart = Date()
+var statEvents = 0
+var statTicks = 0
+func noteStat(event: Bool) {
+    if event { statEvents += 1 } else { statTicks += 1 }
+    let now = Date()
+    if now.timeIntervalSince(statWindowStart) >= 1.0 {
+        if statEvents + statTicks > 8 {
+            tlog("stats events/s=\(statEvents) ticks/s=\(statTicks)")
+        }
+        statWindowStart = now
+        statEvents = 0
+        statTicks = 0
     }
 }
 
@@ -309,6 +367,7 @@ func recheck(after delay: Double) {
 }
 
 func tick() {
+    noteStat(event: false)
     guard let hit = focusedWindowFrame() else {
         // transient misses happen around app switches and popups —
         // hide only when the miss persists, or the ring blinks. Gates
@@ -472,6 +531,7 @@ let slsCallback: NotifyProc = { event, _, _, _ in
     if event == EVENT_WINDOW_CREATE || event == EVENT_WINDOW_DESTROY {
         rebuildSubscriptions()
     }
+    noteStat(event: true)
     kickTick()
 }
 
