@@ -93,6 +93,9 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.helper "$HOME/.local/bin/omacosy-helper" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
+  # aerospace-swipe too — unsigned, every rebuild invalidated its
+  # Accessibility grant and silently killed all trackpad swipes
+  codesign -f -s "Apple Development" --identifier com.acsandmann.swipe "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
 fi
 
 # hover-ignore list (launchd agents can't read ~/Documents — copied)
