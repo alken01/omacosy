@@ -104,16 +104,41 @@ sketchybar --add item spaces_observer left \
 MONITORS="$(aerospace list-monitors --format '%{monitor-id}' 2>/dev/null)"
 if [ -n "$MONITORS" ]; then
   for mid in $MONITORS; do
-    MEMBERS=""
-    for sid in $(aerospace list-workspaces --monitor "$mid" 2>/dev/null); do
-      sketchybar --set "space.$sid" display="$mid"
-      MEMBERS="$MEMBERS space.$sid"
+    # one capsule per workspace SET (1-9 vs 11-19, keyed on the sid
+    # minus its slot digit). With both displays present each monitor
+    # holds one set, so nothing changes; with one display both sets
+    # land on the same monitor and get SEPARATE capsules side by side
+    # — 1-9 as always, the other display's set appended after — never
+    # one merged run of duplicate digits.
+    WS_ON_MON="$(aerospace list-workspaces --monitor "$mid" 2>/dev/null)"
+    SETS="$(for sid in $WS_ON_MON; do echo "s${sid%?}"; done | sort -u)"
+    HAVE_SET=0
+    for setkey in $SETS; do
+      MEMBERS=""
+      FIRST_SID=""
+      for sid in $WS_ON_MON; do
+        [ "s${sid%?}" = "$setkey" ] || continue
+        sketchybar --set "space.$sid" display="$mid"
+        [ -z "$FIRST_SID" ] && FIRST_SID="$sid"
+        MEMBERS="$MEMBERS space.$sid"
+      done
+      [ -z "$MEMBERS" ] && continue
+      # a plain fixed-width item OUTSIDE both brackets is the gap
+      # between set capsules (bracket backgrounds hug their members,
+      # so member padding can't separate them)
+      if [ "$HAVE_SET" = 1 ]; then
+        sketchybar --add item "space.sep.$mid.$setkey" left \
+          --set "space.sep.$mid.$setkey" width=8 display="$mid" \
+            icon.drawing=off label.drawing=off background.drawing=off \
+          --move "space.sep.$mid.$setkey" before "space.$FIRST_SID"
+      fi
+      sketchybar --add bracket "spaces.$mid.$setkey" $MEMBERS \
+        --set "spaces.$mid.$setkey" \
+          background.color="$ITEM_BG" \
+          background.corner_radius=4 \
+          background.height=26
+      HAVE_SET=1
     done
-    [ -n "$MEMBERS" ] && sketchybar --add bracket "spaces.$mid" $MEMBERS \
-      --set "spaces.$mid" \
-        background.color="$ITEM_BG" \
-        background.corner_radius=4 \
-        background.height=26
   done
 else
   # no aerospace yet: one capsule around the fallback set
