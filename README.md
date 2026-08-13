@@ -59,7 +59,7 @@ re-run `install.sh`:
 
 ```sh
 # config/apps.local.conf — your picks win over apps.conf
-TERMINAL=kitty
+TERMINAL=Korren
 BROWSER=Arc
 ```
 
