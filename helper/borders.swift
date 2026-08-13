@@ -163,8 +163,29 @@ func focusedWindowFrame() -> (CGRect, String)? {
             }
         }
         if visible / (rect.width * rect.height) < 0.7 { continue }
-        if let n = w["kCGWindowNumber"] as? Int { lastWid = UInt32(n) }
-        return (rect, name)
+        var pick = rect
+        var pickWid = (w["kCGWindowNumber"] as? Int).map(UInt32.init) ?? 0
+        // Sheets, palettes and popovers are separate layer-0 windows
+        // IN FRONT of their parent — ringing them reads as "the border
+        // marks a sub-section of the window". If the topmost window
+        // sits inside a clearly bigger window of the SAME app, ring
+        // the container instead.
+        for behind in list {
+            guard (behind["kCGWindowLayer"] as? Int) == 0,
+                (behind["kCGWindowOwnerPID"] as? pid_t) == pid,
+                let bb = behind["kCGWindowBounds"] as? [String: Any],
+                let bx = bb["X"] as? CGFloat, let by = bb["Y"] as? CGFloat,
+                let bw = bb["Width"] as? CGFloat, let bh = bb["Height"] as? CGFloat
+            else { continue }
+            let brect = CGRect(x: bx, y: by, width: bw, height: bh)
+            if brect.insetBy(dx: -2, dy: -2).contains(pick),
+                brect.width * brect.height > pick.width * pick.height * 1.3 {
+                pick = brect
+                if let bn = behind["kCGWindowNumber"] as? Int { pickWid = UInt32(bn) }
+            }
+        }
+        lastWid = pickWid
+        return (pick, name)
     }
     lastWid = 0
     return nil
