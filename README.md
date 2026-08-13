@@ -103,7 +103,7 @@ layout.
 Transparent bar, everything a flat radius-4 pill, one `GAP` constant
 for spacing. Every popup closes when the cursor leaves it.
 
-- ** menu** — About, System Settings, Lock, Sleep, Restart, Shut Down,
+- **Apple menu** — About, System Settings, Lock, Sleep, Restart, Shut Down,
   Next Theme, Reload Bar (the menu the hidden native bar took away).
 - **Workspaces** — one segmented capsule per monitor showing only that
   monitor's workspaces; accent pill on the focused one; click to jump.
