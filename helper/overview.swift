@@ -278,10 +278,7 @@ win.hasShadow = false
 win.animationBehavior = .none
 win.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
-func revealIfReady(_ content: ContentView) {
-    guard content.shotReady, content.cardsReady else { return }
-    // cards settle from a slight over-scale while fading in — reads as
-    // one motion with the receding desktop
+func revealCards(_ content: ContentView) {
     content.cards.wantsLayer = true
     if let l = content.cards.layer {
         CATransaction.begin()
@@ -303,65 +300,6 @@ func revealIfReady(_ content: ContentView) {
     }
 }
 
-func applyBackdrop(_ content: ContentView, shot: CGImage?) {
-    // the dim fallback (0.25s) may win the race against a slow SCK
-    // capture — a LATE real shot still lands (with its zoom), it just
-    // must not re-apply once the shot itself is in
-    if shot == nil, content.shotReady { return }
-    if shot != nil, content.shotLayer.contents != nil { return }
-    content.shotReady = true
-    if let shot = shot {
-        content.shotLayer.contents = shot
-        // the shot covers every pixel at scale 1.0 right now — turn the
-        // floor opaque in the same beat, so the zoom reveals the
-        // wallpaper (black where it failed to load) instead of the
-        // live desktop bleeding in around the edges
-        content.layer?.backgroundColor = NSColor.black.cgColor
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0.34)
-        CATransaction.setAnimationTimingFunction(
-            CAMediaTimingFunction(controlPoints: 0.19, 1.0, 0.22, 1.0)) // ease-out-expo
-        content.shotLayer.setAffineTransform(CGAffineTransform(scaleX: 0.93, y: 0.93))
-        content.dimLayer.opacity = 0.5
-        CATransaction.commit()
-    } else {
-        // no screenshot (permission missing / capture failed): plain dim
-        content.dimLayer.opacity = 0.72
-    }
-    revealIfReady(content)
-}
-
-func captureBackdrop(screen: NSScreen, into content: ContentView) {
-    let did = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
-        .uint32Value ?? 0
-    Task {
-        var shot: CGImage? = nil
-        if let sc = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-            let disp = sc.displays.first(where: { $0.displayID == did }) ?? sc.displays.first {
-            let cfg = SCStreamConfiguration()
-            cfg.width = disp.width
-            cfg.height = disp.height
-            cfg.showsCursor = false
-            // exclude OUR overlay — a slow capture otherwise photographs
-            // the half-drawn overlay itself (recursive, undimmed mess)
-            let mine = sc.windows.filter { $0.windowID == CGWindowID(win.windowNumber) }
-            let filter = SCContentFilter(display: disp, excludingWindows: mine)
-            shot = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
-        }
-        let s = shot
-        await MainActor.run {
-            guard overlayVisible, win.contentView === content else { return }
-            applyBackdrop(content, shot: s)
-        }
-    }
-    // capture running late must not hold the whole overlay hostage
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak content] in
-        if let c = content, overlayVisible, win.contentView === c {
-            applyBackdrop(c, shot: nil)
-        }
-    }
-}
-
 func hideOverlay(animated: Bool = true) {
     guard overlayVisible else { return }
     overlayVisible = false
@@ -377,19 +315,20 @@ func hideOverlay(animated: Bool = true) {
             slpsFocus(pid: prev.pid, wid: prev.wid)
         }
     }
-    guard animated, let content = win.contentView as? ContentView, content.shotReady else {
+    guard animated, let content = win.contentView as? ContentView else {
         finish()
         return
     }
-    // mirror of the open: desktop zooms back forward, dim lifts,
+    // mirror of the open: dim lifts, wallpaper drifts out and fades,
     // cards recede
     CATransaction.begin()
     CATransaction.setAnimationDuration(0.22)
     CATransaction.setAnimationTimingFunction(
         CAMediaTimingFunction(controlPoints: 0.4, 0.0, 0.6, 1.0))
     CATransaction.setCompletionBlock(finish)
-    content.shotLayer.setAffineTransform(.identity)
     content.dimLayer.opacity = 0
+    content.wallLayer.opacity = 0
+    content.wallLayer.setAffineTransform(CGAffineTransform(scaleX: 1.05, y: 1.05))
     content.cards.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.04, y: 1.04))
     CATransaction.commit()
     NSAnimationContext.runAnimationGroup { ctx in
@@ -412,12 +351,9 @@ final class ContentView: NSView {
     var cardRects: [(NSRect, String)] = []
     // MC-style backdrop: screenshot of the desktop zooming back under
     // a dim wash while the cards fade in
-    let wallLayer = CALayer() // wallpaper floor the zoom recedes onto
-    let shotLayer = CALayer()
+    let wallLayer = CALayer() // wallpaper backdrop
     let dimLayer = CALayer()
     let cards = NSView()
-    var shotReady = false
-    var cardsReady = false
     override var acceptsFirstResponder: Bool { true }
     // every click belongs to the overlay itself — labels and image
     // views inside cards must never swallow a mouseDown
@@ -576,8 +512,7 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
     content.cards.addSubview(hint)
 
     win.makeFirstResponder(content)
-    content.cardsReady = true
-    revealIfReady(content)
+    revealCards(content)
     refreshThumbs(shown.flatMap { (wins[$0] ?? []).prefix(4).map(\.id) })
 }
 
@@ -595,14 +530,17 @@ func showOverlay() {
     // transparent window + layered backdrop: the first frames look
     // exactly like the desktop, then the screenshot zooms back
     win.backgroundColor = .clear
-    placeholder.layer?.backgroundColor = NSColor.clear.cgColor
+    placeholder.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.0).cgColor
     placeholder.wallLayer.frame = placeholder.bounds
     placeholder.wallLayer.contentsGravity = .resizeAspectFill
     placeholder.wallLayer.masksToBounds = true
+    placeholder.wallLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+    placeholder.wallLayer.position = CGPoint(x: placeholder.bounds.midX, y: placeholder.bounds.midY)
+    placeholder.wallLayer.opacity = 0
+    placeholder.wallLayer.setAffineTransform(CGAffineTransform(scaleX: 1.05, y: 1.05))
     placeholder.layer?.addSublayer(placeholder.wallLayer)
     // resolve the wallpaper the way theme-set sets it — the system's
     // recorded desktop-picture path goes stale when theme repos move
-    // (macOS keeps showing a cached copy of a file that's gone)
     let bgDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/omarchy/current/theme/backgrounds")
     let themeWall = (try? FileManager.default.contentsOfDirectory(
@@ -610,19 +548,25 @@ func showOverlay() {
         .sorted { $0.lastPathComponent < $1.lastPathComponent }.first
     if let url = themeWall ?? NSWorkspace.shared.desktopImageURL(for: screen) {
         DispatchQueue.global().async {
-            // proposedRect nil = natural size (a small rect rasterizes
-            // the whole wallpaper down to that size — 1x1 black pixel)
             let cg = NSImage(contentsOf: url)?
                 .cgImage(forProposedRect: nil, context: nil, hints: nil)
             DispatchQueue.main.async {
-                if win.contentView === placeholder { placeholder.wallLayer.contents = cg }
+                guard win.contentView === placeholder else { return }
+                placeholder.wallLayer.contents = cg
+                // the open breath: desktop darkens as the wallpaper
+                // drifts in behind the dim — deterministic, no display
+                // capture, no race, no rare glitch backdrop
+                CATransaction.begin()
+                CATransaction.setAnimationDuration(0.34)
+                CATransaction.setAnimationTimingFunction(
+                    CAMediaTimingFunction(controlPoints: 0.19, 1.0, 0.22, 1.0))
+                placeholder.dimLayer.opacity = 0.62
+                placeholder.wallLayer.opacity = 1
+                placeholder.wallLayer.setAffineTransform(.identity)
+                CATransaction.commit()
             }
         }
     }
-    placeholder.shotLayer.frame = placeholder.bounds
-    placeholder.shotLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-    placeholder.shotLayer.position = CGPoint(x: placeholder.bounds.midX, y: placeholder.bounds.midY)
-    placeholder.layer?.addSublayer(placeholder.shotLayer)
     placeholder.dimLayer.frame = placeholder.bounds
     placeholder.dimLayer.backgroundColor = NSColor.black.cgColor
     placeholder.dimLayer.opacity = 0
@@ -631,7 +575,6 @@ func showOverlay() {
     placeholder.cards.alphaValue = 0
     placeholder.addSubview(placeholder.cards)
     win.contentView = placeholder
-    captureBackdrop(screen: screen, into: placeholder)
     FileManager.default.createFile(atPath: activeFlag, contents: nil)
     rememberFront()
     tlog("show: screen=\(win.frame) mouse=\(NSEvent.mouseLocation) winNum=\(win.windowNumber)")
