@@ -65,5 +65,6 @@ while IFS=$'\t' read -r marker dev; do
   i=$((i + 1))
 done < <("$HOME/.local/bin/omacosy-helper" audio list)
 
+"$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others volume
 sketchybar --set volume popup.drawing=on
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" volume >/dev/null 2>&1 &)

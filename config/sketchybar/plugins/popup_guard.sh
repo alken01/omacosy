@@ -1,10 +1,37 @@
 #!/usr/bin/env bash
-# popup_guard.sh <anchor-item> — closes the anchor's popup when the
-# cursor leaves the measured item+popup rectangle (plus margin).
+# popup_guard.sh <anchor-item>          — close the anchor's popup once the
+#   cursor is outside BOTH the bar strip and the item+popup hull (plus
+#   margin), so sliding along the bar keeps the popup open.
+# popup_guard.sh close_others <anchor>  — close every other anchor's popup
+#   (popups are exclusive: opening one dismisses the rest).
 # Started by whichever plugin opens a popup; one instance per anchor;
-# exits when the popup is gone. Deterministic replacement for
-# sketchybar's unreliable mouse.exited.global event.
+# exits when the popup is gone. Sole owner of popup dismissal — the
+# plugins no longer listen to sketchybar's unreliable mouse.exited.global.
 export PATH="/opt/homebrew/bin:$PATH"
+
+ANCHORS="clock volume weather wifi bluetooth apple"
+
+close_one() {
+  sketchybar --set "$1" popup.drawing=off 2>/dev/null
+  case "$1" in
+    clock) sketchybar --remove '/clock\.cal\..*/' >/dev/null 2>&1 ;;
+    volume)
+      sketchybar --remove '/volume\.menu\..*/' >/dev/null 2>&1
+      sketchybar --remove volume.slider >/dev/null 2>&1
+      ;;
+    weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
+    wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
+    bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
+    apple) sketchybar --remove '/apple\.pop\..*/' >/dev/null 2>&1 ;;
+  esac
+}
+
+if [ "${1:-}" = "close_others" ]; then
+  for a in $ANCHORS; do
+    [ "$a" != "${2:-}" ] && close_one "$a"
+  done
+  exit 0
+fi
 
 ANCHOR="${1:-}"
 case "$ANCHOR" in
@@ -20,21 +47,6 @@ esac
 LOCKDIR="${TMPDIR:-/tmp}/sketchybar-popup-guard-$ANCHOR.lock"
 mkdir "$LOCKDIR" 2>/dev/null || exit 0
 trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT
-
-close_popup() {
-  sketchybar --set "$ANCHOR" popup.drawing=off 2>/dev/null
-  case "$ANCHOR" in
-    clock) sketchybar --remove '/clock\.cal\..*/' >/dev/null 2>&1 ;;
-    volume)
-      sketchybar --remove '/volume\.menu\..*/' >/dev/null 2>&1
-      sketchybar --remove volume.slider >/dev/null 2>&1
-      ;;
-    weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
-    wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
-    bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
-    apple) sketchybar --remove '/apple\.pop\..*/' >/dev/null 2>&1 ;;
-  esac
-}
 
 sleep 0.25 # let the popup lay out before measuring
 
@@ -58,6 +70,14 @@ else
   Y1="$(jq -r '.y1 + 25 | ceil' <<<"$HULL")"
 fi
 
+# The bar strips (one per display, from the anchor's own rects): while
+# the cursor rides anywhere along the bar the popup stays open.
+BAR_H="$(sketchybar --query bar | jq -r '.height // 34')"
+STRIPS="$(sketchybar --query "$ANCHOR" 2>/dev/null | jq -r --argjson h "$BAR_H" '
+  .bounding_rects // {} | to_entries[]
+  | select(.value.origin[0] > -9000)
+  | "\(.value.origin[1] - 2 | floor) \(.value.origin[1] + $h + 2 | ceil)"')"
+
 tick=0
 for _ in $(seq 1 500); do # ~75s ceiling
   sleep 0.12
@@ -65,8 +85,16 @@ for _ in $(seq 1 500); do # ~75s ceiling
   X="${POS%,*}"
   Y="${POS#*,}"
   case "$X$Y" in '' | *[!0-9-]*) continue ;; esac
-  if [ "$X" -lt "$X0" ] || [ "$X" -gt "$X1" ] || [ "$Y" -lt "$Y0" ] || [ "$Y" -gt "$Y1" ]; then
-    close_popup
+  INSIDE=0
+  if [ "$X" -ge "$X0" ] && [ "$X" -le "$X1" ] && [ "$Y" -ge "$Y0" ] && [ "$Y" -le "$Y1" ]; then
+    INSIDE=1
+  else
+    while read -r S0 S1; do
+      [ -n "$S0" ] && [ "$Y" -ge "$S0" ] && [ "$Y" -le "$S1" ] && INSIDE=1 && break
+    done <<<"$STRIPS"
+  fi
+  if [ "$INSIDE" = 0 ]; then
+    close_one "$ANCHOR"
     exit 0
   fi
   tick=$((tick + 1))
@@ -75,4 +103,4 @@ for _ in $(seq 1 500); do # ~75s ceiling
     exit 0
   fi
 done
-close_popup
+close_one "$ANCHOR"

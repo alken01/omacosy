@@ -147,6 +147,7 @@ case "$SENDER" in
         label.font="JetBrainsMono Nerd Font:Regular:12.0" \
         label.padding_left=10 label.padding_right=10 background.drawing=off \
         click_script="open 'x-apple.systempreferences:com.apple.BluetoothSettings'; sketchybar --set bluetooth popup.drawing=off"
+    "$PLUGIN_DIR/popup_guard.sh" close_others bluetooth
     sketchybar --set bluetooth popup.drawing=on
     ("$PLUGIN_DIR/popup_guard.sh" bluetooth >/dev/null 2>&1 &)
     exit 0

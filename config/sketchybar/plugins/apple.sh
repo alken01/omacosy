@@ -36,6 +36,7 @@ case "$SENDER" in
     add_row 6 "Next Theme" "$HOME/.local/bin/theme-next"
     add_row 7 "Reload Bar" "sketchybar --reload"
 
+    "$PLUGIN_DIR/popup_guard.sh" close_others apple
     sketchybar --set apple popup.drawing=on
     ("$PLUGIN_DIR/popup_guard.sh" apple >/dev/null 2>&1 &)
     exit 0

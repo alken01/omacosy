@@ -41,5 +41,6 @@ done < <(cal | sed 's/ *$//')
 # accent the header row
 sketchybar --set clock.cal.0 label.color="$ACCENT" 2>/dev/null
 
+"$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others clock
 sketchybar --set clock popup.drawing=on
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" clock >/dev/null 2>&1 &)

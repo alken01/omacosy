@@ -19,10 +19,6 @@ close_popup() {
 }
 
 case "$SENDER" in
-  mouse.exited.global)
-    close_popup
-    exit 0
-    ;;
   mouse.clicked)
     if [ "$(sketchybar --query weather | jq -r '.popup.drawing' 2>/dev/null)" = "on" ]; then
       close_popup
@@ -50,6 +46,7 @@ case "$SENDER" in
           background.drawing=off
       i=$((i + 1))
     done < "$CACHE"
+    "$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" close_others weather
     sketchybar --set weather popup.drawing=on
 ("$(cd "$(dirname "$0")" && pwd)/popup_guard.sh" weather >/dev/null 2>&1 &)
     exit 0
