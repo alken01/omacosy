@@ -176,10 +176,18 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..1934d84 100644
+index fae40b9..867a42f 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -15,8 +15,175 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
+@@ -7,6 +7,7 @@
+ #include <AppKit/AppKit.h>
+ #import <ApplicationServices/ApplicationServices.h>
+ #include <pthread.h>
++#include <IOKit/IOKitLib.h>
+ 
+ static aerospace* g_aerospace = NULL;
+ static CFTypeRef g_haptic = NULL;
+@@ -15,8 +16,196 @@ static pthread_mutex_t g_gesture_mutex = PTHREAD_MUTEX_INITIALIZER;
  static gesture_ctx g_gesture_ctx = { 0 };
  static CFMutableDictionaryRef g_tracks = NULL;
  
@@ -225,6 +233,8 @@ index fae40b9..1934d84 100644
 +static uint64_t g_dev_ids[16];
 +static int g_dev_count = 0;
 +
++static void hid_device_appeared(void* refcon, io_iterator_t iter);
++
 +static int register_new_devices(void)
 +{
 +	CFArrayRef list = MTDeviceCreateList();
@@ -250,6 +260,25 @@ index fae40b9..1934d84 100644
 +	}
 +	CFRelease(list);
 +	return added;
++}
++
++static void hid_device_appeared(void* refcon, io_iterator_t iter)
++{
++	(void)refcon;
++	io_object_t obj;
++	while ((obj = IOIteratorNext(iter)))
++		IOObjectRelease(obj); // drain re-arms the notification
++	int n = register_new_devices();
++	if (n)
++		NSLog(@"Multitouch: %d new device(s) on HID attach, %d total.", n, g_dev_count);
++	// some trackpads publish their multitouch service a moment after
++	// their HID service — one delayed follow-up, event-triggered
++	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
++		dispatch_get_main_queue(), ^{
++			int m = register_new_devices();
++			if (m)
++				NSLog(@"Multitouch: %d late device(s), %d total.", m, g_dev_count);
++		});
 +}
 +
 +// AeroSpace numbers monitors by arrangement (left to right), so sorting
@@ -355,7 +384,7 @@ index fae40b9..1934d84 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -51,10 +218,25 @@ static void reset_gesture_state(gesture_ctx* ctx)
+@@ -51,10 +240,25 @@ static void reset_gesture_state(gesture_ctx* ctx)
  	ctx->last_fire_dir = 0;
  }
  
@@ -381,7 +410,7 @@ index fae40b9..1934d84 100644
  
  	ctx->last_fire_dir = direction;
  	ctx->state = GS_COMMITTED;
-@@ -64,6 +246,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -64,6 +268,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -413,7 +442,7 @@ index fae40b9..1934d84 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -112,7 +319,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -112,7 +341,10 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		&min_x, &max_x, &min_y, &max_y);
  
  	float dx = avg_x - ctx->start_x;
@@ -425,7 +454,7 @@ index fae40b9..1934d84 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +349,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +371,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -476,7 +505,7 @@ index fae40b9..1934d84 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -201,8 +455,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +477,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -488,7 +517,7 @@ index fae40b9..1934d84 100644
  
  		goto unlock;
  	}
-@@ -219,65 +475,49 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +497,49 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -566,10 +595,10 @@ index fae40b9..1934d84 100644
 -		CGEventTapEnable(event_tap_ref->handle, true);
 -		return event;
 -	}
- 
+-
 -	if (type != NSEventTypeGesture)
 -		return event;
--
+ 
 -	NSEvent* ev = [NSEvent eventWithCGEvent:event];
 -	NSSet<NSTouch*>* touches = ev.allTouches;
 -
@@ -583,7 +612,7 @@ index fae40b9..1934d84 100644
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +587,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +609,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -601,7 +630,7 @@ index fae40b9..1934d84 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +613,28 @@ int main(int argc, const char* argv[])
+@@ -371,7 +635,33 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
@@ -616,18 +645,23 @@ index fae40b9..1934d84 100644
 +			exit(EXIT_FAILURE);
 +		}
 +		NSLog(@"Raw multitouch detection active on %d device(s).", g_dev_count);
-+		// docking / bluetooth trackpads appear AFTER launch — rescan
-+		static dispatch_source_t rescan;
-+		rescan = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
-+			dispatch_get_main_queue());
-+		dispatch_source_set_timer(rescan, DISPATCH_TIME_NOW,
-+			10ull * NSEC_PER_SEC, NSEC_PER_SEC);
-+		dispatch_source_set_event_handler(rescan, ^{
-+			int n = register_new_devices();
-+			if (n)
-+				NSLog(@"Multitouch rescan: %d new device(s), %d total.", n, g_dev_count);
-+		});
-+		dispatch_resume(rescan);
++		// docking / bluetooth trackpads appear AFTER launch: IOKit
++		// fires a matching notification the moment a HID device
++		// attaches — no polling. The second scan 2s later covers
++		// devices whose multitouch service registers a beat after
++		// their HID arrival.
++		static IONotificationPortRef notify_port;
++		static io_iterator_t hid_iter;
++		notify_port = IONotificationPortCreate(kIOMainPortDefault);
++		CFRunLoopAddSource(CFRunLoopGetMain(),
++			IONotificationPortGetRunLoopSource(notify_port), kCFRunLoopDefaultMode);
++		if (IOServiceAddMatchingNotification(notify_port, kIOFirstMatchNotification,
++				IOServiceMatching("IOHIDDevice"), hid_device_appeared, NULL,
++				&hid_iter) == KERN_SUCCESS) {
++			hid_device_appeared(NULL, hid_iter); // drain to ARM + catch existing
++		} else {
++			NSLog(@"HID matching notification failed — new trackpads need a daemon restart");
++		}
  
  		return NSApplicationMain(argc, argv);
  	}
