@@ -74,6 +74,12 @@ if [ ! -x "$HOME/.local/bin/omacosy-helper" ] || [ "$REPO_DIR/helper/main.swift"
   swiftc -O -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
 fi
 
+# workspace overview overlay (4-finger swipe up)
+if [ ! -x "$HOME/.local/bin/omacosy-overview" ] || [ "$REPO_DIR/helper/overview.swift" -nt "$HOME/.local/bin/omacosy-overview" ]; then
+  log "Building omacosy-overview"
+  swiftc -O -o "$HOME/.local/bin/omacosy-overview" "$REPO_DIR/helper/overview.swift"
+fi
+
 # focus-follows-mouse daemon (own binary so helper rebuilds never
 # invalidate its Accessibility grant); runs as a launchd agent
 if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
@@ -95,6 +101,7 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
   # aerospace-swipe too — unsigned, every rebuild invalidated its
   # Accessibility grant and silently killed all trackpad swipes
+  codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.acsandmann.swipe "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
 fi
 

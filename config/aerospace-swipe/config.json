@@ -5,5 +5,5 @@
   "skip_empty": false,
   "fingers": 4,
   "cursor_monitor": true,
-  "swipe_up": "open -b com.apple.exposelauncher"
+  "swipe_up": "$HOME/.local/bin/omacosy-overview"
 }
