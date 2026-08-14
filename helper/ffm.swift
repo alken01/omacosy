@@ -250,6 +250,13 @@ func process(confirmed: Bool) {
         // cooldown: never two focus changes within 250ms — breaks any
         // residual feedback loop with the window manager
         if now - lastFocusAt > 0.25 {
+            // hover focus IS user intent (it's movement-gated), but it
+            // emits no key/click CGEvent — stamp the focus guard's
+            // intent file or a cross-monitor hover (focused-workspace
+            // change) gets bounced as an "app yank", warping the
+            // cursor back via aerospace's move-mouse hook
+            FileManager.default.createFile(
+                atPath: "/tmp/omacosy-user-intent-\(getuid())", contents: nil)
             slpsFocus(pid: hit.pid, wid: hit.wid, raise: !hit.covered)
             focus(pid: hit.pid, rect: hit.rect, allowRaise: !hit.covered)
             lastFocusAt = now
