@@ -176,10 +176,10 @@ index cc20b13..dde77e9 100644
  	if (nt.phase == 8) {
  		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
 diff --git a/src/main.m b/src/main.m
-index fae40b9..8fb3213 100644
+index fae40b9..13acfcf 100644
 --- a/src/main.m
 +++ b/src/main.m
-@@ -7,16 +7,221 @@
+@@ -7,16 +7,243 @@
  #include <AppKit/AppKit.h>
  #import <ApplicationServices/ApplicationServices.h>
  #include <pthread.h>
@@ -216,22 +216,27 @@ index fae40b9..8fb3213 100644
 +typedef int (*MTContactCallbackFunction)(int, MTFinger*, int, double, int);
 +CFMutableArrayRef MTDeviceCreateList(void);
 +void MTRegisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
++void MTUnregisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 +void MTDeviceStart(MTDeviceRef, int);
++void MTDeviceStop(MTDeviceRef);
 +
 +typedef uint64_t IOHIDRequestType;
 +enum { kIOHIDRequestTypeListenEvent = 1 };
 +extern bool IOHIDRequestAccess(IOHIDRequestType);
 +
-+static CFArrayRef g_mt_devices = NULL;
-+
 +// Trackpads HOTPLUG (docking, bluetooth): MTDeviceCreateList returns
 +// fresh refs each call, so device identity is the hardware id. New
-+// devices get the contact callback; known ones are left alone (a
-+// double registration would double every gesture).
++// devices get the contact callback; a KNOWN id re-enumerating is
++// swapped onto its fresh ref — the previous registration dies with
++// the transport (dock detach, bluetooth drop), and skipping the id
++// left a silently dead trackpad. The old ref is stopped before the
++// fresh one starts, so gestures are never doubled.
 +extern OSStatus MTDeviceGetDeviceID(MTDeviceRef, uint64_t*);
 +static int mt_contact_callback(int device, MTFinger* data, int nFingers,
 +	double timestamp, int frame);
++static void gesture_release_device(int key);
 +static uint64_t g_dev_ids[16];
++static MTDeviceRef g_dev_refs[16];
 +static int g_dev_count = 0;
 +
 +static void hid_device_appeared(void* refcon, io_iterator_t iter);
@@ -247,14 +252,31 @@ index fae40b9..8fb3213 100644
 +		uint64_t did = 0;
 +		if (MTDeviceGetDeviceID(dev, &did) != 0 || did == 0)
 +			did = (uint64_t)(uintptr_t)dev;
-+		bool seen = false;
++		int slot = -1;
 +		for (int j = 0; j < g_dev_count; ++j)
-+			if (g_dev_ids[j] == did) { seen = true; break; }
-+		if (seen)
++			if (g_dev_ids[j] == did) { slot = j; break; }
++		if (slot >= 0) {
++			// known id, fresh ref: retire the old registration (its
++			// gesture slot too — the callback keys on the ref word)
++			MTDeviceRef old = g_dev_refs[slot];
++			if (old) {
++				MTUnregisterContactFrameCallback(old, mt_contact_callback);
++				MTDeviceStop(old);
++				gesture_release_device((int)(uintptr_t)old);
++				CFRelease(old);
++			}
++			CFRetain(dev);
++			g_dev_refs[slot] = dev;
++			MTRegisterContactFrameCallback(dev, mt_contact_callback);
++			MTDeviceStart(dev, 0);
 +			continue;
-+		if (g_dev_count < 16)
-+			g_dev_ids[g_dev_count++] = did;
++		}
++		if (g_dev_count >= 16)
++			continue;
++		g_dev_ids[g_dev_count] = did;
 +		CFRetain(dev);
++		g_dev_refs[g_dev_count] = dev;
++		g_dev_count++;
 +		MTRegisterContactFrameCallback(dev, mt_contact_callback);
 +		MTDeviceStart(dev, 0);
 +		added++;
@@ -402,7 +424,7 @@ index fae40b9..8fb3213 100644
  	if (g_config.skip_empty || g_config.wrap_around) {
  		char* workspaces = aerospace_list_workspaces(g_aerospace, !g_config.skip_empty);
  		if (!workspaces) {
-@@ -51,10 +256,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
+@@ -51,10 +278,37 @@ static void reset_gesture_state(gesture_ctx* ctx)
  	ctx->last_fire_dir = 0;
  }
  
@@ -440,7 +462,7 @@ index fae40b9..8fb3213 100644
  
  	ctx->last_fire_dir = direction;
  	ctx->state = GS_COMMITTED;
-@@ -64,6 +296,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
+@@ -64,6 +318,31 @@ static void fire_gesture(gesture_ctx* ctx, int direction)
  	});
  }
  
@@ -472,7 +494,7 @@ index fae40b9..8fb3213 100644
  static void calculate_touch_averages(touch* touches, int count,
  	float* avg_x, float* avg_y, float* avg_vel,
  	float* min_x, float* max_x, float* min_y, float* max_y)
-@@ -107,12 +364,26 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
+@@ -107,12 +386,26 @@ static bool handle_committed_state(gesture_ctx* ctx, touch* touches, int count)
  		return true;
  	}
  
@@ -500,7 +522,7 @@ index fae40b9..8fb3213 100644
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
  		ctx->start_y = avg_y;
-@@ -139,6 +410,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -139,6 +432,50 @@ static void handle_idle_state(gesture_ctx* ctx, touch* touches, int count,
  	float dx = avg_x - ctx->start_x;
  	float dy = avg_y - ctx->start_y;
  
@@ -551,7 +573,7 @@ index fae40b9..8fb3213 100644
  	if (moved && (fast || (fabsf(dx) >= ACTIVATE_PCT && fabsf(dx) > fabsf(dy)))) {
  		ctx->state = GS_ARMED;
  		ctx->start_x = avg_x;
-@@ -186,11 +501,61 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
+@@ -186,11 +523,74 @@ static void handle_armed_state(gesture_ctx* ctx, touch* touches, int count,
  	}
  }
  
@@ -589,11 +611,24 @@ index fae40b9..8fb3213 100644
 +	return &g_device_gestures[0]; // unreachable: register cap == table size
 +}
 +
-+static void gestureCallback(int device, touch* touches, int count)
++// a retired device ref frees its gesture slot, so ref swaps on
++// hotplug can't exhaust the table across dock cycles
++static void gesture_release_device(int key)
  {
  	pthread_mutex_lock(&g_gesture_mutex);
++	for (int i = 0; i < MAX_GESTURE_DEVICES; ++i)
++		if (g_device_gestures[i].used && g_device_gestures[i].key == key) {
++			memset(&g_device_gestures[i], 0, sizeof(g_device_gestures[i]));
++			break;
++		}
++	pthread_mutex_unlock(&g_gesture_mutex);
++}
  
 -	gesture_ctx* ctx = &g_gesture_ctx;
++static void gestureCallback(int device, touch* touches, int count)
++{
++	pthread_mutex_lock(&g_gesture_mutex);
++
 +	device_gesture* dg = gesture_for_device(device);
 +	gesture_ctx* ctx = &dg->ctx;
 +
@@ -615,7 +650,7 @@ index fae40b9..8fb3213 100644
  
  	if (ctx->state == GS_COMMITTED) {
  		if (handle_committed_state(ctx, touches, count))
-@@ -201,8 +566,10 @@ static void gestureCallback(touch* touches, int count)
+@@ -201,8 +601,10 @@ static void gestureCallback(touch* touches, int count)
  		if (ctx->state == GS_ARMED)
  			ctx->state = GS_IDLE;
  
@@ -627,7 +662,7 @@ index fae40b9..8fb3213 100644
  
  		goto unlock;
  	}
-@@ -219,65 +586,48 @@ static void gestureCallback(touch* touches, int count)
+@@ -219,65 +621,48 @@ static void gestureCallback(touch* touches, int count)
  
  	for (int i = 0; i < count; ++i) {
  		ctx->prev_x[i] = touches[i].x;
@@ -698,7 +733,7 @@ index fae40b9..8fb3213 100644
 -		event_tap_end(event_tap_ref);
 -		return event;
 -	}
--
+ 
 -	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
 -		NSLog(@"Event-tap re-enabled.");
 -		CGEventTapEnable(event_tap_ref->handle, true);
@@ -715,13 +750,13 @@ index fae40b9..8fb3213 100644
 -		return event;
 -
 -	process_touches(touches);
- 
+-
 -	return event;
 +	return 0;
  }
  
  static void acquire_lockfile(void)
-@@ -347,13 +697,15 @@ int main(int argc, const char* argv[])
+@@ -347,13 +732,15 @@ int main(int argc, const char* argv[])
  		NSLog(@"Accessibility permission granted. Continuing app initialization...");
  
  		g_config = load_config();
@@ -739,7 +774,7 @@ index fae40b9..8fb3213 100644
  
  		g_aerospace = aerospace_new(NULL);
  		if (!g_aerospace) {
-@@ -371,7 +723,33 @@ int main(int argc, const char* argv[])
+@@ -371,7 +758,33 @@ int main(int argc, const char* argv[])
  			&kCFTypeDictionaryKeyCallBacks,
  			NULL);
  
