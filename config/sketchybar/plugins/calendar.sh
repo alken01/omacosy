@@ -77,6 +77,7 @@ add_row() { # label  font  color  [today-week]
   fi
   sketchybar --add item "clock.cal.$i" popup.clock \
     --set "clock.cal.$i" \
+      padding_left=4 padding_right=4 \
       icon.drawing=on icon.font="$MONO" icon.width=12 \
       icon.padding_left=6 icon.padding_right=3 icon.color="$ACCENT" \
       label="$1" label.font="$2" label.color="$3" \
