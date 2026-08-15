@@ -31,6 +31,8 @@ render() {
 case "${1:-}" in
   slider)
     "$HOME/.local/bin/omacosy-helper" brightness set "${PERCENTAGE:-50}" >/dev/null 2>&1
+    # the readout is OURS to move — sketchybar only animates the track
+    sketchybar --set brightness.slider slider.percentage="${PERCENTAGE:-50}" label="${PERCENTAGE:-50}%" 2>/dev/null
     render
     exit 0
     ;;

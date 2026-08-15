@@ -35,6 +35,8 @@ case "${1:-toggle}" in
   slider)
     # PERCENTAGE = where on the slider the user clicked
     osascript -e "set volume output volume ${PERCENTAGE:-50}"
+    # the readout is OURS to move — sketchybar only animates the track
+    sketchybar --set volume.slider label="${PERCENTAGE:-50}%" 2>/dev/null
     exit 0
     ;;
   select)
