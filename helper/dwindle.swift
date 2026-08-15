@@ -92,13 +92,22 @@ func settle() {
     let wsCount = aerospace(["list-windows", "--workspace", f[3]])
         .split(separator: "\n").count
     guard wsCount >= 3 else { return } // a pair is already a 50/50 split
+    // Orientation is set EXPLICITLY on the fresh nest (opposite of
+    // the parent) — Hyprland's force_split-at-birth. The config's
+    // opposite-orientation normalization used to do this implicitly,
+    // but it re-derived orientations continuously, which turned
+    // Super+J's local pair-flip into a whole-tree cascade; it is off
+    // now (preserve_split=true equivalent) and birth is the one
+    // moment orientation gets decided.
     switch f[2] {
     case "h_tiles":
         _ = aerospace(["join-with", "left"])
-        tlog("dwindle: joined \(f[0]) left (ws \(f[3]), \(wsCount) windows)")
+        _ = aerospace(["layout", "v_tiles"])
+        tlog("dwindle: joined \(f[0]) left→v (ws \(f[3]), \(wsCount) windows)")
     case "v_tiles":
         _ = aerospace(["join-with", "up"])
-        tlog("dwindle: joined \(f[0]) up (ws \(f[3]), \(wsCount) windows)")
+        _ = aerospace(["layout", "h_tiles"])
+        tlog("dwindle: joined \(f[0]) up→h (ws \(f[3]), \(wsCount) windows)")
     default:
         break // accordions and exotics are the user's own arrangement
     }

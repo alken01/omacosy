@@ -13,8 +13,13 @@ start-at-login = true
 after-login-command = []
 after-startup-command = []
 
+# flatten dissolves single-child wrappers (Hyprland's own close-time
+# cleanup); opposite-orientation stays OFF — it is the inverse of
+# Hyprland's preserve_split=true and made Super+J's togglesplit
+# cascade through every nested container instead of flipping the one
+# pair. omacosy-dwindle sets each nest's orientation once, at birth.
 enable-normalization-flatten-containers = true
-enable-normalization-opposite-orientation-for-nested-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
