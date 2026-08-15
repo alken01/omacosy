@@ -9,22 +9,16 @@
 # plugins no longer listen to sketchybar's unreliable mouse.exited.global.
 export PATH="/opt/homebrew/bin:$PATH"
 
+# The ONLY per-anchor registry. Everything else is derived from the
+# naming convention: an anchor's popup children are ALL named
+# "<anchor>.<something>" (clock.cal.3, volume.slider, bluetooth.pop.1)
+# and nothing outside its popup may use that prefix.
 ANCHORS="clock volume brightness weather wifi bluetooth apple"
 
 close_one() {
   sketchybar --set "$1" popup.drawing=off 2>/dev/null
-  case "$1" in
-    clock) sketchybar --remove '/clock\.cal\..*/' >/dev/null 2>&1 ;;
-    volume)
-      sketchybar --remove '/volume\.menu\..*/' >/dev/null 2>&1
-      sketchybar --remove volume.slider >/dev/null 2>&1
-      ;;
-    brightness) sketchybar --remove brightness.slider >/dev/null 2>&1 ;;
-    weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
-    wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
-    bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
-    apple) sketchybar --remove '/apple\.pop\..*/' >/dev/null 2>&1 ;;
-  esac
+  # sketchybar's regex has no `+`; the mandatory dot spares the anchor
+  sketchybar --remove "/$1\..*/" >/dev/null 2>&1
 }
 
 if [ "${1:-}" = "close_others" ]; then
@@ -35,16 +29,12 @@ if [ "${1:-}" = "close_others" ]; then
 fi
 
 ANCHOR="${1:-}"
-case "$ANCHOR" in
-  clock) CHILD_RE='^clock\.cal\.' ;;
-  volume) CHILD_RE='^volume\.(menu\.|slider)' ;;
-  brightness) CHILD_RE='^brightness\.slider' ;;
-  weather) CHILD_RE='^weather\.pop\.' ;;
-  wifi) CHILD_RE='^wifi\.pop\.' ;;
-  bluetooth) CHILD_RE='^bt\.pop\.' ;;
-  apple) CHILD_RE='^apple\.pop\.' ;;
+[ -n "$ANCHOR" ] || exit 0
+case " $ANCHORS " in
+  *" $ANCHOR "*) ;;
   *) exit 0 ;;
 esac
+CHILD_RE="^$ANCHOR\."
 
 LOCKDIR="${TMPDIR:-/tmp}/sketchybar-popup-guard-$ANCHOR.lock"
 mkdir "$LOCKDIR" 2>/dev/null || exit 0

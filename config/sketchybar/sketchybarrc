@@ -267,13 +267,17 @@ sketchybar --add item wifi right \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
 
-# uniform spacing: every pill in the right cluster (and the front-app
-# pill) gets the same gap, defined once
+# uniform spacing: every right-cluster pill gets the same gap, defined
+# once. DERIVED, not enumerated — a hardcoded name list here has been
+# forgotten twice when adding items; at this point in the rc the bar
+# holds only top-level items (popup children don't exist yet), so
+# "everything positioned right" is exactly the pill set.
 GAP=14
-for it in activity clock battery volume brightness bluetooth wifi weather front_app; do
-  sketchybar --set "$it" padding_left="$GAP" padding_right=0
+for it in $(sketchybar --query bar | jq -r '.items[]'); do
+  [ "$(sketchybar --query "$it" | jq -r '.geometry.position' 2>/dev/null)" = "right" ] &&
+    sketchybar --set "$it" padding_left="$GAP" padding_right=0
 done
-sketchybar --set front_app padding_right="$GAP" \
+sketchybar --set front_app padding_left="$GAP" padding_right="$GAP" \
   --set media.prev padding_left=2 \
   --set media.title padding_right=2
 

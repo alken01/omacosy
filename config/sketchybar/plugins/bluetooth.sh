@@ -10,7 +10,7 @@ PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 close_popup() {
   sketchybar --set bluetooth popup.drawing=off 2>/dev/null
-  sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1
+  sketchybar --remove '/bluetooth\.pop\..*/' >/dev/null 2>&1
 }
 
 # LABEL_COLOR at ~60% alpha for the quiet action rows (weather-popup style)
@@ -125,8 +125,8 @@ case "$SENDER" in
         PCT="$(printf '%s\n' "$BATT" | awk -F'\t' -v n="$name" '$1==n{print $2; exit}')"
         LBL="$name"
         [ -n "$PCT" ] && LBL="$name · ${PCT}%"
-        sketchybar --add item "bt.pop.$i" popup.bluetooth \
-          --set "bt.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
+        sketchybar --add item "bluetooth.pop.$i" popup.bluetooth \
+          --set "bluetooth.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
             icon.color="$ACCENT" icon.padding_left=10 icon.padding_right=8 \
             label="$LBL" label.color="$ACCENT" label.padding_left=0 \
             label.padding_right=10 background.drawing=off \
@@ -136,8 +136,8 @@ case "$SENDER" in
       # paired but not connected: muted type icon, click to connect (first 6)
       while IFS=$'\t' read -r addr name kind; do
         [ -z "$addr" ] && continue
-        sketchybar --add item "bt.pop.$i" popup.bluetooth \
-          --set "bt.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
+        sketchybar --add item "bluetooth.pop.$i" popup.bluetooth \
+          --set "bluetooth.pop.$i" icon="$(kind_icon "$(refine_kind "$kind" "$name")")" \
             icon.color="$MUTED" icon.padding_left=10 icon.padding_right=8 \
             label="$name" label.color="$LABEL_COLOR" label.padding_left=0 \
             label.padding_right=10 background.drawing=off \
@@ -147,15 +147,15 @@ case "$SENDER" in
     fi
     # quiet action rows — small + dimmed, weather-footer style
     [ "$POWER" = "1" ] && TOGGLE_LABEL="turn bluetooth off" || TOGGLE_LABEL="turn bluetooth on"
-    sketchybar --add item "bt.pop.$i" popup.bluetooth \
-      --set "bt.pop.$i" icon.drawing=off \
+    sketchybar --add item "bluetooth.pop.$i" popup.bluetooth \
+      --set "bluetooth.pop.$i" icon.drawing=off \
         label="$TOGGLE_LABEL" label.color="$DIM" \
         label.font="JetBrainsMono Nerd Font:Regular:12.0" \
         label.padding_left=10 label.padding_right=10 background.drawing=off \
         click_script="$PLUGIN_DIR/bluetooth.sh toggle_power"
     i=$((i + 1))
-    sketchybar --add item "bt.pop.$i" popup.bluetooth \
-      --set "bt.pop.$i" icon.drawing=off \
+    sketchybar --add item "bluetooth.pop.$i" popup.bluetooth \
+      --set "bluetooth.pop.$i" icon.drawing=off \
         label="bluetooth settings…" label.color="$DIM" \
         label.font="JetBrainsMono Nerd Font:Regular:12.0" \
         label.padding_left=10 label.padding_right=10 background.drawing=off \
