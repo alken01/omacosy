@@ -10,10 +10,11 @@ bootstrapped from this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
-The whole desktop environment idles around **280MB** and is mostly
-self-built: six small signed Swift binaries (plus two shell tools)
-replace what would otherwise be a pile of dependencies (several of which are broken on
-macOS 26 — see below).
+The whole desktop environment idles around **350MB all-in** (WM, bar,
+six daemons — and a third of that is Karabiner's driver stack) and is
+mostly self-built: six small signed Swift binaries (plus two shell
+tools) replace what would otherwise be a pile of dependencies
+(several of which are broken on macOS 26 — see below).
 
 > **Posture**: built for macOS 26 (Tahoe) on one desk — a MacBook Pro
 > plus one external display. It generalizes deliberately (roles instead
@@ -24,9 +25,15 @@ macOS 26 — see below).
 ## Fresh Mac
 
 ```sh
-git clone https://github.com/paulsp94/omacosy.git
-cd omacosy && ./install.sh
+git clone https://github.com/paulsp94/omacosy.git ~/.local/share/omacosy
+cd ~/.local/share/omacosy && ./install.sh
 ```
+
+The clone location matters: configs are symlinked into the repo, and
+macOS privacy (TCC) blocks launchd services from reading
+`~/Documents`, `~/Desktop` and `~/Downloads` — a clone there makes
+the installer fall back to copying configs (still works; edits then
+need an `install.sh` re-run to apply).
 
 Idempotent — re-run after pulling changes. Installs Homebrew if
 missing, runs `brew bundle`, compiles the helper binaries, generates

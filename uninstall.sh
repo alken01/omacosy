@@ -93,6 +93,11 @@ restore() {
   fi
 }
 
+# configs COPIED for TCC-protected clones are ours to delete; the
+# restore() calls below then bring back backups / displaced symlinks
+grep '^copied-config ' "$MANIFEST" 2>/dev/null | sed 's/^copied-config //' |
+  while IFS= read -r d; do rm -rf "$d"; done
+
 restore "$HOME/.zshrc"
 restore "$HOME/.config/starship.toml"
 restore "$HOME/.config/aerospace"

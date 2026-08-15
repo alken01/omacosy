@@ -16,7 +16,27 @@ MANIFEST="$STATE_DIR/manifest"
 mkdir -p "$STATE_DIR"
 touch "$MANIFEST"
 mark() { grep -qxF "$1" "$MANIFEST" || printf '%s\n' "$1" >> "$MANIFEST"; }
+have() { grep -qxF "$1" "$MANIFEST" 2>/dev/null; }
 export MANIFEST
+
+# Configs are SYMLINKED into the repo so edits go live — but TCC walls
+# launchd consumers (sketchybar, AeroSpace, and the shells they spawn)
+# off from ~/Documents, ~/Desktop and ~/Downloads. A clone there makes
+# every symlinked config unreadable on a machine without Full Disk
+# Access, so such clones get COPIES instead (re-run install.sh after
+# editing; manifest-recorded so uninstall removes them). Existing
+# repo-symlinks are grandfathered — they prove this machine's grants
+# already read through. OMACOSY_SYMLINK=1 forces symlinks.
+case "$REPO_DIR" in
+  "$HOME/Documents"* | "$HOME/Desktop"* | "$HOME/Downloads"*)
+    if [ -n "${OMACOSY_SYMLINK:-}" ]; then LINK_MODE=symlink; else
+      LINK_MODE=copy
+      log "Clone sits under a TCC-protected folder — copying configs instead of symlinking."
+      log "(clone to ~/.local/share/omacosy for live-editable symlinks)"
+    fi
+    ;;
+  *) LINK_MODE=symlink ;;
+esac
 
 # --- 1. Homebrew ------------------------------------------------------------
 if ! command -v brew >/dev/null 2>&1; then
@@ -47,22 +67,37 @@ comm -13 <(printf '%s\n' "$PRE_CASKS") <(brew list --cask 2>/dev/null | sort) \
 # Existing non-symlink targets are backed up, never deleted. A
 # pre-existing SYMLINK (dotfiles managers) is recorded in the manifest
 # (tab-separated — paths can hold spaces) so uninstall can relink it.
+# In copy mode (TCC-protected clone), repo sources are copied instead;
+# sources OUTSIDE the repo always stay symlinks (both ends TCC-safe,
+# and liveness matters — the omarchy theme dir).
 link() {
   local src=$1 dst=$2
   mkdir -p "$(dirname "$dst")"
+  local mode=$LINK_MODE
+  case "$src" in "$REPO_DIR"*) ;; *) mode=symlink ;; esac
   if [ -L "$dst" ]; then
     local cur
     cur="$(readlink "$dst")"
     case "$cur" in
-      "$src" | *omacosy*) ;; # already ours
+      "$src" | *omacosy*)
+        # ours. Grandfather it in copy mode: a live repo-symlink
+        # proves this machine's grants read through it.
+        [ "$mode" = copy ] && return
+        ;;
       *) mark "$(printf 'prior-symlink\t%s\t%s' "$dst" "$cur")" ;;
     esac
-  elif [ -e "$dst" ]; then
+  elif [ -e "$dst" ] && ! have "copied-config $dst"; then
     local bak="$dst.bak.$(date +%Y%m%d%H%M%S)"
     log "Backing up $dst -> $bak"
     mv "$dst" "$bak"
   fi
-  ln -sfn "$src" "$dst"
+  if [ "$mode" = copy ]; then
+    rm -rf "$dst"
+    cp -R "$src" "$dst"
+    mark "copied-config $dst"
+  else
+    ln -sfn "$src" "$dst"
+  fi
 }
 
 # generate aerospace.toml from the template + app choices
@@ -155,6 +190,13 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.watcher "$HOME/.local/bin/omacosy-watcher" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
+else
+  log "NOTE: no Apple Development signing identity found."
+  log "  macOS ties permission grants to the binary's signature — without a"
+  log "  stable identity, every rebuild (each install.sh re-run) invalidates"
+  log "  the Accessibility/Bluetooth grants and you must re-add them in"
+  log "  System Settings > Privacy & Security. Free fix: Xcode > Settings >"
+  log "  Accounts > Manage Certificates > + > Apple Development, then re-run."
 fi
 # (aerospace-swipe is signed in section 5, AFTER its make install —
 # the makefile re-signs ad-hoc as part of the build, so signing here
