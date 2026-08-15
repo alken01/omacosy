@@ -124,7 +124,9 @@ for spacing. Every popup closes when the cursor leaves it.
   toggle. **WiFi** — status, IP, power toggle (macOS 26 hides SSIDs
   from CLI tools). **Weather** — wttr.in, cached details popup.
   **Volume** — scroll adjusts, click opens slider + output-device menu,
-  right-click mutes. **Battery** / **Clock** (calendar popup) /
+  right-click mutes. **Brightness** — built-in display; scroll
+  adjusts, click opens a slider (DisplayServices, no deps).
+  **Battery** / **Clock** (calendar popup) /
   **Activity** (floating btop).
 
 ## Keybindings — Super = hold Caps Lock

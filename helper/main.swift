@@ -14,6 +14,9 @@
 //   bt connect <address> / bt disconnect <address>
 //   input-age               seconds since the last deliberate user input
 //                           (keys/clicks/scroll), for the focus guard
+//   brightness              print the built-in display's brightness (0-100)
+//   brightness set <0-100>  set it (DisplayServices — built-in/Apple
+//                           displays only; external DDC is out of scope)
 // Built by install.sh with swiftc (present wherever Homebrew is).
 // Bluetooth subcommands need the Bluetooth privacy permission of the
 // *responsible* process (sketchybar, for bar plugins).
@@ -26,6 +29,23 @@ import IOBluetooth
 func BTGetPower() -> Int32
 @_silgen_name("IOBluetoothPreferenceSetControllerPowerState")
 func BTSetPower(_ state: Int32)
+
+// DisplayServices (private) — the same calls Control Center makes;
+// covers the built-in panel and Apple externals
+@_silgen_name("DisplayServicesGetBrightness")
+func DSGetBrightness(_ display: CGDirectDisplayID, _ value: UnsafeMutablePointer<Float>) -> Int32
+@_silgen_name("DisplayServicesSetBrightness")
+func DSSetBrightness(_ display: CGDirectDisplayID, _ value: Float) -> Int32
+
+func builtinDisplayID() -> CGDirectDisplayID {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var n: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return CGMainDisplayID() }
+    for i in 0..<Int(n) where CGDisplayIsBuiltin(ids[i]) != 0 {
+        return ids[i]
+    }
+    return CGMainDisplayID()
+}
 
 func fail(_ msg: String) -> Never {
     FileHandle.standardError.write((msg + "\n").data(using: .utf8)!)
@@ -100,6 +120,22 @@ case "wallpaper":
         catch { failures += 1 }
     }
     exit(failures == 0 ? 0 : 1)
+
+case "brightness":
+    let display = builtinDisplayID()
+    if args.count > 3, args[2] == "set" {
+        guard let pct = Int(args[3]), (0...100).contains(pct) else {
+            fail("usage: brightness set <0-100>")
+        }
+        guard DSSetBrightness(display, Float(pct) / 100.0) == 0 else {
+            fail("brightness: set failed (unsupported display?)")
+        }
+    }
+    var level: Float = -1
+    guard DSGetBrightness(display, &level) == 0, level >= 0 else {
+        fail("brightness: unreadable (unsupported display?)")
+    }
+    print(Int((level * 100).rounded()))
 
 case "input-age":
     // seconds since the last DELIBERATE user input (keys, clicks,

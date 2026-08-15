@@ -234,6 +234,17 @@ sketchybar --add item volume right \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
 
+# brightness (built-in display): scroll adjusts, click opens a slider;
+# brightness_change fires on the keyboard brightness keys
+sketchybar --add item brightness right \
+  --subscribe brightness brightness_change mouse.clicked mouse.scrolled \
+  --set brightness updates=on background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_right=10 icon.padding_left=10 script="$PLUGIN_DIR/brightness.sh" \
+    popup.align=right \
+    popup.background.color="$BAR_BG_SOLID" \
+    popup.background.corner_radius=8 \
+    popup.background.border_width=1 \
+    popup.background.border_color="$ACCENT"
+
 # bluetooth: state pill, click for devices + power toggle + settings
 sketchybar --add item bluetooth right \
   --subscribe bluetooth mouse.clicked bluetooth_change \
@@ -279,3 +290,5 @@ sketchybar --add item weather right \
     popup.background.border_color="$ACCENT"
 
 sketchybar --update
+# event-only items get no first paint from --update — kick it explicitly
+sketchybar --trigger brightness_change

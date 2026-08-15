@@ -9,7 +9,7 @@
 # plugins no longer listen to sketchybar's unreliable mouse.exited.global.
 export PATH="/opt/homebrew/bin:$PATH"
 
-ANCHORS="clock volume weather wifi bluetooth apple"
+ANCHORS="clock volume brightness weather wifi bluetooth apple"
 
 close_one() {
   sketchybar --set "$1" popup.drawing=off 2>/dev/null
@@ -19,6 +19,7 @@ close_one() {
       sketchybar --remove '/volume\.menu\..*/' >/dev/null 2>&1
       sketchybar --remove volume.slider >/dev/null 2>&1
       ;;
+    brightness) sketchybar --remove brightness.slider >/dev/null 2>&1 ;;
     weather) sketchybar --remove '/weather\.pop\..*/' >/dev/null 2>&1 ;;
     wifi) sketchybar --remove '/wifi\.pop\..*/' >/dev/null 2>&1 ;;
     bluetooth) sketchybar --remove '/bt\.pop\..*/' >/dev/null 2>&1 ;;
@@ -37,6 +38,7 @@ ANCHOR="${1:-}"
 case "$ANCHOR" in
   clock) CHILD_RE='^clock\.cal\.' ;;
   volume) CHILD_RE='^volume\.(menu\.|slider)' ;;
+  brightness) CHILD_RE='^brightness\.slider' ;;
   weather) CHILD_RE='^weather\.pop\.' ;;
   wifi) CHILD_RE='^wifi\.pop\.' ;;
   bluetooth) CHILD_RE='^bt\.pop\.' ;;

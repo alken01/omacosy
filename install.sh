@@ -97,7 +97,7 @@ mkdir -p "$HOME/.local/bin"
 # Homebrew already requires
 if [ ! -x "$HOME/.local/bin/omacosy-helper" ] || [ "$REPO_DIR/helper/main.swift" -nt "$HOME/.local/bin/omacosy-helper" ]; then
   log "Building omacosy-helper"
-  swiftc -O -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework DisplayServices -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
 fi
 
 # workspace overview overlay (4-finger swipe up)
