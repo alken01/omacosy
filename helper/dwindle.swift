@@ -13,8 +13,8 @@
 // Stand-downs: the overview overlay's truce flag, floating windows,
 // workspaces with fewer than 3 windows, and the opt-out file
 // ~/.config/omacosy/no-dwindle. Events only — a missed event never
-// triggers a late layout jump (the heartbeat refreshes bookkeeping,
-// it never acts).
+// triggers a late layout jump (settle refreshes its own bookkeeping,
+// and only a FRESH window id may be acted on).
 import AppKit
 
 // --- SkyLight window-create events (borders.swift recipe) ---------------
@@ -114,13 +114,18 @@ func settle() {
 }
 
 // debounced: a create event fires before aerospace has tiled the
-// window; give it a beat, and coalesce burst-opens into one pass
+// window; give it a beat, and coalesce burst-opens into one pass.
+// settle() spawns several aerospace CLI processes (each a blocking
+// waitUntilExit) — a serial queue keeps that off the main thread so
+// the SLS event drain never stalls behind a wedged aerospace, while
+// still serializing settles against each other.
+let settleQueue = DispatchQueue(label: "com.omacosy.dwindle.settle")
 var pending: DispatchWorkItem? = nil
 func kick() {
     pending?.cancel()
     let work = DispatchWorkItem { settle() }
     pending = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+    settleQueue.asyncAfter(deadline: .now() + 0.25, execute: work)
 }
 
 // --- event wiring --------------------------------------------------------
@@ -142,11 +147,11 @@ if SLSGetEventPort(cid, &eventPort).rawValue == 0,
     tlog("SLSGetEventPort failed — create events unavailable")
 }
 
-// bookkeeping-only heartbeat: keeps `known` honest across missed
-// events so a stale diff can't fire a layout jump minutes later
-let timer = Timer(timeInterval: 5.0, repeats: true) { _ in
-    if pending == nil || pending!.isCancelled { known = allWindowIds() }
-}
-RunLoop.current.add(timer, forMode: .common)
+// No heartbeat: settle() refreshes `known` on every run, and the
+// focused-must-be-fresh guard already blocks a stale diff from
+// firing a late layout jump. (The old 5s timer was inert anyway —
+// its pending-is-idle condition was permanently false after the
+// first event — and reviving it would mean an aerospace process
+// spawn every 5s forever, against the events-first doctrine.)
 tlog("omacosy-dwindle up")
 RunLoop.current.run()

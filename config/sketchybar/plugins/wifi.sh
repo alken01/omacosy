@@ -76,7 +76,7 @@ case "$SENDER" in
     if [ "$POWER" = "On" ]; then
       # hero fills in the signal verdict asynchronously (~3s fetch)
       row wifi.pop.0 "${SSID:-connected}" "$ACCENT" "JetBrainsMono Nerd Font:Bold:14.0"
-      row wifi.pop.1 "ip $IP · gateway ${GW:-?}" "$LABEL_COLOR"
+      row wifi.pop.1 "ip ${IP:-none yet} · gateway ${GW:-?}" "$LABEL_COLOR"
       row wifi.pop.2 "measuring link…" "$DIM"
       # public ip: cached 15min so the row is instant on repeat opens
       if [ -s "$PUB_CACHE" ] && [ "$(($(date +%s) - $(stat -f %m "$PUB_CACHE")))" -lt 900 ]; then

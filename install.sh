@@ -21,10 +21,12 @@ export MANIFEST
 # --- 1. Homebrew ------------------------------------------------------------
 if ! command -v brew >/dev/null 2>&1; then
   log "Installing Homebrew"
-  mark "installed-homebrew"
   NONINTERACTIVE=1 /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   eval "$(/opt/homebrew/bin/brew shellenv)"
+  # marked AFTER the install succeeds — an aborted attempt must not
+  # tell uninstall.sh that homebrew is ours to remove
+  mark "installed-homebrew"
 fi
 
 # Homebrew >=6 refuses third-party taps until explicitly trusted
@@ -42,11 +44,20 @@ comm -13 <(printf '%s\n' "$PRE_CASKS") <(brew list --cask 2>/dev/null | sort) \
   | while read -r c; do [ -n "$c" ] && mark "brew-cask $c"; done
 
 # --- 2. Symlinks ------------------------------------------------------------
-# Existing non-symlink targets are backed up, never deleted.
+# Existing non-symlink targets are backed up, never deleted. A
+# pre-existing SYMLINK (dotfiles managers) is recorded in the manifest
+# (tab-separated — paths can hold spaces) so uninstall can relink it.
 link() {
   local src=$1 dst=$2
   mkdir -p "$(dirname "$dst")"
-  if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+  if [ -L "$dst" ]; then
+    local cur
+    cur="$(readlink "$dst")"
+    case "$cur" in
+      "$src" | *omacosy*) ;; # already ours
+      *) mark "$(printf 'prior-symlink\t%s\t%s' "$dst" "$cur")" ;;
+    esac
+  elif [ -e "$dst" ]; then
     local bak="$dst.bak.$(date +%Y%m%d%H%M%S)"
     log "Backing up $dst -> $bak"
     mv "$dst" "$bak"
@@ -141,13 +152,14 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.helper "$HOME/.local/bin/omacosy-helper" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
-  # aerospace-swipe too — unsigned, every rebuild invalidated its
-  # Accessibility grant and silently killed all trackpad swipes
   codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.watcher "$HOME/.local/bin/omacosy-watcher" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.acsandmann.swipe "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
 fi
+# (aerospace-swipe is signed in section 5, AFTER its make install —
+# the makefile re-signs ad-hoc as part of the build, so signing here
+# would be overwritten and every rebuild would invalidate the
+# Accessibility grant again)
 
 # hover-ignore list (launchd agents can't read ~/Documents — copied)
 mkdir -p "$HOME/.config/omacosy"
@@ -238,9 +250,11 @@ fi
 # --- 4. Point Korren at the omarchy theme -----------------------------------
 KORREN_CFG="$HOME/Library/Application Support/korren/config.toml"
 if [ -f "$KORREN_CFG" ]; then
-  if ! grep -q '^name = "omarchy"' "$KORREN_CFG"; then
-    # `name =` only occurs under [theme]; Korren live-reloads this file.
-    sed -i '' 's/^name = ".*"/name = "omarchy"/' "$KORREN_CFG"
+  # only seed a theme when NONE is set — theme-set legitimately writes
+  # built-in names (tokyo-night etc.), and a re-run must not revert
+  # the user's pick back to omarchy
+  if ! grep -q '^name = "' "$KORREN_CFG"; then
+    printf '[theme]\nname = "omarchy"\n' >> "$KORREN_CFG"
     log "Korren theme set to follow omarchy"
   fi
 else
@@ -264,8 +278,20 @@ fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
 log "Building aerospace-swipe (grant Accessibility when prompted)"
+# pre-unload: the makefile ends with launchctl load, which fails on
+# an already-loaded agent and made every re-run print a false failure
+launchctl unload "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
 (cd "$HOME/.local/share/aerospace-swipe" && make install) || \
   echo "aerospace-swipe install failed — run manually: cd ~/.local/share/aerospace-swipe && make install"
+# re-sign with the STABLE identity, and only AFTER make install: the
+# makefile signs ad-hoc, which rotates per rebuild and invalidates
+# the Accessibility grant. Keep the entitlements the makefile applied.
+if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Development"; then
+  codesign -f -s "Apple Development" --identifier com.acsandmann.swipe \
+    --entitlements "$HOME/.local/share/aerospace-swipe/accessibility.entitlements" \
+    "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
+  launchctl kickstart -k "gui/$(id -u)/com.acsandmann.swipe" 2>/dev/null || true
+fi
 
 # --- 6. macOS look ----------------------------------------------------------
 "$REPO_DIR/macos-defaults.sh"

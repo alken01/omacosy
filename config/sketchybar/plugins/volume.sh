@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
+export PATH="/opt/homebrew/bin:$PATH"
 # Renders the volume item and handles interaction:
-#   scroll = adjust, left click = toggle mute, right click = Sound settings
+#   scroll = adjust, left click = sound menu popup, right click = mute
 
 case "$SENDER" in
   mouse.scrolled)

@@ -12,7 +12,7 @@ set -euo pipefail
 
 STATE="$HOME/.config/omacosy/disabled"
 UID_N="$(id -u)"
-AGENTS=(com.omacosy.ffm com.omacosy.borders com.acsandmann.swipe)
+AGENTS=(com.omacosy.ffm com.omacosy.borders com.omacosy.dwindle com.omacosy.watcher com.acsandmann.swipe)
 
 mode="${1:-toggle}"
 if [ "$mode" = toggle ]; then

@@ -226,5 +226,5 @@ case "bt":
     }
 
 default:
-    fail("usage: omacosy-helper cursor | wallpaper <path> | audio ... | bt ...")
+    fail("usage: omacosy-helper cursor | displays | wallpaper <path> | audio ... | bt ... | brightness [set <0-100>] | input-age")
 }

@@ -107,6 +107,12 @@ case "$SENDER" in
       close_popup
       exit 0
     fi
+    # build lock: the device enumeration takes long enough that a
+    # double-click's second instance would tear down rows the first
+    # is still adding — one builder at a time, extras just drop
+    BUILDLOCK="${TMPDIR:-/tmp}/sketchybar-bt-build.lock"
+    mkdir "$BUILDLOCK" 2>/dev/null || exit 0
+    trap 'rmdir "$BUILDLOCK" 2>/dev/null' EXIT
     close_popup
     POWER="$("$HOME/.local/bin/omacosy-helper" bt power 2>/dev/null)"
     i=0

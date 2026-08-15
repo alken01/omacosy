@@ -33,18 +33,20 @@ if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
 fi
 rm -f "$HOME/.local/bin/omacosy-overview" "$HOME/.local/bin/omacosy-toggle"
 rm -f /tmp/omacosy-*.log /tmp/omacosy-*.err "/tmp/omacosy-overview-$(id -u).pid" \
-  "/tmp/omacosy-overlay-active-$(id -u)" /tmp/omacosy-ws-switch
+  "/tmp/omacosy-overlay-active-$(id -u)" /tmp/omacosy-ws-switch \
+  "/tmp/omacosy-user-intent-$(id -u)" \
+  "/tmp/omacosy-guard-bounce-$(id -u)" \
+  "/tmp/omacosy-guard-cooldown-$(id -u)" \
+  "${TMPDIR:-/tmp}/omacosy-monitor-count"
 rm -rf "$HOME/.config/omacosy"
 
-# aerospace-swipe: unload its launch agent and remove config; delete
-# the clone only if WE cloned it
-if [ -d "$HOME/.local/share/aerospace-swipe" ]; then
+# aerospace-swipe: ONLY if we cloned it — a pre-existing install
+# (agent, app, clone) belongs to the user and stays untouched
+if have "cloned-aerospace-swipe" && [ -d "$HOME/.local/share/aerospace-swipe" ]; then
   (cd "$HOME/.local/share/aerospace-swipe" && make uninstall) 2>/dev/null || true
-  if have "cloned-aerospace-swipe"; then
-    rm -rf "$HOME/.local/share/aerospace-swipe"
-  fi
+  rm -rf "$HOME/.local/share/aerospace-swipe"
+  rm -rf "$HOME/.config/aerospace-swipe"
 fi
-rm -rf "$HOME/.config/aerospace-swipe"
 
 # --- 2. Native menu bar + system gestures back ------------------------------
 # Preferred path: restore each key to its RECORDED pre-omacosy value
@@ -74,9 +76,18 @@ killall Dock 2>/dev/null || true
 restore() {
   local dst=$1
   [ -L "$dst" ] && rm "$dst"
+  # a symlink we displaced (dotfiles managers) comes back first
+  local prior
+  prior="$(grep -F "$(printf 'prior-symlink\t%s\t' "$dst")" "$MANIFEST" 2>/dev/null | tail -1 | cut -f3)"
+  if [ -n "$prior" ] && [ ! -e "$dst" ]; then
+    log "Relinking $dst -> $prior"
+    ln -sfn "$prior" "$dst"
+    return
+  fi
   local bak
   bak="$(ls -d "$dst".bak.* 2>/dev/null | sort | tail -1 || true)"
-  if [ -n "$bak" ]; then
+  # never clobber something the user has recreated since
+  if [ -n "$bak" ] && [ ! -e "$dst" ]; then
     log "Restoring $bak -> $dst"
     mv "$bak" "$dst"
   fi
@@ -118,8 +129,9 @@ for t in theme-set theme-next omacosy-ws omacosy-toggle omacosy-focus-guard omac
 done
 rm -f "$HOME/.local/bin/omacosy-helper"
 
-# omarchy theme convention dirs
-[ -L "$HOME/Library/Application Support/omarchy" ] && rm "$HOME/Library/Application Support/omarchy"
+# omarchy theme convention dirs (restore brings back any .bak the
+# install displaced — it was created and then orphaned before)
+restore "$HOME/Library/Application Support/omarchy"
 rm -f "$HOME/.config/omarchy/current/theme"
 rmdir "$HOME/.config/omarchy/current" "$HOME/.config/omarchy" 2>/dev/null || true
 

@@ -158,6 +158,10 @@ func dbg(_ m: String) {
 // focus-needs-raise workaround for plain tile-to-tile hops.
 func focus(pid: pid_t, rect: CGRect, allowRaise: Bool) {
     let app = AXUIElementCreateApplication(pid)
+    // AX attribute reads are synchronous mach IPC with a ~6s default
+    // timeout PER CALL — hovering a beachballing app froze the whole
+    // daemon for (windows × attributes × 6s). Cap it hard.
+    AXUIElementSetMessagingTimeout(app, 0.3)
     var matched = false
     var winsRef: CFTypeRef?
     if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &winsRef) == .success,
@@ -276,9 +280,24 @@ func process(confirmed: Bool) {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
+var trailArmed = false
 NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in
     let now = CFAbsoluteTimeGetCurrent()
-    if now - lastProcessAt < processMinInterval { return }
+    if now - lastProcessAt < processMinInterval {
+        // trailing edge: a fast flick's FINAL event (the one actually
+        // over the new window) can land inside the throttle window —
+        // dropping it without a follow-up left the window unfocused
+        // until the next twitch of the mouse
+        if !trailArmed {
+            trailArmed = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + processMinInterval) {
+                trailArmed = false
+                lastProcessAt = CFAbsoluteTimeGetCurrent()
+                process(confirmed: false)
+            }
+        }
+        return
+    }
     lastProcessAt = now
     process(confirmed: false)
 }

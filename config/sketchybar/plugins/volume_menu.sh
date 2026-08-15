@@ -63,7 +63,8 @@ VOL="$(osascript -e 'output volume of (get volume settings)')"
 DEVLIST="$("$HOME/.local/bin/omacosy-helper" audio list)"
 WCACHE="${TMPDIR:-/tmp}/sketchybar-volwidth"
 DEVHASH="$(printf '%s' "$DEVLIST" | /sbin/md5 -q)"
-read -r CHASH CMAXW <"$WCACHE" 2>/dev/null
+CHASH="" CMAXW=""
+[ -f "$WCACHE" ] && read -r CHASH CMAXW <"$WCACHE"
 if [ "$CHASH" = "$DEVHASH" ] && [ "${CMAXW:-0}" -gt 100 ]; then
   MAXROW="$CMAXW"
 else

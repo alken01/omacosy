@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="/opt/homebrew/bin:$PATH"
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
 PERCENTAGE="$(pmset -g batt | grep -Eo '\d+%' | cut -d% -f1)"

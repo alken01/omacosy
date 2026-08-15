@@ -12,7 +12,7 @@ source "$OMACOSY_CONFIG/apps.conf"
 
 # serialize reloads: two rc passes interleaving their --add calls
 # scramble the whole bar's item order (observed). A reload arriving
-# while one runs yields; stale locks (>30s) are broken.
+# while one runs yields; stale locks (≥5s) are broken.
 RELOAD_LOCK="${TMPDIR:-/tmp}/omacosy-bar-reload.lock"
 for _ in $(seq 1 80); do
   mkdir "$RELOAD_LOCK" 2>/dev/null && break
@@ -267,20 +267,6 @@ sketchybar --add item wifi right \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
 
-# uniform spacing: every right-cluster pill gets the same gap, defined
-# once. DERIVED, not enumerated — a hardcoded name list here has been
-# forgotten twice when adding items; at this point in the rc the bar
-# holds only top-level items (popup children don't exist yet), so
-# "everything positioned right" is exactly the pill set.
-GAP=14
-for it in $(sketchybar --query bar | jq -r '.items[]'); do
-  [ "$(sketchybar --query "$it" | jq -r '.geometry.position' 2>/dev/null)" = "right" ] &&
-    sketchybar --set "$it" padding_left="$GAP" padding_right=0
-done
-sketchybar --set front_app padding_left="$GAP" padding_right="$GAP" \
-  --set media.prev padding_left=2 \
-  --set media.title padding_right=2
-
 # weather: wttr.in pill, click for details popup (leftmost of the right cluster)
 sketchybar --add item weather right \
   --subscribe weather mouse.clicked system_woke \
@@ -292,6 +278,18 @@ sketchybar --add item weather right \
     popup.background.corner_radius=8 \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
+
+# uniform spacing: every right-cluster pill gets the same gap, defined
+# once. DERIVED, not enumerated — a hardcoded name list here was
+# forgotten twice when adding items. MUST run after the last --add:
+# it sweeps "everything positioned right", and popup children (which
+# would pollute the sweep) don't exist until first click.
+GAP=14
+for it in $(sketchybar --query bar | jq -r '.items[]'); do
+  [ "$(sketchybar --query "$it" | jq -r '.geometry.position' 2>/dev/null)" = "right" ] &&
+    sketchybar --set "$it" padding_left="$GAP" padding_right=0
+done
+sketchybar --set front_app padding_left="$GAP" padding_right="$GAP"
 
 sketchybar --update
 # event-only items get no first paint from --update — kick it explicitly

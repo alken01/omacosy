@@ -155,6 +155,8 @@ elif [ "${RAINPCT:-0}" -ge 30 ]; then
   RAIN="☔ rain ${RAINPCT}% today"
 fi
 
+# atomic: a click can read the cache mid-write; tmp+mv means it sees
+# either the old rows or the new, never a truncated file
 {
   printf '%s\n' "$EMOJI ${TEMP}°C"
   printf 'hero|%s\n' "$EMOJI ${TEMP}°C $DESC_LC"
@@ -163,5 +165,5 @@ fi
   [ -n "$RAIN" ] && printf 'body|%s\n' "$RAIN"
   printf 'body|%s\n' "sun $SR → $SS · $ME $MOON_LC"
   printf 'dim|%s\n' "$LOC"
-} >"$CACHE"
+} >"$CACHE.tmp" && mv "$CACHE.tmp" "$CACHE"
 sketchybar --set "$NAME" drawing=on icon.drawing=off label="$(head -1 "$CACHE")"

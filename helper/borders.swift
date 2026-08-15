@@ -398,6 +398,14 @@ func recheck(after delay: Double) {
 func tick() {
     noteStat(event: false)
     guard let hit = focusedWindowFrame() else {
+        // ring already hidden: there is nothing to hide and nothing
+        // to recheck — without this, an empty workspace ran the
+        // miss→recheck cycle at ~8 full window-list walks per second
+        // forever
+        if !win.isVisible {
+            missSince = nil
+            return
+        }
         // transient misses happen around app switches and popups —
         // hide only when the miss persists, or the ring blinks. Gates
         // are wall-clock, not tick counts: event-driven ticks arrive
@@ -477,7 +485,10 @@ func tick() {
 
 // --- event sources -----------------------------------------------------
 
-var sources: [any DispatchSourceFileSystemObject] = []
+// keyed by path so a re-armed watch REPLACES its dead predecessor —
+// an append-only list leaked one cancelled source per config save /
+// theme switch in a daemon that runs for months
+var sources: [String: any DispatchSourceFileSystemObject] = [:]
 
 // kqueue watch with auto re-arm: editors and cp replace files (rename),
 // so a dead vnode watch must recreate itself against the new file
@@ -506,7 +517,7 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
             watch(path, create: create, handler: handler)
         }
     }
-    sources.append(src)
+    sources[path] = src
     src.resume()
 }
 

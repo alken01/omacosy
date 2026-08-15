@@ -16,10 +16,17 @@ VISIBLE=" $(aerospace list-workspaces --visible --monitor all 2>/dev/null | tr '
 # Settings over the terminal must not strip korren's icon). COUNT
 # flips to 2 on the first second distinct app — only "exactly one"
 # matters, not the true count.
-declare -A APPS COUNT
+#
+# INDEXED arrays keyed on the numeric workspace id: `declare -A` is
+# bash 4+ and these scripts must run on stock /bin/bash 3.2 (env
+# bash IS 3.2 on a fresh Mac). Non-numeric workspaces (the
+# scratchpad) skip the icon logic and keep their label.
+APPS=()
+COUNT=()
 while IFS='|' read -r ws app layout; do
   [ -z "$ws" ] && continue
   [ "$layout" = "floating" ] && continue
+  case "$ws" in *[!0-9]*) continue ;; esac
   if [ -z "${APPS[$ws]:-}" ]; then
     APPS[$ws]="$app"
     COUNT[$ws]=1

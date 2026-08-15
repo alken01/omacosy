@@ -20,11 +20,17 @@ mkdir -p "$STATE_DIR"
 case "${1:-}" in
   collapse)
     [ "$(aerospace list-monitors 2>/dev/null | wc -l | tr -d ' ')" = 1 ] || exit 0
-    # empty single-digit slots, ascending — the merge targets
+    # empty single-digit slots, ascending — the merge targets. A
+    # failed probe MUST abort: display reconfiguration is exactly
+    # when aerospace is busiest, and mistaking "CLI error" for
+    # "empty" would dump guest windows onto an occupied workspace.
     TARGETS=()
     for s in 1 2 3 4 5 6 7 8 9; do
-      [ -z "$(aerospace list-windows --workspace "$s" --format '%{window-id}' 2>/dev/null)" ] &&
-        TARGETS+=("$s")
+      if ! WOUT="$(aerospace list-windows --workspace "$s" --format '%{window-id}' 2>&1)"; then
+        echo "$(date '+%F %T') collapse aborted: ws $s probe failed" >>/tmp/omacosy-ws-collapse.log
+        exit 0
+      fi
+      [ -z "$WOUT" ] && TARGETS+=("$s")
     done
     ti=0
     for gws in $(aerospace list-workspaces --all 2>/dev/null | grep -E '^[0-9]{2}$'); do
@@ -47,6 +53,10 @@ case "${1:-}" in
     ;;
   restore)
     [ -s "$MAP" ] || exit 0
+    # claim the map atomically FIRST: a monitor flap can fire a new
+    # collapse while restore runs, and its fresh records must land in
+    # a fresh map — not be swallowed by our final rm
+    mv "$MAP" "$MAP.run" 2>/dev/null || exit 0
     # let aerospace finish adopting the reattached monitor (its
     # force-assignment moves the guest workspaces back first)
     sleep 1
@@ -54,8 +64,8 @@ case "${1:-}" in
       [ -n "$wid" ] && [ -n "$gws" ] || continue
       aerospace move-node-to-workspace --window-id "$wid" "$gws" 2>/dev/null &&
         echo "$(date '+%F %T') restored $wid -> $gws" >>/tmp/omacosy-ws-collapse.log
-    done <"$MAP"
-    rm -f "$MAP"
+    done <"$MAP.run"
+    rm -f "$MAP.run"
     sketchybar --trigger windows_changed 2>/dev/null
     ;;
   *)

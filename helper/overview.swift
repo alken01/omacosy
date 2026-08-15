@@ -93,9 +93,18 @@ if !isDaemon {
 }
 
 try? "\(getpid())".write(toFile: pidPath, atomically: true, encoding: .utf8)
+// a previous instance that died visible leaves the truce flag up,
+// which silently disables ffm and dwindle — this daemon owns the
+// flag, and at startup the overlay is definitely not on screen
+unlink(activeFlag)
+// pre-bridged C strings: a signal handler may only use
+// async-signal-safe calls (unlink yes, FileManager/exit no)
+let pidPathC = strdup(pidPath)
+let activeFlagC = strdup(activeFlag)
 signal(SIGTERM) { _ in
-    try? FileManager.default.removeItem(atPath: pidPath)
-    exit(0)
+    unlink(pidPathC)
+    unlink(activeFlagC)
+    _exit(0)
 }
 signal(SIGUSR1, SIG_IGN) // delivered via DispatchSource below
 signal(SIGUSR2, SIG_IGN)
@@ -247,6 +256,12 @@ var thumbViews: [UInt32: NSView] = [:]
 
 func refreshThumbs(_ ids: [UInt32]) {
     Task {
+        // evict thumbs of windows no longer shown — window ids are
+        // never reused, so without this the cache of a resident
+        // daemon grows by one full screenshot per window, forever
+        await MainActor.run {
+            thumbs = thumbs.filter { ids.contains($0.key) }
+        }
         guard let content = try? await SCShareableContent
             .excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
         for scw in content.windows {
@@ -254,8 +269,8 @@ func refreshThumbs(_ ids: [UInt32]) {
             guard ids.contains(wid), scw.frame.width > 40, scw.frame.height > 40 else { continue }
             let cfg = SCStreamConfiguration()
             // half resolution is plenty for a card slot and halves the work
-            cfg.width = Int(scw.frame.width)
-            cfg.height = Int(scw.frame.height)
+            cfg.width = Int(scw.frame.width / 2)
+            cfg.height = Int(scw.frame.height / 2)
             cfg.showsCursor = false
             let filter = SCContentFilter(desktopIndependentWindow: scw)
             guard var img = try? await SCScreenshotManager.captureImage(

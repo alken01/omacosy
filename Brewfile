@@ -7,6 +7,7 @@ tap "FelixKratz/formulae"    # sketchybar, borders
 cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
 cask "ghostty"             # default terminal + floating TUI host (btop)
+cask "raycast"             # Super+Space launcher (the binding assumes it)
 brew "sketchybar"
 
 # CLI stack

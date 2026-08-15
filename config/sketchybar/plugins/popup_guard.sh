@@ -70,7 +70,6 @@ STRIPS="$(sketchybar --query "$ANCHOR" 2>/dev/null | jq -r --argjson h "$BAR_H" 
   | select(.value.origin[0] > -9000)
   | "\(.value.origin[1] - 2 | floor) \(.value.origin[1] + $h + 2 | ceil)"')"
 
-tick=0
 for _ in $(seq 1 500); do # ~75s ceiling
   sleep 0.12
   POS="$($HOME/.local/bin/omacosy-helper cursor 2>/dev/null)"
@@ -89,9 +88,10 @@ for _ in $(seq 1 500); do # ~75s ceiling
     close_one "$ANCHOR"
     exit 0
   fi
-  tick=$((tick + 1))
-  if [ $((tick % 15)) -eq 0 ] &&
-    [ "$(sketchybar --query "$ANCHOR" | jq -r '.popup.drawing' 2>/dev/null)" != "on" ]; then
+  # every tick: a toggle-close must release the lock fast, or a
+  # reopen within the old guard's lifetime is stuck with a hull
+  # measured for the previous popup
+  if [ "$(sketchybar --query "$ANCHOR" | jq -r '.popup.drawing' 2>/dev/null)" != "on" ]; then
     exit 0
   fi
 done

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="/opt/homebrew/bin:$PATH"
 # Toggle a month-calendar popup under the clock. The grid is composed
 # here (not `cal`): Monday-first, a real title, the current week
 # carried by an accent gutter marker + a subtle pill, and an ISO-week
