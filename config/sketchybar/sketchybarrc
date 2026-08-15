@@ -270,7 +270,7 @@ sketchybar --add item wifi right \
 # uniform spacing: every pill in the right cluster (and the front-app
 # pill) gets the same gap, defined once
 GAP=14
-for it in activity clock battery volume bluetooth wifi weather front_app; do
+for it in activity clock battery volume brightness bluetooth wifi weather front_app; do
   sketchybar --set "$it" padding_left="$GAP" padding_right=0
 done
 sketchybar --set front_app padding_right="$GAP" \
