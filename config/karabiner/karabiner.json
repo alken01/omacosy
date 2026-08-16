@@ -39,7 +39,17 @@
             "selected": true,
             "virtual_hid_keyboard": {
                 "keyboard_type_v2": "ansi"
-            }
+            },
+            "devices": [
+                {
+                    "identifiers": {
+                        "is_keyboard": true,
+                        "vendor_id": 1452,
+                        "product_id": 834
+                    },
+                    "manipulate_caps_lock_led": true
+                }
+            ]
         }
     ],
     "global": {
