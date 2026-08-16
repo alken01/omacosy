@@ -10,7 +10,7 @@ DIM="0x99${LABEL_COLOR:4}"
 
 close_popup() {
   sketchybar --set brightness popup.drawing=off 2>/dev/null
-  sketchybar --remove brightness.slider >/dev/null 2>&1
+  sketchybar --remove '/brightness\..*/' >/dev/null 2>&1
 }
 
 level_icon() { # 0-100 → glyph
@@ -29,6 +29,11 @@ render() {
 }
 
 case "${1:-}" in
+  nightshift)
+    NS="$("$HOME/.local/bin/omacosy-helper" nightshift toggle 2>/dev/null)"
+    sketchybar --set brightness.nightshift label="night shift ${NS:-?}" 2>/dev/null
+    exit 0
+    ;;
   slider)
     "$HOME/.local/bin/omacosy-helper" brightness set "${PERCENTAGE:-50}" >/dev/null 2>&1
     # the readout is OURS to move — sketchybar only animates the track
@@ -72,6 +77,14 @@ case "$SENDER" in
         slider.background.color="$ITEM_BG" \
         script="$PLUGIN_DIR/brightness.sh slider" \
       --subscribe brightness.slider mouse.clicked
+    # quiet action row — click toggles night shift, label tracks it
+    NS="$("$HOME/.local/bin/omacosy-helper" nightshift 2>/dev/null)"
+    sketchybar --add item brightness.nightshift popup.brightness \
+      --set brightness.nightshift icon.drawing=off \
+        label="night shift ${NS:-?}" label.color="$DIM" \
+        label.font="JetBrainsMono Nerd Font:Regular:12.0" \
+        label.padding_left=10 label.padding_right=10 background.drawing=off \
+        click_script="$PLUGIN_DIR/brightness.sh nightshift"
     "$PLUGIN_DIR/popup_guard.sh" close_others brightness
     sketchybar --set brightness popup.drawing=on
     ("$PLUGIN_DIR/popup_guard.sh" brightness >/dev/null 2>&1 &)

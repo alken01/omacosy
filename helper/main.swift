@@ -17,12 +17,18 @@
 //   brightness              print the built-in display's brightness (0-100)
 //   brightness set <0-100>  set it (DisplayServices — built-in/Apple
 //                           displays only; external DDC is out of scope)
+//   nightshift              print night shift state (on/off)
+//   nightshift <on|off|toggle>
+//   capslock off            clear the HID-system caps-lock latch (with the
+//                           key remapped to Super, a latched LED is
+//                           otherwise permanent)
 // Built by install.sh with swiftc (present wherever Homebrew is).
 // Bluetooth subcommands need the Bluetooth privacy permission of the
 // *responsible* process (sketchybar, for bar plugins).
 import AppKit
 import CoreAudio
 import IOBluetooth
+import IOKit.hidsystem
 
 // private but stable power API — the same symbols blueutil links
 @_silgen_name("IOBluetoothPreferenceGetControllerPowerState")
@@ -120,6 +126,59 @@ case "wallpaper":
         catch { failures += 1 }
     }
     exit(failures == 0 ? 0 : 1)
+
+case "nightshift":
+    // CBBlueLightClient (private CoreBrightness) — what Control Center
+    // itself calls. Only the leading `active`/`enabled` fields of the
+    // status struct are read; the rest is layout padding per the OSS
+    // `nightlight` tool.
+    guard dlopen("/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness", RTLD_LAZY) != nil,
+        let cls = NSClassFromString("CBBlueLightClient") as? NSObject.Type
+    else { fail("nightshift: CoreBrightness unavailable") }
+    let client = cls.init()
+    struct BLStatus {
+        var active: ObjCBool = false
+        var enabled: ObjCBool = false
+        var sunSchedulePermitted: ObjCBool = false
+        var mode: Int32 = 0
+        var schedule: (Int32, Int32, Int32, Int32) = (0, 0, 0, 0)
+        var disableFlags: UInt64 = 0
+        var available: ObjCBool = false
+    }
+    func blEnabled() -> Bool {
+        let sel = NSSelectorFromString("getBlueLightStatus:")
+        guard let m = class_getInstanceMethod(cls, sel) else { return false }
+        typealias GetFn = @convention(c) (AnyObject, Selector, UnsafeMutableRawPointer) -> Bool
+        let f = unsafeBitCast(method_getImplementation(m), to: GetFn.self)
+        var st = BLStatus()
+        _ = withUnsafeMutablePointer(to: &st) { f(client, sel, UnsafeMutableRawPointer($0)) }
+        return st.enabled.boolValue
+    }
+    func blSet(_ on: Bool) {
+        let sel = NSSelectorFromString("setEnabled:")
+        guard let m = class_getInstanceMethod(cls, sel) else { fail("nightshift: setEnabled missing") }
+        typealias SetFn = @convention(c) (AnyObject, Selector, Bool) -> Bool
+        let f = unsafeBitCast(method_getImplementation(m), to: SetFn.self)
+        _ = f(client, sel, on)
+    }
+    switch args.count > 2 ? args[2] : "status" {
+    case "on": blSet(true)
+    case "off": blSet(false)
+    case "toggle": blSet(!blEnabled())
+    case "status": break
+    default: fail("usage: nightshift [on|off|toggle]")
+    }
+    print(blEnabled() ? "on" : "off")
+
+case "capslock":
+    guard args.count > 2, args[2] == "off" else { fail("usage: capslock off") }
+    let svc = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOHIDSystem"))
+    var conn: io_connect_t = 0
+    guard IOServiceOpen(svc, mach_task_self_, UInt32(kIOHIDParamConnectType), &conn) == KERN_SUCCESS
+    else { fail("capslock: IOHIDSystem open failed") }
+    guard IOHIDSetModifierLockState(conn, Int32(kIOHIDCapsLockState), false) == KERN_SUCCESS
+    else { fail("capslock: set failed") }
+    IOServiceClose(conn)
 
 case "brightness":
     let display = builtinDisplayID()
