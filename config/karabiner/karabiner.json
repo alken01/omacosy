@@ -43,9 +43,8 @@
             "devices": [
                 {
                     "identifiers": {
-                        "is_keyboard": true,
-                        "vendor_id": 1452,
-                        "product_id": 834
+                        "is_built_in_keyboard": true,
+                        "is_keyboard": true
                     },
                     "manipulate_caps_lock_led": true
                 }
