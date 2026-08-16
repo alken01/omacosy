@@ -300,15 +300,22 @@ shroud.animationBehavior = .none
 // show the strip cover when a fullscreen window sits on a notched
 // display; hide it everywhere else (flat displays need no cover —
 // fullscreen already owns every pixel there)
+// hide UNCONDITIONALLY: AppKit's isVisible cache has desynced from
+// the window server before (fullscreen exit left the shroud on
+// screen, black-banding the bar, while isVisible read false — so the
+// guarded hide skipped forever). orderOut is idempotent; the flag is
+// only trusted for logging and the show edge.
 func syncShroud(_ f: CGRect?) {
     guard let f = f else {
-        if shroud.isVisible { shroud.orderOut(nil); tlog("shroud hide") }
+        if shroud.isVisible { tlog("shroud hide") }
+        shroud.orderOut(nil)
         return
     }
     let d = CGDisplayBounds(displayOf(f))
     let inset = safeTop(for: d)
     guard inset > 0 else {
-        if shroud.isVisible { shroud.orderOut(nil); tlog("shroud hide") }
+        if shroud.isVisible { tlog("shroud hide") }
+        shroud.orderOut(nil)
         return
     }
     let band = cocoaRect(CGRect(x: d.origin.x, y: d.origin.y,
