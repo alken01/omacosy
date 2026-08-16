@@ -25,7 +25,7 @@ tools) replace what would otherwise be a pile of dependencies
 ## Fresh Mac
 
 ```sh
-git clone https://github.com/paulsp94/omacosy.git ~/.local/share/omacosy
+git clone https://github.com/paulsp94/omacosy.git ~/.local/share/omacosy &&
 cd ~/.local/share/omacosy && ./install.sh
 ```
 
