@@ -200,6 +200,13 @@ func snapshotWorkspaces(mon: Int) -> (order: [String], wins: [String: [Win]], fo
     let vis = aerospace(["list-workspaces", "--monitor", String(mon), "--visible"])
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !vis.isEmpty { focused = vis }
+    // single display: both sets live on this monitor, and the guest
+    // set's EMPTY workspaces would render as duplicate slot digits in
+    // the chip row (11-19 all show their last digit). Same rule as
+    // the bar: hide empty guests, keep any that hold windows or focus.
+    if NSScreen.screens.count == 1 {
+        all = all.filter { $0.count == 1 || wins[$0] != nil || $0 == focused }
+    }
     return (order, wins, focused, all)
 }
 
