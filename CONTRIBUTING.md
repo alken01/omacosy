@@ -14,6 +14,19 @@ Small repo, strong opinions. PRs are welcome when they keep these.
   "every right-positioned item"; popup cleanup works off the naming
   convention below. If your change needs a hardcoded name list, find
   the derived form instead — every list here has rotted.
+- **Repaint the bar, don't rebuild it.** A theme switch changes ten
+  colour values and nothing structural, so `theme-set` re-sets them on
+  the live items in one message (`omacosy-bar-repaint`) instead of
+  reloading. `sketchybar --reload` is for structural change only —
+  display add/remove — because it re-runs the whole config in front of
+  the user and opens the window below.
+- **`--default` is a convenience, never a guarantee.** It is global
+  daemon state: a reload arriving mid-pass resets it, and every item
+  added after that point is born with sketchybar's built-ins — Hack
+  Nerd Font (not installed, so text lands in a system fallback face),
+  white, auto-height pills. The closing sweep in `sketchybarrc` stamps
+  the real font, colour and pill height back over anything still
+  wearing a value the theme never issued; extend the sweep, not a list.
 - **Popup naming convention (load-bearing):** an anchor's popup
   children are ALL named `<anchor>.<something>` (`clock.cal.3`,
   `volume.slider`, `bluetooth.pop.1`), and nothing outside its popup

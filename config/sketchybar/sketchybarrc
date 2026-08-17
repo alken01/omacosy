@@ -25,6 +25,14 @@ done
 trap 'rmdir "$RELOAD_LOCK" 2>/dev/null' EXIT
 source "$HOME/.config/omarchy/current/theme/sketchybar.sh"
 
+# Named once so the closing sweep can stamp them back on: --default is
+# global daemon state, and anything it fails to reach ends up wearing
+# sketchybar's built-ins instead (see the sweep at the bottom).
+FONT_FAMILY="JetBrainsMono Nerd Font"
+ICON_FONT="$FONT_FAMILY:Bold:14.0"
+LABEL_FONT="$FONT_FAMILY:SemiBold:13.0"
+PILL_H=26 # one pill height for the whole bar; chips sit smaller inside theirs
+
 sketchybar --bar \
   position=top \
   height=34 \
@@ -35,8 +43,8 @@ sketchybar --bar \
   y_offset=0 \
 
 sketchybar --default \
-  icon.font="JetBrainsMono Nerd Font:Bold:14.0" \
-  label.font="JetBrainsMono Nerd Font:SemiBold:13.0" \
+  icon.font="$ICON_FONT" \
+  label.font="$LABEL_FONT" \
   icon.color="$ICON_COLOR" \
   label.color="$LABEL_COLOR" \
   icon.padding_left=6 \
@@ -44,13 +52,13 @@ sketchybar --default \
   label.padding_left=0 \
   label.padding_right=6 \
   background.corner_radius=4 \
-  background.height=24
+  background.height=$PILL_H
 
 # --- Apple menu (far left) ---------------------------------------------------
 sketchybar --add item apple left \
   --subscribe apple mouse.clicked \
-  --set apple icon="" icon.color="$ACCENT" icon.font="JetBrainsMono Nerd Font:Bold:15.0" icon.padding_left=8 icon.padding_right=8 padding_right=10 label.drawing=off \
-    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=26 \
+  --set apple icon="" icon.color="$ACCENT" icon.font="$FONT_FAMILY:Bold:15.0" icon.padding_left=8 icon.padding_right=8 padding_right=10 label.drawing=off \
+    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=$PILL_H \
     script="$PLUGIN_DIR/apple.sh" \
     popup.align=left \
     popup.background.color="$BAR_BG_SOLID" \
@@ -123,7 +131,7 @@ if [ -n "$MONITORS" ]; then
       --set "spaces.$mid" \
         background.color="$ITEM_BG" \
         background.corner_radius=4 \
-        background.height=26
+        background.height=$PILL_H
   done
 else
   # no aerospace yet: one capsule around the fallback set
@@ -133,7 +141,7 @@ else
     --set spaces.all \
       background.color="$ITEM_BG" \
       background.corner_radius=4 \
-      background.height=26
+      background.height=$PILL_H
 fi
 
 # paint initial focus/visibility state through the same plugin path
@@ -145,7 +153,7 @@ sketchybar --add item front_app left \
   --subscribe front_app front_app_switched \
   --set front_app background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 label.padding_left=10 label.padding_right=10 \
     icon.drawing=off \
-    label.font="JetBrainsMono Nerd Font:Bold:13.0" \
+    label.font="$FONT_FAMILY:Bold:13.0" \
     label.color="$ACCENT" \
     script="$PLUGIN_DIR/front_app.sh"
 
@@ -175,7 +183,7 @@ media_capsule() {
       label.padding_left=12 label.padding_right=12 padding_right=2 \
       click_script="open -a Spotify"
   sketchybar --add bracket "$pfx" "$pfx.prev" "$pfx.play" "$pfx.next" "$pfx.title" \
-    --set "$pfx" background.color="$ITEM_BG" background.corner_radius=4 background.height=26
+    --set "$pfx" background.color="$ITEM_BG" background.corner_radius=4 background.height=$PILL_H
 }
 
 FIRST_MEDIA=""
@@ -205,7 +213,7 @@ sketchybar --add item display_watcher left \
 # configured terminal (Ghostty and Korren share the --title=/-e flags)
 sketchybar --add item activity right \
   --set activity icon="󰍛" icon.color="$ACCENT" icon.padding_left=8 icon.padding_right=8 label.drawing=off \
-    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=26 \
+    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 background.height=$PILL_H \
     click_script="open -na $TERMINAL --args --title=omacosy-activity -e btop"
 
 # clock: click toggles a calendar popup
@@ -279,17 +287,46 @@ sketchybar --add item weather right \
     popup.background.border_width=1 \
     popup.background.border_color="$ACCENT"
 
-# uniform spacing: every right-cluster pill gets the same gap, defined
-# once. DERIVED, not enumerated — a hardcoded name list here was
-# forgotten twice when adding items. MUST run after the last --add:
-# it sweeps "everything positioned right", and popup children (which
-# would pollute the sweep) don't exist until first click.
+# One closing pass over every item, doing two jobs. DERIVED, not
+# enumerated — a hardcoded name list here was forgotten twice when adding
+# items. MUST run after the last --add: it sweeps every item, and popup
+# children (which would pollute it) don't exist until first click.
+#
+#   spacing — every right-cluster pill gets the same gap, defined once.
+#
+#   style   — --default is global daemon state, so a reload arriving
+#             mid-pass resets it and every item added afterwards is born
+#             wearing sketchybar's built-ins: Hack Nerd Font (not
+#             installed, so the text lands in a system fallback face),
+#             white, auto-height. Anything still carrying a font or
+#             colour this theme never issued gets ours put back.
+#
+# Both halves are single messages: the whole bar is queried at once, and
+# one --set batch applies the result in one frame.
 GAP=14
-for it in $(sketchybar --query bar | jq -r '.items[]'); do
-  [ "$(sketchybar --query "$it" | jq -r '.geometry.position' 2>/dev/null)" = "right" ] &&
-    sketchybar --set "$it" padding_left="$GAP" padding_right=0
-done
-sketchybar --set front_app padding_left="$GAP" padding_right="$GAP"
+PALETTE=" $ITEM_BG $ACCENT $LABEL_COLOR $ICON_COLOR $MUTED $RED $GREEN $YELLOW $BAR_BG_SOLID "
+
+QUERY=()
+for it in $(sketchybar --query bar | jq -r '.items[]'); do QUERY+=(--query "$it"); done
+
+SWEEP=()
+while IFS=$'\t' read -r name pos ifont lfont icolor lcolor bgh; do
+  [ -n "$name" ] || continue
+  props=()
+  [ "$pos" = "right" ] && props+=(padding_left="$GAP" padding_right=0)
+  case "$ifont" in "$FONT_FAMILY":*) ;; *) props+=(icon.font="$ICON_FONT") ;; esac
+  case "$lfont" in "$FONT_FAMILY":*) ;; *) props+=(label.font="$LABEL_FONT") ;; esac
+  case "$PALETTE" in *" $icolor "*) ;; *) props+=(icon.color="$ICON_COLOR") ;; esac
+  case "$PALETTE" in *" $lcolor "*) ;; *) props+=(label.color="$LABEL_COLOR") ;; esac
+  # height 0 means "auto", i.e. fill the bar — never what a pill wants
+  [ "$bgh" = "0" ] && props+=(background.height="$PILL_H")
+  [ ${#props[@]} -gt 0 ] && SWEEP+=(--set "$name" "${props[@]}")
+done <<EOF
+$(sketchybar "${QUERY[@]}" | jq -r '[.name, .geometry.position, .icon.font, .label.font,
+  .icon.color, .label.color, (.geometry.background.height|tostring)] | @tsv')
+EOF
+SWEEP+=(--set front_app padding_left="$GAP" padding_right="$GAP")
+sketchybar "${SWEEP[@]}"
 
 sketchybar --update
 # event-only items get no first paint from --update — kick it explicitly
