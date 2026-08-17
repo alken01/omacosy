@@ -16,7 +16,38 @@
 // on window create/destroy, off the critical path.
 //
 // Timings land in /tmp/omacosy-bar.log as `switch <ws> <ms>`.
+//
+// The right cluster is the same eight pills the bar already carries, but
+// reading their sources directly instead of forking a script that forks
+// `pmset`, `osascript`, `networksetup` and `ipconfig`: IOPS for power,
+// CoreAudio for volume, DisplayServices for brightness, SCDynamicStore
+// for the network, IOBluetooth for devices. Every one of those is a
+// publisher, so nothing here polls except the clock and the weather,
+// which have no publisher to listen to.
 import AppKit
+import CoreAudio
+import CoreBluetooth
+import CoreWLAN
+import IOBluetooth
+import IOKit.ps
+import SystemConfiguration
+
+// DisplayServices (private) — the same calls Control Center makes, and
+// the same ones helper/main.swift uses for `omacosy-helper brightness`.
+@_silgen_name("DisplayServicesGetBrightness")
+func DSGetBrightness(_ display: CGDirectDisplayID, _ value: UnsafeMutablePointer<Float>) -> Int32
+@_silgen_name("DisplayServicesSetBrightness")
+func DSSetBrightness(_ display: CGDirectDisplayID, _ value: Float) -> Int32
+
+// Brightness has a publisher after all. The callback's later arguments
+// are deliberately untyped and never dereferenced: the arity is what the
+// ABI needs, the contents are not ours to trust.
+typealias DSBrightnessProc = @convention(c) (UnsafeRawPointer?, CGDirectDisplayID, UnsafeRawPointer?, UnsafeRawPointer?) -> Void
+@_silgen_name("DisplayServicesRegisterForBrightnessChangeNotifications")
+func DSRegisterBrightnessNotifications(_ display: CGDirectDisplayID, _ context: UnsafeMutableRawPointer?, _ callback: DSBrightnessProc) -> Int32
+
+@_silgen_name("IOBluetoothPreferenceGetControllerPowerState")
+func BTGetPower() -> Int32
 
 // --- SkyLight window events (borders.swift recipe) ------------------------
 
@@ -75,6 +106,9 @@ struct Palette {
     var label = NSColor.white
     var muted = NSColor.gray
     var barBG = NSColor.black
+    var red = NSColor.systemRed
+    var green = NSColor.systemGreen
+    var yellow = NSColor.systemYellow
 }
 
 func color(fromARGB v: UInt64) -> NSColor {
@@ -99,6 +133,9 @@ func loadPalette() -> Palette {
         case "LABEL_COLOR": p.label = color(fromARGB: v)
         case "MUTED": p.muted = color(fromARGB: v)
         case "BAR_BG_SOLID": p.barBG = color(fromARGB: v)
+        case "RED": p.red = color(fromARGB: v)
+        case "GREEN": p.green = color(fromARGB: v)
+        case "YELLOW": p.yellow = color(fromARGB: v)
         default: break
         }
     }
@@ -198,6 +235,298 @@ func setFocused(_ ws: String) {
     if model.mine.contains(ws) { model.visible = ws }
 }
 
+// --- right cluster ---------------------------------------------------------
+// An item is data. Layout, hit-testing and drawing are generic over the
+// list, so adding a pill is one entry and one provider — no per-item
+// geometry, no padding arithmetic, no width caches.
+
+struct BarItem: Equatable {
+    var icon = ""
+    var label = ""
+    var iconColor: NSColor?
+    var drawing = true
+}
+
+// screen order, left to right
+let rightOrder = ["weather", "wifi", "bluetooth", "brightness", "volume", "battery", "clock", "activity"]
+var rightItems: [String: BarItem] = [:]
+
+func set(_ name: String, _ mutate: (inout BarItem) -> Void) {
+    var item = rightItems[name] ?? BarItem()
+    mutate(&item)
+    guard item != rightItems[name] else { return } // no pixels owed
+    let t0 = DispatchTime.now().uptimeNanoseconds
+    rightItems[name] = item
+    repaint()
+    tlog(String(format: "item %@ %.2f ms", name, Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))
+}
+
+func shell(_ launch: String, _ args: [String]) -> String {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: launch)
+    p.arguments = args
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = FileHandle.nullDevice
+    guard (try? p.run()) != nil else { return "" }
+    let out = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return String(data: out, encoding: .utf8) ?? ""
+}
+
+// --- clock (no publisher: the one honest timer, aligned to the minute)
+func updateClock() {
+    let f = DateFormatter()
+    f.dateFormat = "EEE dd MMM  HH:mm"
+    set("clock") { $0.icon = "󰃰"; $0.label = f.string(from: Date()) }
+}
+
+// --- battery (IOPS publishes, capacity ticks included)
+func updateBattery() {
+    guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+          let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
+    else { return }
+    for source in list {
+        guard let d = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
+              let cur = d[kIOPSCurrentCapacityKey] as? Int else { continue }
+        let max = d[kIOPSMaxCapacityKey] as? Int ?? 100
+        let pct = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
+        let charging = (d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue
+        // same thresholds and glyphs the bar already uses
+        var icon = "󰂃", color = palette.red
+        switch pct {
+        case 90...: icon = "󰁹"; color = palette.green
+        case 60..<90: icon = "󰂀"; color = palette.label
+        case 30..<60: icon = "󰁾"; color = palette.label
+        case 10..<30: icon = "󰁻"; color = palette.yellow
+        default: break
+        }
+        if charging { icon = "󰂄"; color = palette.green }
+        set("battery") { $0.icon = icon; $0.iconColor = color; $0.label = "\(pct)%" }
+        return
+    }
+}
+
+// --- volume (CoreAudio publishes on the device itself)
+func defaultOutputDevice() -> AudioDeviceID {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    var id = AudioDeviceID(0)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &id)
+    return id
+}
+
+func volumeAddress(_ element: UInt32) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                               mScope: kAudioDevicePropertyScopeOutput, mElement: element)
+}
+
+func readVolume() -> (percent: Int, muted: Bool)? {
+    let dev = defaultOutputDevice()
+    guard dev != 0 else { return nil }
+
+    var muted: UInt32 = 0
+    var muteAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                                              mScope: kAudioDevicePropertyScopeOutput,
+                                              mElement: kAudioObjectPropertyElementMain)
+    var muteSize = UInt32(MemoryLayout<UInt32>.size)
+    AudioObjectGetPropertyData(dev, &muteAddr, 0, nil, &muteSize, &muted)
+
+    var level: Float32 = 0
+    var addr = volumeAddress(kAudioObjectPropertyElementMain)
+    var size = UInt32(MemoryLayout<Float32>.size)
+    if AudioObjectGetPropertyData(dev, &addr, 0, nil, &size, &level) != noErr {
+        // a device without a master channel: average the stereo pair
+        var sum: Float32 = 0
+        var found = 0
+        for channel in UInt32(1)...UInt32(2) {
+            var chAddr = volumeAddress(channel)
+            var chSize = UInt32(MemoryLayout<Float32>.size)
+            var value: Float32 = 0
+            if AudioObjectGetPropertyData(dev, &chAddr, 0, nil, &chSize, &value) == noErr {
+                sum += value
+                found += 1
+            }
+        }
+        guard found > 0 else { return nil }
+        level = sum / Float32(found)
+    }
+    return (Int((level * 100).rounded()), muted != 0)
+}
+
+func writeVolume(_ percent: Int) {
+    let dev = defaultOutputDevice()
+    guard dev != 0 else { return }
+    var value = Float32(min(100, max(0, percent))) / 100
+    let size = UInt32(MemoryLayout<Float32>.size)
+    var addr = volumeAddress(kAudioObjectPropertyElementMain)
+    if AudioObjectSetPropertyData(dev, &addr, 0, nil, size, &value) != noErr {
+        for channel in UInt32(1)...UInt32(2) {
+            var chAddr = volumeAddress(channel)
+            AudioObjectSetPropertyData(dev, &chAddr, 0, nil, size, &value)
+        }
+    }
+}
+
+func updateVolume() {
+    guard let v = readVolume() else { return }
+    let icon: String
+    if v.muted || v.percent == 0 {
+        icon = "󰝟"
+    } else if v.percent >= 70 {
+        icon = "󰕾"
+    } else if v.percent >= 30 {
+        icon = "󰖀"
+    } else {
+        icon = "󰕿"
+    }
+    set("volume") { $0.icon = icon; $0.iconColor = nil; $0.label = v.muted ? "mute" : "\(v.percent)%" }
+}
+
+// --- brightness (DisplayServices publishes; built-in panel only)
+func builtinDisplayID() -> CGDirectDisplayID {
+    var count: UInt32 = 0
+    CGGetActiveDisplayList(0, nil, &count)
+    var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+    CGGetActiveDisplayList(count, &ids, &count)
+    return ids.first { CGDisplayIsBuiltin($0) != 0 } ?? CGMainDisplayID()
+}
+
+func updateBrightness() {
+    var value: Float = 0
+    guard DSGetBrightness(builtinDisplayID(), &value) == 0, value.isFinite else {
+        set("brightness") { $0.drawing = false } // hide rather than lie
+        return
+    }
+    let pct = Int((value * 100).rounded())
+    let icon = pct >= 66 ? "󰃠" : (pct >= 33 ? "󰃟" : "󰃞")
+    set("brightness") { $0.drawing = true; $0.icon = icon; $0.iconColor = nil; $0.label = "\(pct)%" }
+}
+
+// --- wifi (SCDynamicStore publishes; SSID needs a subprocess, so it is
+// fetched off-main and only when the network actually changed)
+var wifiDevice = CWWiFiClient.shared().interface()?.interfaceName ?? "en0"
+
+func updateWifi() {
+    let powered = CWWiFiClient.shared().interface()?.powerOn() ?? false
+    guard powered else {
+        set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
+        return
+    }
+    rebuildQueue.async {
+        // CoreWLAN hands out the SSID only with Location permission; the
+        // bar has always read it from ipconfig instead, so do the same
+        let summary = shell("/usr/sbin/ipconfig", ["getsummary", wifiDevice])
+        var ssid = ""
+        for line in summary.split(separator: "\n") where line.contains(" SSID : ") {
+            ssid = line.components(separatedBy: " SSID : ").last?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            break
+        }
+        let named = ssid.isEmpty || ssid.hasPrefix("<") ? "" : ssid
+        DispatchQueue.main.async {
+            set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
+        }
+    }
+}
+
+// --- bluetooth (IOBluetooth publishes connect/disconnect)
+//
+// IOBluetooth ABORTS the process outright — SIGABRT, no exception to
+// catch — if it is touched without the Bluetooth privacy grant. Learnt
+// here the same way watcher.swift learnt it: exit code 134 and an empty
+// log. So the grant is gated on CBCentralManager.authorization (reading
+// that never prompts), and the pill simply stays hidden when it is not
+// held. The binary carries helper/bar-info.plist for the usage string,
+// without which the prompt cannot even be raised.
+func updateBluetooth() {
+    guard CBCentralManager.authorization == .allowedAlways else { return }
+    guard BTGetPower() != 0 else {
+        set("bluetooth") { $0.drawing = true; $0.icon = "󰂲"; $0.iconColor = nil; $0.label = "off" }
+        return
+    }
+    let connected = ((IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? [])
+        .filter { $0.isConnected() }.count
+    set("bluetooth") {
+        $0.drawing = true
+        $0.icon = connected > 0 ? "󰂱" : "󰂯"
+        $0.iconColor = nil
+        $0.label = connected > 0 ? "\(connected)" : ""
+    }
+}
+
+// IOBluetooth's connect/disconnect notifications are ObjC target/action,
+// so they need a real object to aim at; CoreBluetooth's delegate is what
+// tells us the grant has landed.
+final class BluetoothWatcher: NSObject, CBCentralManagerDelegate {
+    private var central: CBCentralManager?
+    private var classicStarted = false
+
+    // Only ever touched with the grant already in hand. Creating a
+    // CBCentralManager is itself an access, and TCC judges it by the
+    // RESPONSIBLE process, not this binary: launched from a shell the
+    // whole process is killed (SIGABRT, exit 134, no report), embedded
+    // Info.plist and signature notwithstanding. watcher.swift gets away
+    // with prompting because launchd starts it and is responsible for
+    // it. So this never prompts — under launchd the grant is already
+    // there and the pill appears; run by hand it stays hidden.
+    func start() {
+        switch CBCentralManager.authorization {
+        case .allowedAlways:
+            startClassic()
+            central = CBCentralManager(delegate: self, queue: .main)
+        default:
+            tlog("bluetooth: no grant in this launch context — pill hidden")
+            set("bluetooth") { $0.drawing = false }
+        }
+    }
+
+    private func startClassic() {
+        guard !classicStarted else { return }
+        classicStarted = true
+        IOBluetoothDevice.register(forConnectNotifications: self,
+                                   selector: #selector(connected(_:device:)))
+        for device in (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? []
+        where device.isConnected() {
+            device.register(forDisconnectNotification: self, selector: #selector(changed(_:device:)))
+        }
+        updateBluetooth()
+    }
+
+    @objc func connected(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+        device.register(forDisconnectNotification: self, selector: #selector(changed(_:device:)))
+        DispatchQueue.main.async { updateBluetooth() }
+    }
+
+    @objc func changed(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+        DispatchQueue.main.async { updateBluetooth() }
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        if CBCentralManager.authorization == .allowedAlways { startClassic() }
+        DispatchQueue.main.async { updateBluetooth() }
+    }
+}
+let bluetoothWatcher = BluetoothWatcher()
+
+// --- weather (no publisher; wttr.in, refreshed on a long timer)
+func updateWeather() {
+    guard let url = URL(string: "https://wttr.in/?format=%c+%t") else { return }
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 10
+    URLSession.shared.dataTask(with: request) { data, _, _ in
+        guard let data, var text = String(data: data, encoding: .utf8) else { return }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "+", with: "")
+        guard !text.isEmpty, !text.lowercased().contains("unknown") else { return }
+        DispatchQueue.main.async {
+            set("weather") { $0.icon = ""; $0.label = text }
+        }
+    }.resume()
+}
+
 // --- view -----------------------------------------------------------------
 
 // Icons come from the running app and are cached by name: a redraw must
@@ -220,8 +549,28 @@ let chipPillHeight: CGFloat = 20
 let radius: CGFloat = 4
 let gap: CGFloat = 14
 
+// the terminal the activity pill opens btop in — the same apps.conf the
+// bar and aerospace read, so one config still drives all of them
+let terminalApp: String = {
+    let config = URL(fileURLWithPath: (FileManager.default
+        .destinationOfSymbolicLinkAtPathIfAny("\(NSHomeDirectory())/.config/sketchybar")))
+        .deletingLastPathComponent().appendingPathComponent("apps.conf")
+    guard let text = try? String(contentsOf: config, encoding: .utf8) else { return "Ghostty" }
+    for line in text.split(separator: "\n") where line.hasPrefix("TERMINAL=") {
+        return line.dropFirst("TERMINAL=".count).trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+    }
+    return "Ghostty"
+}()
+
+extension FileManager {
+    func destinationOfSymbolicLinkAtPathIfAny(_ path: String) -> String {
+        (try? destinationOfSymbolicLink(atPath: path)) ?? path
+    }
+}
+
 final class BarView: NSView {
     var chipRects: [(String, NSRect)] = []
+    var itemRects: [(String, NSRect)] = []
 
     override var isFlipped: Bool { false }
 
@@ -234,8 +583,10 @@ final class BarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         chipRects.removeAll()
+        itemRects.removeAll()
         let chipFont = nerdFont("SemiBold", 13)
         let appFont = nerdFont("Bold", 13)
+        let iconFont = nerdFont("Bold", 14)
 
         // workspace chips, in one bracket
         // Same rule as the bar: an empty GUEST workspace (the two-digit
@@ -275,20 +626,90 @@ final class BarView: NSView {
         }
 
         // front-app pill
-        guard !model.frontApp.isEmpty else { return }
-        let attrs: [NSAttributedString.Key: Any] = [.font: appFont, .foregroundColor: palette.accent]
-        let textW = (model.frontApp as NSString).size(withAttributes: attrs).width
-        let pill = NSRect(x: bracket.maxX + gap, y: (barHeight - pillHeight) / 2,
-                          width: textW + 20, height: pillHeight)
-        palette.itemBG.setFill()
-        NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
-        draw(model.frontApp, appFont, palette.accent, centeredIn: pill)
+        if !model.frontApp.isEmpty {
+            let attrs: [NSAttributedString.Key: Any] = [.font: appFont, .foregroundColor: palette.accent]
+            let textW = (model.frontApp as NSString).size(withAttributes: attrs).width
+            let pill = NSRect(x: bracket.maxX + gap, y: (barHeight - pillHeight) / 2,
+                              width: textW + 20, height: pillHeight)
+            palette.itemBG.setFill()
+            NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
+            draw(model.frontApp, appFont, palette.accent, centeredIn: pill)
+        }
+
+        // right cluster: laid out from the right edge inwards, so a pill
+        // changing width never shifts the ones outside it
+        var cursor = bounds.maxX - padLeft
+        for name in rightOrder.reversed() {
+            guard let item = rightItems[name], item.drawing,
+                  !(item.icon.isEmpty && item.label.isEmpty) else { continue }
+            let iconAttrs: [NSAttributedString.Key: Any] =
+                [.font: iconFont, .foregroundColor: item.iconColor ?? palette.label]
+            let labelAttrs: [NSAttributedString.Key: Any] =
+                [.font: chipFont, .foregroundColor: palette.label]
+            let iconSize = (item.icon as NSString).size(withAttributes: iconAttrs)
+            let labelSize = (item.label as NSString).size(withAttributes: labelAttrs)
+            // icon.padding_left 10, icon-to-label 7, label.padding_right 10
+            let width = 10 + iconSize.width + (item.label.isEmpty ? 10 : 7 + labelSize.width + 10)
+            let pill = NSRect(x: cursor - width, y: (barHeight - pillHeight) / 2,
+                              width: width, height: pillHeight)
+            palette.itemBG.setFill()
+            NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
+            (item.icon as NSString).draw(
+                at: NSPoint(x: pill.minX + 10, y: pill.midY - iconSize.height / 2), withAttributes: iconAttrs)
+            if !item.label.isEmpty {
+                (item.label as NSString).draw(
+                    at: NSPoint(x: pill.minX + 10 + iconSize.width + 7, y: pill.midY - labelSize.height / 2),
+                    withAttributes: labelAttrs)
+            }
+            itemRects.append((name, NSRect(x: pill.minX, y: 0, width: width, height: barHeight)))
+            cursor = pill.minX - gap
+        }
+    }
+
+    private func hit(_ event: NSEvent) -> String? {
+        let p = convert(event.locationInWindow, from: nil)
+        return itemRects.first(where: { $0.1.contains(p) })?.0
     }
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard let hit = chipRects.first(where: { $0.1.contains(p) })?.0 else { return }
-        DispatchQueue.global(qos: .userInitiated).async { aerospace(["workspace", hit]) }
+        if let ws = chipRects.first(where: { $0.1.contains(p) })?.0 {
+            DispatchQueue.global(qos: .userInitiated).async { aerospace(["workspace", ws]) }
+            return
+        }
+        guard let name = hit(event) else { return }
+        // Popups are not built yet, so a click opens the pane that owns
+        // the setting rather than pretending to be a menu.
+        let pane: String?
+        switch name {
+        case "battery": pane = "x-apple.systempreferences:com.apple.Battery-Settings.extension"
+        case "wifi": pane = "x-apple.systempreferences:com.apple.wifi-settings-extension"
+        case "bluetooth": pane = "x-apple.systempreferences:com.apple.BluetoothSettings"
+        case "volume", "brightness": pane = "x-apple.systempreferences:com.apple.Sound-Settings.extension"
+        case "activity":
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = shell("/usr/bin/open", ["-na", terminalApp, "--args", "--title=omacosy-activity", "-e", "btop"])
+            }
+            return
+        default: pane = nil
+        }
+        if let pane { NSWorkspace.shared.open(URL(string: pane)!) }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let name = hit(event) else { return }
+        let step = event.scrollingDeltaY > 0 ? 5 : -5
+        switch name {
+        case "volume":
+            guard let v = readVolume() else { return }
+            writeVolume(v.percent + step) // the CoreAudio listener repaints
+        case "brightness":
+            var value: Float = 0
+            guard DSGetBrightness(builtinDisplayID(), &value) == 0 else { return }
+            _ = DSSetBrightness(builtinDisplayID(), min(1, max(0, value + Float(step) / 100)))
+            updateBrightness()
+        default: break
+        }
     }
 }
 
@@ -491,12 +912,104 @@ watch(FileManager.default.homeDirectoryForCurrentUser
     tlog(String(format: "theme %.2f ms", ms))
 }
 
+// --- right-cluster publishers ---------------------------------------------
+
+// battery: IOPS fires on capacity ticks too
+let powerCallback: IOPowerSourceCallbackType = { _ in DispatchQueue.main.async { updateBattery() } }
+if let src = IOPSNotificationCreateRunLoopSource(powerCallback, nil)?.takeRetainedValue() {
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), src, .defaultMode)
+} else {
+    tlog("IOPSNotificationCreateRunLoopSource failed — battery pill will not update")
+}
+
+// volume: listen on the current default output device, and re-attach when
+// the default changes (plugging in headphones is a different device)
+var volumeListeners: [(AudioObjectID, AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
+
+func attachVolumeListeners() {
+    for (object, address, block) in volumeListeners {
+        var a = address
+        AudioObjectRemovePropertyListenerBlock(object, &a, DispatchQueue.main, block)
+    }
+    volumeListeners.removeAll()
+
+    let dev = defaultOutputDevice()
+    guard dev != 0 else { return }
+    let block: AudioObjectPropertyListenerBlock = { _, _ in updateVolume() }
+    for selector in [kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyMute] {
+        var addr = AudioObjectPropertyAddress(mSelector: selector,
+                                              mScope: kAudioDevicePropertyScopeOutput,
+                                              mElement: kAudioObjectPropertyElementMain)
+        if AudioObjectAddPropertyListenerBlock(dev, &addr, DispatchQueue.main, block) == noErr {
+            volumeListeners.append((dev, addr, block))
+        }
+    }
+    updateVolume()
+}
+
+var defaultDeviceAddress = AudioObjectPropertyAddress(
+    mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain)
+AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject),
+                                    &defaultDeviceAddress, DispatchQueue.main) { _, _ in
+    attachVolumeListeners()
+}
+attachVolumeListeners()
+
+// brightness: DisplayServices publishes, so the keyboard keys land here
+// without the bar being told about them by anyone else
+let brightnessProc: DSBrightnessProc = { _, _, _, _ in
+    DispatchQueue.main.async { updateBrightness() }
+}
+if DSRegisterBrightnessNotifications(builtinDisplayID(), nil, brightnessProc) != 0 {
+    tlog("brightness notifications unavailable — pill updates on scroll only")
+}
+
+// network: the same SCDynamicStore keys the watcher uses
+var storeContext = SCDynamicStoreContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
+if let store = SCDynamicStoreCreate(nil, "omacosy-bar" as CFString,
+                                    { _, _, _ in DispatchQueue.main.async { updateWifi() } }, &storeContext) {
+    SCDynamicStoreSetNotificationKeys(store, nil, [
+        "State:/Network/Global/IPv4",
+        "State:/Network/Interface/en.*/Link",
+        "State:/Network/Interface/en.*/AirPort",
+    ] as CFArray)
+    if let src = SCDynamicStoreCreateRunLoopSource(nil, store, 0) {
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), src, .defaultMode)
+    }
+} else {
+    tlog("SCDynamicStoreCreate failed — wifi pill will not update")
+}
+
+// bluetooth: gated on the privacy grant, which the watcher above also needs
+bluetoothWatcher.start()
+
+// clock and weather have no publisher to listen to. The clock ticks on
+// the minute boundary rather than every 60 s from launch, so it never
+// shows a stale minute.
+func scheduleClock() {
+    updateClock()
+    let now = Date()
+    let nextMinute = Calendar.current.date(bySetting: .second, value: 0,
+                                           of: now.addingTimeInterval(60)) ?? now.addingTimeInterval(60)
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(1, nextMinute.timeIntervalSinceNow)) { scheduleClock() }
+}
+scheduleClock()
+
+Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { _ in updateWeather() }
+
 // --- go -------------------------------------------------------------------
 
 model.frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
 model.focused = aerospace(["list-workspaces", "--focused"])
     .trimmingCharacters(in: .whitespacesAndNewlines)
 apply(fetchSnapshot()) // blocking is fine here: the run loop has not started
+rightItems["activity"] = BarItem(icon: "󰍛", iconColor: palette.accent)
+updateBattery()
+updateBrightness()
+updateWifi()
+updateWeather()
 repaint()
 tlog("omacosy-bar up on \(screen.localizedName) (aerospace monitor \(monitorID))")
 app.run()

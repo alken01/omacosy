@@ -31,7 +31,12 @@ both can be watched at once. Build and run it by hand:
 
 ```
 swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight \
-  -o /tmp/omacosy-bar helper/bar.swift && /tmp/omacosy-bar &
+  -framework DisplayServices \
+  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist \
+  -Xlinker helper/bar-info.plist \
+  -o /tmp/omacosy-bar helper/bar.swift &&
+codesign -f -s "Apple Development" --identifier com.omacosy.bar /tmp/omacosy-bar &&
+/tmp/omacosy-bar &
 ```
 
 It exists to price one question: how much of the bar's latency is the
@@ -50,7 +55,22 @@ notifications three daemons are separately subscribed to today. The slow
 path (which windows exist, where) costs ~65 ms and runs off the main
 queue on window create/destroy only, never on a switch.
 
-Two findings worth keeping even if this goes no further:
+The right cluster is now there too — weather, wifi, bluetooth, brightness,
+volume, battery, clock, activity — reading their sources directly rather
+than forking a script that forks `pmset`, `osascript`, `networksetup` and
+`ipconfig`. Every pill has a real publisher behind it (IOPS, CoreAudio,
+DisplayServices, SCDynamicStore, IOBluetooth), so only the clock and the
+weather run on timers. Per-pill repaint, measured:
+
+| pill | sketchybar plugin | native |
+|---|---|---|
+| volume | 370 ms | 1.9 ms |
+| weather | 270 ms | 5.4 ms |
+| wifi | 120 ms | 1.8 ms |
+| brightness | 70 ms | 1.7 ms |
+| battery | 60 ms | 2–19 ms (first paint warms the font) |
+
+Findings worth keeping even if this goes no further:
 
 - Asking for a font family and **verifying you got it** makes the
   Hiragino class of bug unrepresentable; sketchybar's `--default` failed
@@ -67,10 +87,27 @@ Two findings worth keeping even if this goes no further:
   re-resolved by display NAME on every screen-parameters change, which is
   the same trap `borders.swift` hit with a stale CG-to-Cocoa flip.
 
-Not decided: whether to grow this into the whole shell (bar, popups,
-OSD, overview, borders in one process) or leave sketchybar alone. The
-scope that would make sense is those five surfaces — never a lock screen
-(`loginwindow` is protected) or a Notification Center replacement.
+- **Bluetooth privacy is judged by the RESPONSIBLE process, not the
+  binary.** IOBluetooth does not fail when ungranted, it aborts the whole
+  process: SIGABRT, exit 134, empty stderr, and this machine writes no
+  crash report, so it looks like a silent death. An embedded Info.plist
+  and a stable signature are not enough — launched from a shell, the
+  responsible process is the shell, and the grant is not there. That is
+  why `watcher.swift` gets away with prompting: launchd starts it. The
+  bar therefore never prompts; it checks `CBCentralManager.authorization`
+  and hides the pill unless the grant is already held, which it will be
+  once this runs as a launchd agent like every other daemon here.
+- The SSID comes back as `<redacted>` from `ipconfig` without Location
+  permission, so the pill shows the icon alone rather than printing the
+  word — hide, don't lie.
+
+Still missing before this could replace sketchybar: popups and sliders,
+the apple and media items, per-display bars, notch-aware layout, and
+fullscreen hiding. Not decided: whether to grow it into the whole shell
+(bar, popups, OSD, overview, borders in one process) or leave sketchybar
+alone. The scope that would make sense is those five surfaces — never a
+lock screen (`loginwindow` is protected) or a Notification Center
+replacement.
 
 ## Wants
 
