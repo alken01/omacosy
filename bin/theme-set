@@ -24,6 +24,18 @@ if [ ! -d "$THEMES_DIR/$NAME" ]; then
   exit 1
 fi
 
+# Capture the outgoing palette before the symlink moves: the bar is
+# repainted slot-by-slot against it rather than rebuilt (omacosy-bar-repaint).
+OLD_PALETTE=()
+if [ -f "$CURRENT_DIR/theme/sketchybar.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$CURRENT_DIR/theme/sketchybar.sh"
+  for slot in ITEM_BG ACCENT LABEL_COLOR ICON_COLOR MUTED RED GREEN YELLOW BAR_BG_SOLID BAR_COLOR; do
+    eval "value=\${$slot:-}"
+    [ -n "$value" ] && OLD_PALETTE+=("OLD_$slot=$value")
+  done
+fi
+
 mkdir -p "$CURRENT_DIR"
 ln -sfn "$THEMES_DIR/$NAME" "$CURRENT_DIR/theme"
 
@@ -52,8 +64,17 @@ if [ -n "$WALL" ]; then
   fi
 fi
 
-# sketchybar: full reload so the bar re-reads the palette
-command -v sketchybar >/dev/null && sketchybar --reload || true
+# sketchybar: repaint the live items in one message. A full --reload
+# rebuilds all 45 items in front of you and can leave the bar half-styled
+# when two passes overlap, so it is only the fallback — for a first run
+# with no outgoing palette, or if the repaint finds nothing to work with.
+if command -v sketchybar >/dev/null; then
+  repainted=0
+  if [ ${#OLD_PALETTE[@]} -gt 0 ]; then
+    if env "${OLD_PALETTE[@]}" "$REPO_DIR/bin/omacosy-bar-repaint"; then repainted=1; fi
+  fi
+  [ "$repainted" = 1 ] || sketchybar --reload || true
+fi
 
 # omacosy-borders re-reads the theme file on its own (mtime watch)
 
