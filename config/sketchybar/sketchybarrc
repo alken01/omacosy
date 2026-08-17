@@ -144,10 +144,6 @@ else
       background.height=$PILL_H
 fi
 
-# paint initial focus/visibility state through the same plugin path
-sketchybar --trigger aerospace_workspace_change \
-  FOCUSED_WORKSPACE="$(aerospace list-workspaces --focused 2>/dev/null || echo '')"
-
 # --- Front app --------------------------------------------------------------
 sketchybar --add item front_app left \
   --subscribe front_app front_app_switched \
@@ -156,6 +152,19 @@ sketchybar --add item front_app left \
     label.font="$FONT_FAMILY:Bold:13.0" \
     label.color="$ACCENT" \
     script="$PLUGIN_DIR/front_app.sh"
+
+# --- Floating windows -------------------------------------------------------
+# macOS z-orders windows per APP, so a float drops behind the tiles the
+# moment another app takes focus and leaves no trace that it is still
+# there. This pill is the trace: present only while the focused workspace
+# holds floats, and a click surfaces the next one (same as Super+S).
+sketchybar --add item floats left \
+  --subscribe floats aerospace_workspace_change windows_changed front_app_switched \
+  --set floats drawing=off icon="󱂬" icon.color="$ACCENT" \
+    background.drawing=on background.color="$ITEM_BG" background.corner_radius=4 \
+    icon.padding_left=10 label.padding_right=10 \
+    script="$PLUGIN_DIR/floats.sh" \
+    click_script="$HOME/.local/bin/omacosy-float"
 
 # --- Media (Spotify) --------------------------------------------------------
 # prev / play-pause / next / track title in one capsule; hides itself
@@ -329,5 +338,9 @@ SWEEP+=(--set front_app padding_left="$GAP" padding_right="$GAP")
 sketchybar "${SWEEP[@]}"
 
 sketchybar --update
-# event-only items get no first paint from --update — kick it explicitly
+# event-only items get no first paint from --update — kick them explicitly.
+# The workspace trigger paints the chips and the floats pill in one go, so
+# it has to run after every item exists, not next to the chips themselves.
 sketchybar --trigger brightness_change
+sketchybar --trigger aerospace_workspace_change \
+  FOCUSED_WORKSPACE="$(aerospace list-workspaces --focused 2>/dev/null || echo '')"

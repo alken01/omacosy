@@ -203,6 +203,15 @@ window exactly once (at birth), stands down for floats and while the
 overview is open, and `touch ~/.config/omacosy/no-dwindle` disables it
 live. Manual control (Super+J flips, resize, float) works unchanged.
 
+Floats get a rescue path, because macOS will not keep them on top:
+z-order is per *app*, not per window, so a float sinks behind whichever
+app you focus next, and pinning it would mean rewriting the window's
+level through a private call with SIP off. Instead the bar grows a pill
+whenever the focused workspace is holding floats, and **Super+S** — or
+a click on that pill — surfaces the next one and brings the cursor with
+it, so a float is never lost behind a tile and never retrieved by
+aiming at something you cannot see.
+
 ## Focus follows mouse & swipes
 
 `omacosy-ffm`: hover focuses (no raise over floating windows — floats

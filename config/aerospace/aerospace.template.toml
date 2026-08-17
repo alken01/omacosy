@@ -85,6 +85,11 @@ cmd-ctrl-alt-shift-right = 'move right'
 
 # Layout (omarchy: Super+T float toggle, Super+J split toggle, Super+F fullscreen)
 cmd-ctrl-alt-t = 'layout floating tiling'
+# Surface the next float on this workspace (S for surface). macOS
+# z-orders windows per APP, so a float sinks behind whichever app you
+# focus next and cannot be pinned on top without a private window-level
+# call; this is how you get it back, cursor and all.
+cmd-ctrl-alt-s = 'exec-and-forget $HOME/.local/bin/omacosy-float'
 cmd-ctrl-alt-j = 'layout tiles horizontal vertical'
 cmd-ctrl-alt-f = 'fullscreen --no-outer-gaps'
 # native (green-button) fullscreen: the only mode that may claim the
