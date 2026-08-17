@@ -277,6 +277,7 @@ link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
 link "$REPO_DIR/bin/omacosy-ws-collapse" "$HOME/.local/bin/omacosy-ws-collapse"
 link "$REPO_DIR/bin/omacosy-bar-repaint" "$HOME/.local/bin/omacosy-bar-repaint"
+link "$REPO_DIR/bin/omacosy-float" "$HOME/.local/bin/omacosy-float"
 
 # --- 3. omarchy theme convention -------------------------------------------
 # Canonical theme state lives at ~/.config/omarchy/current/theme (what the
