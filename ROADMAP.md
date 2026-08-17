@@ -119,8 +119,23 @@ on whether that screen has a notch — read from `safeAreaInsets` rather
 than asked of a helper. Verified on one display; the two-display case
 gets its real test at the next dock.
 
-Still missing before this could replace sketchybar: the weather and apple
-popups, per-display bars, notch-aware layout, and
+The weather popup and fullscreen hiding close the list. One j1 fetch now
+feeds both the pill and its popup; weather.sh needs a cache file written
+atomically because a click can read it mid-write, and in one process the
+struct IS the cache, so that race cannot be expressed.
+
+Hiding is the one place sketchybar has it easier: its windows sit at
+layer -20, below normal windows, so a fullscreen window simply covers
+them. This bar draws above windows and has to decide for itself, and
+geometry alone is not enough — measured, on a notched display the notch
+inset (32 px) and the gap a tiled window leaves for the bar (33 px) are
+the same edge, so an ordinary tiled window reads as fullscreen by height.
+WIDTH separates them: `--no-outer-gaps` means the window takes the 8 px
+side gaps too, and a tiled one never does. Note that
+`%{window-is-fullscreen}` reported `false` on a window that measured
+1512x950 — aerospace's own flag could not be used for this.
+
+Still missing before this could replace sketchybar: the apple menu popup, per-display bars, notch-aware layout, and
 fullscreen hiding. Not decided: whether to grow it into the whole shell
 (bar, popups, OSD, overview, borders in one process) or leave sketchybar
 alone. The scope that would make sense is those five surfaces — never a

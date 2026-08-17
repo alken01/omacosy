@@ -55,6 +55,8 @@ typealias NotifyProc = @convention(c) (UInt32, UnsafeMutableRawPointer?, Int, Un
 
 @_silgen_name("SLSMainConnectionID")
 func SLSMainConnectionID() -> Int32
+@_silgen_name("SLSRequestNotificationsForWindows")
+func SLSRequestNotificationsForWindows(_ cid: Int32, _ windows: UnsafePointer<UInt32>, _ count: Int32) -> CGError
 @_silgen_name("SLSRegisterNotifyProc")
 func SLSRegisterNotifyProc(_ proc: NotifyProc, _ event: UInt32, _ context: UnsafeMutableRawPointer?) -> CGError
 @_silgen_name("SLSGetEventPort")
@@ -62,6 +64,8 @@ func SLSGetEventPort(_ cid: Int32, _ port: UnsafeMutablePointer<mach_port_t>) ->
 @_silgen_name("SLEventCreateNextEvent")
 func SLEventCreateNextEvent(_ cid: Int32) -> Unmanaged<CGEvent>?
 
+let EVENT_WINDOW_MOVE: UInt32 = 806
+let EVENT_WINDOW_RESIZE: UInt32 = 807
 let EVENT_WINDOW_CREATE: UInt32 = 1325
 let EVENT_WINDOW_DESTROY: UInt32 = 1326
 
@@ -631,17 +635,125 @@ final class BluetoothWatcher: NSObject, CBCentralManagerDelegate {
 let bluetoothWatcher = BluetoothWatcher()
 
 // --- weather (no publisher; wttr.in, refreshed on a long timer)
+// One j1 fetch feeds both the pill and its popup — weather.sh does the
+// same, via a cache file it writes atomically because a click can read it
+// mid-write. In one process the struct IS the cache and that race cannot
+// be expressed.
+
+struct Weather {
+    var emoji = ""
+    var temp = ""
+    var desc = ""
+    var feels = ""
+    var low = ""
+    var high = ""
+    var wind = ""
+    var humidity = ""
+    var rain = ""
+    var sunrise = ""
+    var sunset = ""
+    var moon = ""
+    var location = ""
+}
+
+var weather: Weather?
+
+// WWO condition code -> glyph, night-aware for the clear/partly pair
+func weatherEmoji(_ code: Int, night: Bool) -> String {
+    switch code {
+    case 113: return night ? "🌙" : "☀️"
+    case 116: return night ? "☁️" : "⛅"
+    case 119, 122: return "☁️"
+    case 143, 248, 260: return "🌫️"
+    case 176, 263, 266, 293, 296, 353: return "🌦️"
+    case 299, 302, 305, 308, 356, 359: return "🌧️"
+    case 200, 386, 389, 392, 395: return "⛈️"
+    case 179, 182, 185, 227, 230, 281, 284, 311...338, 350, 362...368, 374...377: return "❄️"
+    default: return "🌡️"
+    }
+}
+
+func moonEmoji(_ phase: String) -> String {
+    switch phase {
+    case "New Moon": return "🌑"
+    case "Waxing Crescent": return "🌒"
+    case "First Quarter": return "🌓"
+    case "Waxing Gibbous": return "🌔"
+    case "Full Moon": return "🌕"
+    case "Waning Gibbous": return "🌖"
+    case "Last Quarter", "Third Quarter": return "🌗"
+    case "Waning Crescent": return "🌘"
+    default: return "🌙"
+    }
+}
+
 func updateWeather() {
-    guard let url = URL(string: "https://wttr.in/?format=%c+%t") else { return }
+    guard let url = URL(string: "https://wttr.in/?format=j1") else { return }
     var request = URLRequest(url: url)
-    request.timeoutInterval = 10
+    request.timeoutInterval = 15
     URLSession.shared.dataTask(with: request) { data, _, _ in
-        guard let data, var text = String(data: data, encoding: .utf8) else { return }
-        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "+", with: "")
-        guard !text.isEmpty, !text.lowercased().contains("unknown") else { return }
+        guard let data,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let current = (root["current_condition"] as? [[String: Any]])?.first,
+              let today = (root["weather"] as? [[String: Any]])?.first
+        else { return }
+
+        func text(_ d: [String: Any], _ key: String) -> String { d[key] as? String ?? "" }
+        func nested(_ d: [String: Any], _ key: String) -> String {
+            ((d[key] as? [[String: Any]])?.first?["value"] as? String) ?? ""
+        }
+
+        var w = Weather()
+        let hour = Calendar.current.component(.hour, from: Date())
+        w.emoji = weatherEmoji(Int(text(current, "weatherCode")) ?? 0, night: hour < 7 || hour >= 20)
+        w.temp = text(current, "temp_C")
+        w.desc = nested(current, "weatherDesc").lowercased()
+        w.feels = text(current, "FeelsLikeC")
+        w.low = text(today, "mintempC")
+        w.high = text(today, "maxtempC")
+        w.humidity = text(current, "humidity")
+
+        let degrees = Int(text(current, "winddirDegree")) ?? 0
+        let arrows = ["↓", "↙", "←", "↖", "↑", "↗", "→", "↘"]
+        w.wind = "\(arrows[((degrees + 180) / 45) % 8]) \(text(current, "windspeedKmph")) km/h"
+
+        // rain earns a row only with real signal: falling now, or likely today
+        let precip = Double(text(current, "precipMM")) ?? 0
+        let chance = ((today["hourly"] as? [[String: Any]]) ?? [])
+            .compactMap { Int(($0["chanceofrain"] as? String) ?? "0") }.max() ?? 0
+        if precip > 0 {
+            w.rain = "☔ \(text(current, "precipMM"))mm now"
+            if chance >= 30 { w.rain += " · rain \(chance)% today" }
+        } else if chance >= 30 {
+            w.rain = "☔ rain \(chance)% today"
+        }
+
+        if let astro = (today["astronomy"] as? [[String: Any]])?.first {
+            w.sunrise = text(astro, "sunrise")
+            w.sunset = text(astro, "sunset")
+            w.moon = "\(moonEmoji(text(astro, "moon_phase"))) \(text(astro, "moon_phase").lowercased())"
+        }
+
+        if let area = (root["nearest_area"] as? [[String: Any]])?.first {
+            // wttr repeats the city as its region ("Porto, Porto"), so the
+            // region is dropped whenever either name contains the other
+            let city = nested(area, "areaName")
+            let region = nested(area, "region")
+            let country = nested(area, "country")
+            var parts = [city]
+            if !region.isEmpty,
+               !city.lowercased().contains(region.lowercased()),
+               !region.lowercased().contains(city.lowercased()) {
+                parts.append(region)
+            }
+            if !country.isEmpty { parts.append(country) }
+            w.location = parts.joined(separator: ", ")
+        }
+
         DispatchQueue.main.async {
-            set("weather") { $0.icon = ""; $0.label = text }
+            weather = w
+            set("weather") { $0.icon = ""; $0.label = "\(w.emoji) \(w.temp)°C" }
+            if openPopup == "weather" { refreshPopup() }
         }
     }.resume()
 }
@@ -979,9 +1091,27 @@ func bluetoothRows() -> [PopupRow] {
     return rows
 }
 
+func weatherRows() -> [PopupRow] {
+    guard let w = weather else { return [] }
+    var rows: [PopupRow] = [PopupRow(text: "\(w.emoji) \(w.temp)°C \(w.desc)", hero: true)]
+
+    // feels-like earns a mention only when it differs from the real temp
+    var today = "today \(w.low)° → \(w.high)°C"
+    if w.feels != w.temp { today = "feels \(w.feels)°C · " + today }
+    rows.append(PopupRow(text: today))
+    rows.append(PopupRow(text: "wind \(w.wind) · humidity \(w.humidity)%"))
+    if !w.rain.isEmpty { rows.append(PopupRow(text: w.rain)) }
+    if !w.sunrise.isEmpty {
+        rows.append(PopupRow(text: "sun \(w.sunrise) → \(w.sunset) · \(w.moon)"))
+    }
+    if !w.location.isEmpty { rows.append(PopupRow(text: w.location, dim: true)) }
+    return rows
+}
+
 func popupRows(for name: String) -> [PopupRow] {
     switch name {
     case "clock": return calendarRows()
+    case "weather": return weatherRows()
     case "brightness": return brightnessRows()
     case "volume": return volumeRows()
     case "wifi": return wifiRows()
@@ -1379,6 +1509,76 @@ func repaint() {
     }
 }
 
+// --- fullscreen ------------------------------------------------------------
+// sketchybar gets this for free: its windows sit at layer -20, below
+// normal windows, so a fullscreen window simply covers them while
+// aerospace's outer gap keeps tiled windows off the strip. This bar sits
+// above windows (it has to, to be visible while stacked under sketchybar
+// for comparison), so it has to decide for itself.
+//
+// The test is borders.swift's, and for the same reason: `fullscreen
+// --no-outer-gaps` and macOS native fullscreen are indistinguishable from
+// out here, and both should take the strip. A managed window never starts
+// at the display's top edge — the bar owns it.
+
+func safeTop(for display: CGRect) -> CGFloat {
+    let primaryH = NSScreen.screens.first?.frame.height ?? 0
+    for screen in NSScreen.screens {
+        let cgY = primaryH - screen.frame.maxY
+        if abs(screen.frame.origin.x - display.origin.x) < 2, abs(cgY - display.origin.y) < 2 {
+            return screen.safeAreaInsets.top
+        }
+    }
+    return 0
+}
+
+func fullscreenDisplays() -> Set<CGDirectDisplayID> {
+    var covered: Set<CGDirectDisplayID> = []
+    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
+    else { return covered }
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var count: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &count) == .success else { return covered }
+
+    for window in list {
+        guard (window[kCGWindowLayer as String] as? Int) == 0,
+              let b = window[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
+        let rect = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
+        for i in 0..<Int(count) {
+            let display = CGDisplayBounds(ids[i])
+            guard display.intersects(rect) else { continue }
+            let inset = safeTop(for: display)
+            // Height and top edge alone are NOT enough, measured: on a
+            // notched display the notch inset (32) and the gap a tiled
+            // window leaves for the bar (33) are the same edge, so an
+            // ordinary tiled Arc reads as fullscreen. WIDTH is what
+            // separates them — `--no-outer-gaps` means exactly that, the
+            // window takes the side gaps too, and a tiled one never does.
+            if rect.origin.y - display.origin.y < inset + 3,
+               rect.height >= display.height - inset - 6,
+               rect.width >= display.width - 2 {
+                covered.insert(ids[i])
+            }
+        }
+    }
+    return covered
+}
+
+func updateBarVisibility() {
+    let covered = fullscreenDisplays()
+    for surface in surfaces {
+        let hide = covered.contains(screenID(surface.screen))
+        // unconditional either way: isVisible can desync from the window
+        // server, which is how borders.swift ended up with a stuck shroud
+        if hide {
+            surface.window.orderOut(nil)
+            if openPopup != nil { closePopup() }
+        } else {
+            surface.window.orderFrontRegardless()
+        }
+    }
+}
+
 // --- signals --------------------------------------------------------------
 
 // Workspace switches arrive as a one-line file written by aerospace's
@@ -1419,6 +1619,7 @@ watch(wsPath, create: true) {
     guard !ws.isEmpty, ws != model.focused else { return }
     setFocused(ws)
     repaint()
+    kickVisibility()
     let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
     tlog(String(format: "switch %@ %.2f ms", ws, ms))
 }
@@ -1475,9 +1676,50 @@ func kickRebuild() {
 }
 
 let cid = SLSMainConnectionID()
-let notify: NotifyProc = { _, _, _, _ in DispatchQueue.main.async { kickRebuild() } }
+// move and resize only fire for SUBSCRIBED windows, and going fullscreen
+// is a resize — so the subscription set is kept equal to every normal
+// window, refreshed whenever one is created or destroyed (borders.swift's
+// recipe, and its reason).
+var subscribed: Set<UInt32> = []
+func rebuildSubscriptions() {
+    guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]]
+    else { return }
+    var wids: [UInt32] = []
+    for w in list where (w[kCGWindowLayer as String] as? Int) == 0 {
+        if let n = w[kCGWindowNumber as String] as? Int { wids.append(UInt32(n)) }
+    }
+    let set = Set(wids)
+    guard set != subscribed, !wids.isEmpty else { return }
+    subscribed = set
+    _ = wids.withUnsafeBufferPointer {
+        SLSRequestNotificationsForWindows(cid, $0.baseAddress!, Int32(wids.count))
+    }
+}
+
+// a fullscreen check is a window-list read, not a subprocess: cheap
+// enough to run on a short debounce after any window event
+var visibilityPending: DispatchWorkItem?
+func kickVisibility() {
+    visibilityPending?.cancel()
+    let work = DispatchWorkItem { updateBarVisibility() }
+    visibilityPending = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+}
+
+let notify: NotifyProc = { event, _, _, _ in
+    DispatchQueue.main.async {
+        if event == EVENT_WINDOW_CREATE || event == EVENT_WINDOW_DESTROY {
+            kickRebuild()
+            rebuildSubscriptions()
+        }
+        kickVisibility()
+    }
+}
 _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_CREATE, nil)
 _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_DESTROY, nil)
+_ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_MOVE, nil)
+_ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_RESIZE, nil)
+rebuildSubscriptions()
 var eventPort: mach_port_t = 0
 if SLSGetEventPort(cid, &eventPort).rawValue == 0, eventPort != 0 {
     let drain = DispatchSource.makeMachReceiveSource(port: eventPort, queue: .main)
