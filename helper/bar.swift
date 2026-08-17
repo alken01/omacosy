@@ -370,6 +370,53 @@ func writeVolume(_ percent: Int) {
     }
 }
 
+// the output devices the volume popup lists — the same enumeration
+// helper/main.swift does for `omacosy-helper audio`, without the round trip
+func audioOutputDevices() -> [(id: AudioDeviceID, name: String)] {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size) == noErr
+    else { return [] }
+    var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &ids) == noErr
+    else { return [] }
+
+    var result: [(AudioDeviceID, String)] = []
+    for id in ids {
+        // output-capable only: a device with no output streams is a mic
+        var streams = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
+                                                 mScope: kAudioDevicePropertyScopeOutput,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var streamSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(id, &streams, 0, nil, &streamSize) == noErr, streamSize > 0
+        else { continue }
+
+        var nameAddr = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName,
+                                                  mScope: kAudioObjectPropertyScopeGlobal,
+                                                  mElement: kAudioObjectPropertyElementMain)
+        var name: CFString = "" as CFString
+        var nameSize = UInt32(MemoryLayout<CFString>.size)
+        var ok = false
+        withUnsafeMutablePointer(to: &name) { ptr in
+            ok = AudioObjectGetPropertyData(id, &nameAddr, 0, nil, &nameSize, ptr) == noErr
+        }
+        guard ok else { continue }
+        result.append((id, name as String))
+    }
+    return result
+}
+
+func setDefaultOutputDevice(_ id: AudioDeviceID) {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    var dev = id
+    AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil,
+                               UInt32(MemoryLayout<AudioDeviceID>.size), &dev)
+}
+
 func updateVolume() {
     guard let v = readVolume() else { return }
     let icon: String
@@ -527,6 +574,354 @@ func updateWeather() {
     }.resume()
 }
 
+// --- popups ----------------------------------------------------------------
+// A popup is a list of rows in its own window. sketchybar has to model
+// these as bar items with a naming convention (`clock.cal.3`) that a
+// separate shell guard greps to clean up; here they are just views that
+// go away when the window closes, so there is no convention to break and
+// nothing to leak.
+
+struct PopupRow {
+    var icon = ""
+    var text = ""
+    var hero = false // accent, bold — the title row
+    var dim = false // the quiet action footer
+    var highlight = false // today's week, the active device
+    var slider: Double? // 0...1 draws a track instead of text
+    var onSlide: ((Double) -> Void)?
+    var action: (() -> Void)?
+}
+
+let rowHeight: CGFloat = 26
+let popupPad: CGFloat = 8
+let popupRadius: CGFloat = 8
+
+final class PopupView: NSView {
+    var rows: [PopupRow] = []
+    private var rowRects: [(Int, NSRect)] = []
+
+    override var isFlipped: Bool { true }
+
+    func font(_ row: PopupRow) -> NSFont {
+        if row.hero { return nerdFont("Bold", 13) }
+        if row.dim { return nerdFont("Regular", 12) }
+        return nerdFont("Regular", 13)
+    }
+
+    func color(_ row: PopupRow) -> NSColor {
+        if row.hero { return palette.accent }
+        // the dim footer is the label colour at 60%, the same relationship
+        // the shell popups build with a 0x99 alpha prefix
+        if row.dim { return palette.label.withAlphaComponent(0.6) }
+        return palette.label
+    }
+
+    func measure() -> NSSize {
+        var width: CGFloat = 0
+        for row in rows {
+            let attrs: [NSAttributedString.Key: Any] = [.font: font(row)]
+            var w = (row.text as NSString).size(withAttributes: attrs).width
+            if !row.icon.isEmpty {
+                w += (row.icon as NSString).size(withAttributes: [.font: nerdFont("Bold", 13)]).width + 8
+            }
+            if row.slider != nil { w = max(w, 150) }
+            width = max(width, w)
+        }
+        return NSSize(width: width + popupPad * 2 + 20,
+                      height: CGFloat(rows.count) * rowHeight + popupPad * 2)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        rowRects.removeAll()
+        let body = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: popupRadius, yRadius: popupRadius)
+        palette.barBG.setFill()
+        body.fill()
+        palette.accent.setStroke()
+        body.lineWidth = 1
+        body.stroke()
+
+        var y = popupPad
+        for (index, row) in rows.enumerated() {
+            let rect = NSRect(x: popupPad, y: y, width: bounds.width - popupPad * 2, height: rowHeight)
+            if row.highlight {
+                palette.itemBG.setFill()
+                NSBezierPath(roundedRect: rect.insetBy(dx: -2, dy: 2), xRadius: 4, yRadius: 4).fill()
+            }
+            var x = rect.minX + 4
+            if !row.icon.isEmpty {
+                let iconAttrs: [NSAttributedString.Key: Any] =
+                    [.font: nerdFont("Bold", 13), .foregroundColor: palette.accent]
+                let size = (row.icon as NSString).size(withAttributes: iconAttrs)
+                (row.icon as NSString).draw(at: NSPoint(x: x, y: rect.midY - size.height / 2),
+                                            withAttributes: iconAttrs)
+                x += size.width + 8
+            }
+            if let value = row.slider {
+                // track, then filled portion — the readout is the row's text
+                let trackW = rect.width - (x - rect.minX) - 52
+                let track = NSRect(x: x, y: rect.midY - 3, width: trackW, height: 6)
+                palette.itemBG.setFill()
+                NSBezierPath(roundedRect: track, xRadius: 3, yRadius: 3).fill()
+                palette.accent.setFill()
+                NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY,
+                                                 width: track.width * CGFloat(value), height: track.height),
+                             xRadius: 3, yRadius: 3).fill()
+                let attrs: [NSAttributedString.Key: Any] =
+                    [.font: font(row), .foregroundColor: color(row)]
+                let size = (row.text as NSString).size(withAttributes: attrs)
+                (row.text as NSString).draw(
+                    at: NSPoint(x: rect.maxX - size.width - 4, y: rect.midY - size.height / 2),
+                    withAttributes: attrs)
+            } else {
+                let attrs: [NSAttributedString.Key: Any] =
+                    [.font: font(row), .foregroundColor: color(row)]
+                let size = (row.text as NSString).size(withAttributes: attrs)
+                (row.text as NSString).draw(at: NSPoint(x: x, y: rect.midY - size.height / 2),
+                                            withAttributes: attrs)
+            }
+            rowRects.append((index, rect))
+            y += rowHeight
+        }
+    }
+
+
+    // Tracking areas, not a poll and not a global monitor: a global
+    // monitor stops delivering once this app is itself active, which is
+    // exactly what clicking the bar makes it.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseExited(with event: NSEvent) { scheduleHullCheck() }
+
+    private func slide(_ event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        guard let (index, rect) = rowRects.first(where: { $0.1.contains(p) }),
+              rows[index].slider != nil, let onSlide = rows[index].onSlide else { return }
+        let trackX = rect.minX + 4
+        let trackW = rect.width - 4 - 52
+        onSlide(min(1, max(0, (p.x - trackX) / trackW)))
+    }
+
+    override func mouseDown(with event: NSEvent) { slide(event) }
+    override func mouseDragged(with event: NSEvent) { slide(event) }
+
+    override func mouseUp(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        guard let (index, _) = rowRects.first(where: { $0.1.contains(p) }),
+              rows[index].slider == nil, let action = rows[index].action else { return }
+        action()
+    }
+}
+
+final class PopupWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+var popupWindow: PopupWindow?
+var popupView: PopupView?
+var openPopup: String? // which bar item owns it
+
+func closePopup() {
+    popupWindow?.orderOut(nil)
+    popupWindow = nil
+    popupView = nil
+    openPopup = nil
+}
+
+// rows are rebuilt, not patched: the content is cheap to regenerate and a
+// stale row is worse than a redrawn one
+func refreshPopup() {
+    guard let name = openPopup, let view = popupView, let window = popupWindow else { return }
+    view.rows = popupRows(for: name)
+    let size = view.measure()
+    window.setContentSize(size)
+    view.frame = NSRect(origin: .zero, size: size)
+    view.needsDisplay = true
+    view.display()
+}
+
+func showPopup(_ name: String, under anchor: NSRect) {
+    if openPopup == name { closePopup(); return }
+    closePopup()
+    let rows = popupRows(for: name)
+    guard !rows.isEmpty else { return }
+
+    let view = PopupView(frame: .zero)
+    view.rows = rows
+    let size = view.measure()
+    view.frame = NSRect(origin: .zero, size: size)
+
+    // right-aligned under the item, clamped to the screen
+    guard let screen = targetScreen() else { return }
+    let barBottom = win.frame.minY
+    var x = anchor.maxX - size.width
+    x = min(max(screen.frame.minX + 6, x), screen.frame.maxX - size.width - 6)
+    let window = PopupWindow(contentRect: NSRect(x: x, y: barBottom - size.height - 4,
+                                                 width: size.width, height: size.height),
+                             styleMask: .borderless, backing: .buffered, defer: false)
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.hasShadow = true
+    window.level = .popUpMenu
+    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    window.acceptsMouseMovedEvents = true
+    window.contentView = view
+    window.orderFrontRegardless()
+    popupWindow = window
+    popupView = view
+    openPopup = name
+}
+
+// --- popup content ---------------------------------------------------------
+
+func calendarRows() -> [PopupRow] {
+    var rows: [PopupRow] = []
+    let now = Date()
+    var cal = Calendar(identifier: .gregorian)
+    cal.firstWeekday = 2 // Monday, like the shell version
+    let title = DateFormatter()
+    title.dateFormat = "MMMM yyyy"
+    rows.append(PopupRow(text: title.string(from: now).lowercased(), hero: true))
+    rows.append(PopupRow(text: "mo tu we th fr sa su", dim: true))
+
+    guard let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)),
+          let range = cal.range(of: .day, in: .month, for: now) else { return rows }
+    let today = cal.component(.day, from: now)
+    // weekday index with Monday = 0
+    let leading = (cal.component(.weekday, from: monthStart) + 5) % 7
+    let prevDays = cal.range(of: .day, in: .month,
+                             for: cal.date(byAdding: .month, value: -1, to: monthStart)!)!.count
+
+    var cells: [(Int, Bool)] = [] // day, in-month
+    for i in 0..<leading { cells.append((prevDays - leading + 1 + i, false)) }
+    for d in range { cells.append((d, true)) }
+    var next = 1
+    while cells.count % 7 != 0 { cells.append((next, false)); next += 1 }
+
+    for week in stride(from: 0, to: cells.count, by: 7) {
+        let slice = cells[week..<min(week + 7, cells.count)]
+        let text = slice.map { String(format: "%2d", $0.0) }.joined(separator: " ")
+        let hasToday = slice.contains { $0.0 == today && $0.1 }
+        rows.append(PopupRow(icon: hasToday ? "▸" : " ", text: text, highlight: hasToday))
+    }
+    let week = cal.component(.weekOfYear, from: now)
+    rows.append(PopupRow(text: "week \(week)", dim: true))
+    return rows
+}
+
+func brightnessRows() -> [PopupRow] {
+    var value: Float = 0
+    guard DSGetBrightness(builtinDisplayID(), &value) == 0 else { return [] }
+    return [
+        PopupRow(icon: "󰃟", text: "\(Int((value * 100).rounded()))%",
+                 slider: Double(value),
+                 onSlide: { fraction in
+                     _ = DSSetBrightness(builtinDisplayID(), Float(fraction))
+                     updateBrightness()
+                     refreshPopup()
+                 }),
+        PopupRow(text: "display settings…", dim: true, action: {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!)
+            closePopup()
+        }),
+    ]
+}
+
+func volumeRows() -> [PopupRow] {
+    guard let v = readVolume() else { return [] }
+    var rows: [PopupRow] = [
+        PopupRow(icon: v.muted ? "󰝟" : "󰕾", text: v.muted ? "mute" : "\(v.percent)%",
+                 slider: Double(v.percent) / 100,
+                 onSlide: { fraction in
+                     writeVolume(Int((fraction * 100).rounded()))
+                     updateVolume()
+                     refreshPopup()
+                 }),
+    ]
+    // output devices, current one marked — the same list `omacosy-helper
+    // audio` offers, read here without the round trip
+    let current = defaultOutputDevice()
+    for device in audioOutputDevices() {
+        rows.append(PopupRow(icon: device.id == current ? "󰄬" : " ", text: device.name,
+                             highlight: device.id == current,
+                             action: {
+                                 setDefaultOutputDevice(device.id)
+                                 updateVolume()
+                                 refreshPopup()
+                             }))
+    }
+    rows.append(PopupRow(text: "sound settings…", dim: true, action: {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!)
+        closePopup()
+    }))
+    return rows
+}
+
+func wifiRows() -> [PopupRow] {
+    let interface = CWWiFiClient.shared().interface()
+    var rows: [PopupRow] = [
+        PopupRow(text: (rightItems["wifi"]?.label.isEmpty ?? true) ? "wi-fi" : rightItems["wifi"]!.label,
+                 hero: true),
+    ]
+    rows.append(PopupRow(text: "ip \(shell("/usr/sbin/ipconfig", ["getifaddr", wifiDevice]).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty("none"))"))
+    if let rssi = interface?.rssiValue(), rssi != 0 {
+        let verdict = rssi >= -55 ? "excellent" : (rssi >= -67 ? "good" : (rssi >= -75 ? "fair" : "weak"))
+        rows.append(PopupRow(text: "signal \(rssi) dBm  \(verdict)"))
+    }
+    if let channel = interface?.wlanChannel() {
+        rows.append(PopupRow(text: "channel \(channel.channelNumber)"))
+    }
+    rows.append(PopupRow(text: "network settings…", dim: true, action: {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
+        closePopup()
+    }))
+    return rows
+}
+
+func bluetoothRows() -> [PopupRow] {
+    var rows: [PopupRow] = [PopupRow(text: "bluetooth", hero: true)]
+    guard CBCentralManager.authorization == .allowedAlways else {
+        rows.append(PopupRow(text: "no permission in this launch context", dim: true))
+        return rows
+    }
+    for device in (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? [] {
+        let name = device.name ?? device.addressString ?? "device"
+        rows.append(PopupRow(icon: device.isConnected() ? "󰂱" : "󰂯", text: name,
+                             highlight: device.isConnected(),
+                             action: {
+                                 if device.isConnected() { device.closeConnection() } else { device.openConnection() }
+                                 updateBluetooth()
+                                 refreshPopup()
+                             }))
+    }
+    rows.append(PopupRow(text: "bluetooth settings…", dim: true, action: {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!)
+        closePopup()
+    }))
+    return rows
+}
+
+func popupRows(for name: String) -> [PopupRow] {
+    switch name {
+    case "clock": return calendarRows()
+    case "brightness": return brightnessRows()
+    case "volume": return volumeRows()
+    case "wifi": return wifiRows()
+    case "bluetooth": return bluetoothRows()
+    default: return []
+    }
+}
+
+extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
 // --- view -----------------------------------------------------------------
 
 // Icons come from the running app and are cached by name: a redraw must
@@ -666,6 +1061,20 @@ final class BarView: NSView {
         }
     }
 
+
+    // Tracking areas, not a poll and not a global monitor: a global
+    // monitor stops delivering once this app is itself active, which is
+    // exactly what clicking the bar makes it.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseExited(with event: NSEvent) { scheduleHullCheck() }
+
     private func hit(_ event: NSEvent) -> String? {
         let p = convert(event.locationInWindow, from: nil)
         return itemRects.first(where: { $0.1.contains(p) })?.0
@@ -677,23 +1086,27 @@ final class BarView: NSView {
             DispatchQueue.global(qos: .userInitiated).async { aerospace(["workspace", ws]) }
             return
         }
-        guard let name = hit(event) else { return }
-        // Popups are not built yet, so a click opens the pane that owns
-        // the setting rather than pretending to be a menu.
-        let pane: String?
+        guard let name = hit(event), let rect = itemRects.first(where: { $0.0 == name })?.1 else {
+            closePopup()
+            return
+        }
+        // an item with a popup toggles it; the rest still act directly
+        if !popupRows(for: name).isEmpty {
+            let anchor = window?.convertToScreen(convert(rect, to: nil)) ?? rect
+            showPopup(name, under: anchor)
+            return
+        }
+        closePopup()
         switch name {
-        case "battery": pane = "x-apple.systempreferences:com.apple.Battery-Settings.extension"
-        case "wifi": pane = "x-apple.systempreferences:com.apple.wifi-settings-extension"
-        case "bluetooth": pane = "x-apple.systempreferences:com.apple.BluetoothSettings"
-        case "volume", "brightness": pane = "x-apple.systempreferences:com.apple.Sound-Settings.extension"
+        case "battery":
+            NSWorkspace.shared.open(
+                URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")!)
         case "activity":
             DispatchQueue.global(qos: .userInitiated).async {
                 _ = shell("/usr/bin/open", ["-na", terminalApp, "--args", "--title=omacosy-activity", "-e", "btop"])
             }
-            return
-        default: pane = nil
+        default: break
         }
-        if let pane { NSWorkspace.shared.open(URL(string: pane)!) }
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -771,6 +1184,7 @@ win.backgroundColor = .clear
 win.hasShadow = false
 win.level = .statusBar // sketchybar's own windows sit at layer -20
 win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+win.acceptsMouseMovedEvents = true // tracking areas need the moves
 let view = BarView(frame: NSRect(origin: .zero, size: frame.size))
 win.contentView = view
 win.orderFrontRegardless()
@@ -910,6 +1324,38 @@ watch(FileManager.default.homeDirectoryForCurrentUser
     repaint()
     let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
     tlog(String(format: "theme %.2f ms", ms))
+}
+
+// --- popup guard -----------------------------------------------------------
+// popup_guard.sh polls the cursor on a loop and greps item names to decide
+// whether a popup should still be open. Here the cursor is a published
+// event and the geometry is already known, so the rule is exact: a popup
+// closes when the pointer is in neither the bar nor the popup — which is
+// what "don't close it while I'm still in the bar" actually means.
+// The check runs a beat after the pointer leaves either surface, because
+// travelling from the bar to its popup crosses the gap between them and
+// must not read as leaving.
+func scheduleHullCheck() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        if popupWindow != nil, pointerLeftTheHull() { closePopup() }
+    }
+}
+
+func pointerLeftTheHull() -> Bool {
+    guard let popup = popupWindow else { return false }
+    let p = NSEvent.mouseLocation
+    let slack: CGFloat = 6 // the gap between the bar and the popup
+    return !win.frame.insetBy(dx: 0, dy: -slack).contains(p)
+        && !popup.frame.insetBy(dx: -slack, dy: -slack).contains(p)
+}
+
+// the monitor must be RETAINED — dropping the returned token deregisters
+// it immediately, and the popup then never closes on its own
+var popupGuardToken: Any?
+popupGuardToken = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { _ in
+    // a click that lands in another app dismisses the popup; hover-exit
+    // is the tracking areas' job
+    if popupWindow != nil, pointerLeftTheHull() { closePopup() }
 }
 
 // --- right-cluster publishers ---------------------------------------------

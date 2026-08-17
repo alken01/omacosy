@@ -101,8 +101,16 @@ Findings worth keeping even if this goes no further:
   permission, so the pill shows the icon alone rather than printing the
   word — hide, don't lie.
 
-Still missing before this could replace sketchybar: popups and sliders,
-the apple and media items, per-display bars, notch-aware layout, and
+Popups are there now — calendar, volume (slider plus output devices),
+brightness (slider plus display settings), wifi and bluetooth. They are
+plain views in their own window rather than bar items named by
+convention, so there is nothing for a shell guard to grep and nothing to
+leak. Closing follows the rule the shell guard approximates by polling:
+tracking areas on both surfaces, checked a beat later so that crossing
+the gap from bar to popup does not read as leaving.
+
+Still missing before this could replace sketchybar: the weather and apple
+popups, the media items, per-display bars, notch-aware layout, and
 fullscreen hiding. Not decided: whether to grow it into the whole shell
 (bar, popups, OSD, overview, borders in one process) or leave sketchybar
 alone. The scope that would make sense is those five surfaces — never a
