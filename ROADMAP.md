@@ -109,8 +109,18 @@ leak. Closing follows the rule the shell guard approximates by polling:
 tracking areas on both surfaces, checked a beat later so that crossing
 the gap from bar to popup does not read as leaving.
 
+The media capsule and per-display bars are in as well. Spotify broadcasts
+its own state and the payload already carries the track, so the pill
+repaints (2.1 ms, against media.sh's 480 ms) without asking anything —
+the only subprocess left is the one a click sends, where 20 ms does not
+show. There is now one window per screen, each drawing its own workspace
+set, and the media capsule sits centred or in the left cluster depending
+on whether that screen has a notch — read from `safeAreaInsets` rather
+than asked of a helper. Verified on one display; the two-display case
+gets its real test at the next dock.
+
 Still missing before this could replace sketchybar: the weather and apple
-popups, the media items, per-display bars, notch-aware layout, and
+popups, per-display bars, notch-aware layout, and
 fullscreen hiding. Not decided: whether to grow it into the whole shell
 (bar, popups, OSD, overview, borders in one process) or leave sketchybar
 alone. The scope that would make sense is those five surfaces — never a

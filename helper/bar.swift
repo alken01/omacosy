@@ -160,21 +160,25 @@ func nerdFont(_ face: String, _ size: CGFloat) -> NSFont {
 
 // --- model ----------------------------------------------------------------
 
+// Shared across every display: which workspace has focus, what the front
+// app is, which workspaces hold what. Anything that differs per screen —
+// the workspace set, the visible one, the notch — belongs to the surface.
 final class Model {
-    var workspaces: [String] = [] // this monitor's set, in order
-    var mine: Set<String> = []
     var focused = "" // globally focused workspace
-    var visible = "" // visible on THIS monitor
     var soleApp: [String: String] = [:] // ws -> app name, when it holds exactly one
     var occupied: Set<String> = []
     var frontApp = ""
+    var media = Media()
+}
+
+struct Media: Equatable {
+    var running = false
+    var playing = false
+    var title = ""
 }
 
 let model = Model()
 var palette = loadPalette()
-
-// aerospace monitor id for the display this bar lives on
-var monitorID = "2"
 
 // SLOW path: who lives where. Three CLI calls — and it runs only when a
 // window is created or destroyed, never on a workspace switch.
@@ -185,8 +189,7 @@ var monitorID = "2"
 // architecture only pays off if subprocess work never sits on the path a
 // frame has to travel.
 struct Snapshot {
-    var workspaces: [String] = []
-    var visible = ""
+    var perMonitor: [String: (workspaces: [String], visible: String)] = [:]
     var soleApp: [String: String] = [:]
     var occupied: Set<String> = []
 }
@@ -195,10 +198,14 @@ let rebuildQueue = DispatchQueue(label: "com.omacosy.bar.rebuild")
 
 func fetchSnapshot() -> Snapshot {
     var s = Snapshot()
-    s.workspaces = aerospace(["list-workspaces", "--monitor", monitorID])
-        .split(separator: "\n").map(String.init)
-    s.visible = aerospace(["list-workspaces", "--monitor", monitorID, "--visible"])
-        .split(separator: "\n").map(String.init).first ?? ""
+    // one pass per display, plus one window list for all of them
+    for id in surfaces.map({ $0.monitorID }) {
+        let workspaces = aerospace(["list-workspaces", "--monitor", id])
+            .split(separator: "\n").map(String.init)
+        let visible = aerospace(["list-workspaces", "--monitor", id, "--visible"])
+            .split(separator: "\n").map(String.init).first ?? ""
+        s.perMonitor[id] = (workspaces, visible)
+    }
 
     var sole: [String: String] = [:]
     var count: [String: Int] = [:]
@@ -219,20 +226,85 @@ func fetchSnapshot() -> Snapshot {
 }
 
 func apply(_ s: Snapshot) {
-    if !s.workspaces.isEmpty {
-        model.workspaces = s.workspaces
-        model.mine = Set(s.workspaces)
+    for surface in surfaces {
+        guard let part = s.perMonitor[surface.monitorID] else { continue }
+        if !part.workspaces.isEmpty {
+            surface.workspaces = part.workspaces
+            surface.mine = Set(part.workspaces)
+        }
+        if !part.visible.isEmpty { surface.visible = part.visible }
     }
-    if !s.visible.isEmpty { model.visible = s.visible }
     model.occupied = s.occupied
     model.soleApp = s.soleApp
 }
 
 // FAST path: a workspace switch changes focus and nothing else. No CLI,
-// no IPC, no shell — the model already knows the rest.
+// no IPC, no shell — every surface already knows the rest, and the one
+// that owns the workspace also now shows it.
 func setFocused(_ ws: String) {
     model.focused = ws
-    if model.mine.contains(ws) { model.visible = ws }
+    for surface in surfaces where surface.mine.contains(ws) { surface.visible = ws }
+}
+
+// --- media (Spotify announces itself; the title needs no subprocess) -------
+// media.sh spawns osascript to ask what is playing. Spotify's own
+// PlaybackStateChanged notification already carries Name, Artist and
+// Player State, so the only subprocess left is the one a click sends —
+// and that is user-initiated, where 20 ms does not show.
+
+let spotifyBundleID = "com.spotify.client"
+
+func spotifyRunning() -> Bool {
+    !NSRunningApplication.runningApplications(withBundleIdentifier: spotifyBundleID).isEmpty
+}
+
+func updateMedia(from info: [AnyHashable: Any]? = nil) {
+    var next = Media()
+    next.running = spotifyRunning()
+    if next.running {
+        if let info {
+            next.playing = (info["Player State"] as? String) == "Playing"
+            let name = info["Name"] as? String ?? ""
+            let artist = info["Artist"] as? String ?? ""
+            next.title = artist.isEmpty ? name : "\(artist) — \(name)"
+        } else {
+            next.title = model.media.title
+            next.playing = model.media.playing
+        }
+    }
+    guard next != model.media else { return }
+    let t0 = DispatchTime.now().uptimeNanoseconds
+    model.media = next
+    repaint()
+    tlog(String(format: "media %@ %@ %.2f ms", next.playing ? "play" : "pause", next.title,
+                Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))
+}
+
+// startup only: the notification fires on change, so the current track
+// has to be asked for once
+func primeMedia() {
+    guard spotifyRunning() else { return }
+    rebuildQueue.async {
+        let script = """
+        tell application "Spotify" to if it is running then \
+        return (player state as text) & "|" & artist of current track & "|" & name of current track
+        """
+        let out = shell("/usr/bin/osascript", ["-e", script])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = out.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3 else { return }
+        DispatchQueue.main.async {
+            model.media = Media(running: true, playing: parts[0] == "playing",
+                                title: parts[1].isEmpty ? parts[2] : "\(parts[1]) — \(parts[2])")
+            repaint()
+        }
+    }
+}
+
+func spotify(_ command: String) {
+    DispatchQueue.global(qos: .userInitiated).async {
+        _ = shell("/usr/bin/osascript", ["-e", "tell application \"Spotify\" to \(command)"])
+    }
 }
 
 // --- right cluster ---------------------------------------------------------
@@ -746,7 +818,7 @@ func refreshPopup() {
     view.display()
 }
 
-func showPopup(_ name: String, under anchor: NSRect) {
+func showPopup(_ name: String, under anchor: NSRect, on surface: BarSurface) {
     if openPopup == name { closePopup(); return }
     closePopup()
     let rows = popupRows(for: name)
@@ -757,9 +829,9 @@ func showPopup(_ name: String, under anchor: NSRect) {
     let size = view.measure()
     view.frame = NSRect(origin: .zero, size: size)
 
-    // right-aligned under the item, clamped to the screen
-    guard let screen = targetScreen() else { return }
-    let barBottom = win.frame.minY
+    // right-aligned under the item, clamped to the screen it opened on
+    let screen = surface.screen
+    let barBottom = surface.window.frame.minY
     var x = anchor.maxX - size.width
     x = min(max(screen.frame.minX + 6, x), screen.frame.maxX - size.width - 6)
     let window = PopupWindow(contentRect: NSRect(x: x, y: barBottom - size.height - 4,
@@ -964,10 +1036,50 @@ extension FileManager {
 }
 
 final class BarView: NSView {
+    weak var surface: BarSurface?
     var chipRects: [(String, NSRect)] = []
     var itemRects: [(String, NSRect)] = []
+    var mediaRects: [(String, NSRect)] = []
 
     override var isFlipped: Bool { false }
+
+    // the media capsule: transport glyphs then the title, one pill. Its
+    // width is measured, not cached — sketchybar needs an md5-keyed width
+    // cache here only because it cannot measure text before laying out.
+    private func mediaSize(_ titleFont: NSFont, _ iconFont: NSFont) -> CGFloat {
+        guard model.media.running, !model.media.title.isEmpty else { return 0 }
+        let glyphs = ("󰒮 󰐊 󰒭" as NSString).size(withAttributes: [.font: iconFont]).width
+        let title = (clippedTitle as NSString).size(withAttributes: [.font: titleFont]).width
+        return 10 + glyphs + 12 + title + 12
+    }
+
+    private var clippedTitle: String {
+        let limit = (surface?.notched ?? false) ? 20 : 28
+        let title = model.media.title
+        return title.count <= limit ? title : String(title.prefix(limit - 1)) + "…"
+    }
+
+    private func drawMedia(at origin: CGFloat, _ titleFont: NSFont, _ iconFont: NSFont) {
+        guard model.media.running, !model.media.title.isEmpty else { return }
+        let width = mediaSize(titleFont, iconFont)
+        let pill = NSRect(x: origin, y: (barHeight - pillHeight) / 2, width: width, height: pillHeight)
+        palette.itemBG.setFill()
+        NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
+
+        var x = pill.minX + 10
+        for (name, glyph) in [("prev", "󰒮"), ("play", model.media.playing ? "󰏤" : "󰐊"), ("next", "󰒭")] {
+            let attrs: [NSAttributedString.Key: Any] = [.font: iconFont, .foregroundColor: palette.label]
+            let size = (glyph as NSString).size(withAttributes: attrs)
+            (glyph as NSString).draw(at: NSPoint(x: x, y: pill.midY - size.height / 2), withAttributes: attrs)
+            mediaRects.append((name, NSRect(x: x - 4, y: 0, width: size.width + 8, height: barHeight)))
+            x += size.width + 6
+        }
+        let attrs: [NSAttributedString.Key: Any] = [.font: titleFont, .foregroundColor: palette.label]
+        let size = (clippedTitle as NSString).size(withAttributes: attrs)
+        (clippedTitle as NSString).draw(at: NSPoint(x: x + 6, y: pill.midY - size.height / 2),
+                                        withAttributes: attrs)
+        mediaRects.append(("title", NSRect(x: x + 6, y: 0, width: size.width, height: barHeight)))
+    }
 
     private func draw(_ s: String, _ font: NSFont, _ color: NSColor, centeredIn box: NSRect) {
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
@@ -979,15 +1091,17 @@ final class BarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         chipRects.removeAll()
         itemRects.removeAll()
+        mediaRects.removeAll()
         let chipFont = nerdFont("SemiBold", 13)
         let appFont = nerdFont("Bold", 13)
         let iconFont = nerdFont("Bold", 14)
+        guard let surface else { return }
 
-        // workspace chips, in one bracket
+        // workspace chips, in one bracket — this display's set only
         // Same rule as the bar: an empty GUEST workspace (the two-digit
         // set that force-assignment parks here while undocked) is noise,
         // but an empty primary keeps its slot so the row stays 1..9.
-        let shown = model.workspaces.filter {
+        let shown = surface.workspaces.filter {
             $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
         }
         let bracketW = CGFloat(shown.count) * (chipBox + chipPad * 2)
@@ -1007,7 +1121,7 @@ final class BarView: NSView {
                 NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
             }
             let tint: NSColor = ws == model.focused ? palette.barBG
-                : (ws == model.visible ? palette.label : palette.muted)
+                : (ws == surface.visible ? palette.label : palette.muted)
             // a workspace holding exactly one app shows that app's icon —
             // free here, where NSRunningApplication hands the icon over,
             // versus sketchybar's image-registration dance
@@ -1021,6 +1135,7 @@ final class BarView: NSView {
         }
 
         // front-app pill
+        var leftEdge = bracket.maxX
         if !model.frontApp.isEmpty {
             let attrs: [NSAttributedString.Key: Any] = [.font: appFont, .foregroundColor: palette.accent]
             let textW = (model.frontApp as NSString).size(withAttributes: attrs).width
@@ -1029,6 +1144,15 @@ final class BarView: NSView {
             palette.itemBG.setFill()
             NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
             draw(model.frontApp, appFont, palette.accent, centeredIn: pill)
+            leftEdge = pill.maxX
+        }
+
+        // media: centred where there is room, in the left cluster where a
+        // notch owns the middle
+        let mediaW = mediaSize(chipFont, iconFont)
+        if mediaW > 0 {
+            drawMedia(at: surface.notched ? leftEdge + gap : (bounds.width - mediaW) / 2,
+                      chipFont, iconFont)
         }
 
         // right cluster: laid out from the right edge inwards, so a pill
@@ -1086,14 +1210,27 @@ final class BarView: NSView {
             DispatchQueue.global(qos: .userInitiated).async { aerospace(["workspace", ws]) }
             return
         }
+        if let part = mediaRects.first(where: { $0.1.contains(p) })?.0 {
+            closePopup()
+            switch part {
+            case "prev": spotify("previous track")
+            case "play": spotify("playpause")
+            case "next": spotify("next track")
+            default:
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: spotifyBundleID) {
+                    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                }
+            }
+            return
+        }
         guard let name = hit(event), let rect = itemRects.first(where: { $0.0 == name })?.1 else {
             closePopup()
             return
         }
         // an item with a popup toggles it; the rest still act directly
-        if !popupRows(for: name).isEmpty {
+        if !popupRows(for: name).isEmpty, let surface {
             let anchor = window?.convertToScreen(convert(rect, to: nil)) ?? rect
-            showPopup(name, under: anchor)
+            showPopup(name, under: anchor, on: surface)
             return
         }
         closePopup()
@@ -1131,40 +1268,6 @@ final class BarView: NSView {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-// the built-in display: this slice runs here while sketchybar keeps the
-// external one, so both are on screen at once for comparison
-func builtinScreen() -> NSScreen? {
-    NSScreen.screens.first {
-        guard let n = $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-        else { return false }
-        return CGDisplayIsBuiltin(n.uint32Value) != 0
-    }
-}
-
-// The aerospace monitor id is NOT stable across a hotplug: undock and the
-// built-in stops being monitor 2 and becomes monitor 1, at which point a
-// cached id returns "Invalid monitor ID" and the snapshot comes back
-// empty — the bar then renders the last set it knew, silently stale.
-// Resolve the id by display NAME every time the screens change.
-func targetScreen() -> NSScreen? { builtinScreen() ?? NSScreen.main }
-
-func resolveMonitor() {
-    guard let screen = targetScreen() else { return }
-    for line in aerospace(["list-monitors", "--format", "%{monitor-id}|%{monitor-name}"]).split(separator: "\n") {
-        let f = line.split(separator: "|").map(String.init)
-        if f.count == 2, f[1] == screen.localizedName, f[0] != monitorID {
-            tlog("monitor: \(screen.localizedName) is now aerospace monitor \(f[0]) (was \(monitorID))")
-            monitorID = f[0]
-        }
-    }
-}
-
-guard let screen = targetScreen() else {
-    FileHandle.standardError.write("omacosy-bar: no usable display\n".data(using: .utf8)!)
-    exit(1)
-}
-resolveMonitor()
-
 // AppKit pushes an ordinary window down out of the menu-bar strip, which
 // is exactly where a bar belongs — 32 px lower than asked for, measured.
 // Opting out of the constraint is the supported way to sit in it.
@@ -1176,25 +1279,103 @@ final class BarWindow: NSWindow {
 // strip so both are readable at once instead of overdrawing each other.
 // OMACOSY_BAR_TOP=1 puts it where a real bar belongs.
 let stackOffset: CGFloat = ProcessInfo.processInfo.environment["OMACOSY_BAR_TOP"] == nil ? barHeight : 0
-let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - barHeight - stackOffset,
-                   width: screen.frame.width, height: barHeight)
-let win = BarWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-win.isOpaque = false
-win.backgroundColor = .clear
-win.hasShadow = false
-win.level = .statusBar // sketchybar's own windows sit at layer -20
-win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-win.acceptsMouseMovedEvents = true // tracking areas need the moves
-let view = BarView(frame: NSRect(origin: .zero, size: frame.size))
-win.contentView = view
-win.orderFrontRegardless()
+
+// One surface per display. Each owns its screen's workspace set and its
+// own window; everything else it reads from the shared model.
+final class BarSurface {
+    var screen: NSScreen
+    var monitorID: String
+    var workspaces: [String] = []
+    var mine: Set<String> = []
+    var visible = ""
+    let window: BarWindow
+    let view: BarView
+
+    // A notched display has no usable centre, so the media capsule joins
+    // the left cluster there — the same rule the shell bar applies, but
+    // read from the screen itself instead of asked of a helper.
+    var notched: Bool { screen.safeAreaInsets.top > 0 }
+
+    init(screen: NSScreen, monitorID: String) {
+        self.screen = screen
+        self.monitorID = monitorID
+        let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - barHeight - stackOffset,
+                           width: screen.frame.width, height: barHeight)
+        window = BarWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.level = .statusBar // sketchybar's own windows sit at layer -20
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        window.acceptsMouseMovedEvents = true // tracking areas need the moves
+        view = BarView(frame: NSRect(origin: .zero, size: frame.size))
+        window.contentView = view
+        view.surface = self
+        window.orderFrontRegardless()
+    }
+
+    func place() {
+        let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - barHeight - stackOffset,
+                           width: screen.frame.width, height: barHeight)
+        window.setFrame(frame, display: true)
+        view.frame = NSRect(origin: .zero, size: frame.size)
+    }
+}
+
+var surfaces: [BarSurface] = []
+
+func screenID(_ screen: NSScreen) -> CGDirectDisplayID {
+    (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+}
+
+// AeroSpace monitor ids are NOT stable across a hotplug — undock and the
+// built-in stops being monitor 2 and becomes monitor 1 — so they are
+// resolved by display NAME every time the screens change. A cached id
+// answers "Invalid monitor ID" and the snapshot comes back empty, which
+// renders as the last set the bar knew, stale and silent.
+func monitorIDs() -> [String: String] { // display name -> aerospace id
+    var map: [String: String] = [:]
+    for line in aerospace(["list-monitors", "--format", "%{monitor-id}|%{monitor-name}"])
+        .split(separator: "\n") {
+        let f = line.split(separator: "|").map(String.init)
+        if f.count == 2 { map[f[1]] = f[0] }
+    }
+    return map
+}
+
+func rebuildSurfaces() {
+    let ids = monitorIDs()
+    var kept: [BarSurface] = []
+    for screen in NSScreen.screens {
+        guard let id = ids[screen.localizedName] else { continue }
+        if let existing = surfaces.first(where: { screenID($0.screen) == screenID(screen) }) {
+            if existing.monitorID != id {
+                tlog("monitor: \(screen.localizedName) is now aerospace monitor \(id) (was \(existing.monitorID))")
+                existing.monitorID = id
+            }
+            existing.screen = screen
+            existing.place()
+            kept.append(existing)
+        } else {
+            tlog("surface: \(screen.localizedName) -> aerospace monitor \(id)\(screen.safeAreaInsets.top > 0 ? " (notched)" : "")")
+            kept.append(BarSurface(screen: screen, monitorID: id))
+        }
+    }
+    for gone in surfaces where !kept.contains(where: { $0 === gone }) {
+        tlog("surface: \(gone.screen.localizedName) went away")
+        gone.window.orderOut(nil)
+    }
+    surfaces = kept
+}
 
 func repaint() {
     // every caller is already on the main queue; display() is synchronous
     // so the timings below cover real drawing, not just invalidation
     MainActor.assumeIsolated {
-        view.needsDisplay = true
-        view.display()
+        for surface in surfaces {
+            surface.view.needsDisplay = true
+            surface.view.display()
+        }
     }
 }
 
@@ -1260,22 +1441,12 @@ NSWorkspace.shared.notificationCenter.addObserver(
 // now, move the window onto it, and rebuild. Screen parameters arrive
 // before the arrangement settles, so give it a beat (borders.swift learnt
 // the same lesson with a stale CG-to-Cocoa flip after a replug).
-func placeWindow() {
-    guard let screen = targetScreen() else { return }
-    MainActor.assumeIsolated {
-        win.setFrame(NSRect(x: screen.frame.minX,
-                            y: screen.frame.maxY - barHeight - stackOffset,
-                            width: screen.frame.width, height: barHeight), display: true)
-        view.frame = NSRect(origin: .zero, size: win.frame.size)
-    }
-}
-
 NotificationCenter.default.addObserver(
     forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
 ) { _ in
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-        resolveMonitor()
-        placeWindow()
+        closePopup() // its anchor may not exist any more
+        rebuildSurfaces()
         kickRebuild()
     }
 }
@@ -1344,9 +1515,12 @@ func scheduleHullCheck() {
 func pointerLeftTheHull() -> Bool {
     guard let popup = popupWindow else { return false }
     let p = NSEvent.mouseLocation
-    let slack: CGFloat = 6 // the gap between the bar and the popup
-    return !win.frame.insetBy(dx: 0, dy: -slack).contains(p)
-        && !popup.frame.insetBy(dx: -slack, dy: -slack).contains(p)
+    let slack: CGFloat = 6 // the gap between a bar and its popup
+    if popup.frame.insetBy(dx: -slack, dy: -slack).contains(p) { return false }
+    for surface in surfaces where surface.window.frame.insetBy(dx: 0, dy: -slack).contains(p) {
+        return false
+    }
+    return true
 }
 
 // the monitor must be RETAINED — dropping the returned token deregisters
@@ -1431,6 +1605,22 @@ if let store = SCDynamicStoreCreate(nil, "omacosy-bar" as CFString,
 // bluetooth: gated on the privacy grant, which the watcher above also needs
 bluetoothWatcher.start()
 
+// media: Spotify broadcasts every state change itself, and the payload
+// already carries the track — so the pill repaints without asking anyone
+// anything. Launch and quit are the one pair it cannot announce.
+DistributedNotificationCenter.default().addObserver(
+    forName: NSNotification.Name("\(spotifyBundleID).PlaybackStateChanged"), object: nil, queue: .main
+) { note in updateMedia(from: note.userInfo) }
+
+for event in [NSWorkspace.didLaunchApplicationNotification,
+              NSWorkspace.didTerminateApplicationNotification] {
+    NSWorkspace.shared.notificationCenter.addObserver(forName: event, object: nil, queue: .main) { note in
+        guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              app.bundleIdentifier == spotifyBundleID else { return }
+        if event == NSWorkspace.didLaunchApplicationNotification { primeMedia() } else { updateMedia() }
+    }
+}
+
 // clock and weather have no publisher to listen to. The clock ticks on
 // the minute boundary rather than every 60 s from launch, so it never
 // shows a stale minute.
@@ -1450,6 +1640,11 @@ Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { _ in updateWeather
 model.frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
 model.focused = aerospace(["list-workspaces", "--focused"])
     .trimmingCharacters(in: .whitespacesAndNewlines)
+rebuildSurfaces()
+guard !surfaces.isEmpty else {
+    FileHandle.standardError.write("omacosy-bar: no display matched an aerospace monitor\n".data(using: .utf8)!)
+    exit(1)
+}
 apply(fetchSnapshot()) // blocking is fine here: the run loop has not started
 rightItems["activity"] = BarItem(icon: "󰍛", iconColor: palette.accent)
 updateBattery()
@@ -1457,5 +1652,6 @@ updateBrightness()
 updateWifi()
 updateWeather()
 repaint()
-tlog("omacosy-bar up on \(screen.localizedName) (aerospace monitor \(monitorID))")
+primeMedia()
+tlog("omacosy-bar up on " + surfaces.map { "\($0.screen.localizedName)=m\($0.monitorID)\($0.notched ? " (notched)" : "")" }.joined(separator: ", "))
 app.run()
