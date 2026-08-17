@@ -16,14 +16,7 @@ A="$(command -v aerospace || echo /opt/homebrew/bin/aerospace)"
 
 FLOATS="$("$A" list-windows --workspace focused --format '%{window-id}|%{window-layout}' 2>/dev/null |
   awk -F'|' '$2 == "floating" { print $1 }')"
-if [ -z "$FLOATS" ]; then
-  # nothing to surface — and if the bar still shows a float pill it is
-  # holding a count that aerospace no longer agrees with (its window list
-  # can lag a destroy past the event that prompted the last count), so
-  # take the chance to put it right
-  sketchybar --trigger windows_changed 2>/dev/null || true
-  exit 0
-fi
+[ -n "$FLOATS" ] || exit 0
 
 CURRENT="$("$A" list-windows --focused --format '%{window-id}' 2>/dev/null || true)"
 

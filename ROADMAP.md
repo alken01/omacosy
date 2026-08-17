@@ -22,12 +22,14 @@ Direction, not promises. Ordered roughly by pull.
   Apple Silicon, one external display. Sequoia and Intel are
   unknown territory — reports welcome.
 
-## Native shell (measured experiment, not yet a direction)
+## The bar (was: a measured experiment)
 
-`helper/bar.swift` is a deliberate slice, not part of the install: a bar
-surface drawn by one Swift process — workspace chips and the front-app
-pill — on the built-in display, stacked under sketchybar's own bar so
-both can be watched at once. Build and run it by hand:
+`helper/bar.swift` IS the bar now — sketchybar is gone, and with it the
+sixteen shell plugins, the popup guard that polled the cursor, and the
+watcher daemon whose only job was triggering it. It started as a slice
+built alongside sketchybar to answer one question with numbers. Run a
+second copy stacked under the real one with `OMACOSY_BAR_STACK=1` if you
+ever want that comparison again:
 
 ```
 swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight \
@@ -143,11 +145,9 @@ the theme is watched, so a row that did nothing would be worse than a row
 that is absent.
 
 What is left is not features but standing: per-display bars, notch-aware layout, and
-fullscreen hiding. Not decided: whether to grow it into the whole shell
-(bar, popups, OSD, overview, borders in one process) or leave sketchybar
-alone. The scope that would make sense is those five surfaces — never a
-lock screen (`loginwindow` is protected) or a Notification Center
-replacement.
+fullscreen hiding. Still separate processes: borders and the overview. Folding those in is
+the obvious next step — never a lock screen (`loginwindow` is protected)
+or a Notification Center replacement.
 
 ## Wants
 

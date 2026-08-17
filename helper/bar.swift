@@ -173,6 +173,7 @@ final class Model {
     var occupied: Set<String> = []
     var frontApp = ""
     var media = Media()
+    var floating: [String: Int] = [:]
 }
 
 struct Media: Equatable {
@@ -196,6 +197,7 @@ struct Snapshot {
     var perMonitor: [String: (workspaces: [String], visible: String)] = [:]
     var soleApp: [String: String] = [:]
     var occupied: Set<String> = []
+    var floating: [String: Int] = [:] // workspace -> floating windows
 }
 
 let rebuildQueue = DispatchQueue(label: "com.omacosy.bar.rebuild")
@@ -216,7 +218,11 @@ func fetchSnapshot() -> Snapshot {
     for line in aerospace(["list-windows", "--all", "--format",
                            "%{workspace}|%{app-name}|%{window-layout}"]).split(separator: "\n") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        guard f.count >= 3, f[2] != "floating" else { continue }
+        guard f.count >= 3 else { continue }
+        if f[2] == "floating" {
+            s.floating[f[0], default: 0] += 1
+            continue
+        }
         s.occupied.insert(f[0])
         if let existing = sole[f[0]] {
             if existing != f[1] { count[f[0]] = 2 }
@@ -240,6 +246,21 @@ func apply(_ s: Snapshot) {
     }
     model.occupied = s.occupied
     model.soleApp = s.soleApp
+    model.floating = s.floating
+    updateFloats()
+}
+
+// A float sinks behind the tiles as soon as another app takes focus, so
+// the pill is the only trace it leaves. The count is already in the
+// snapshot, which means a workspace switch needs no query to update it.
+func updateFloats() {
+    let count = model.floating[model.focused] ?? 0
+    set("floats") {
+        $0.drawing = count > 0
+        $0.icon = "\u{f10ac}"
+        $0.iconColor = palette.accent
+        $0.label = count > 0 ? "\(count)" : ""
+    }
 }
 
 // FAST path: a workspace switch changes focus and nothing else. No CLI,
@@ -248,6 +269,7 @@ func apply(_ s: Snapshot) {
 func setFocused(_ ws: String) {
     model.focused = ws
     for surface in surfaces where surface.mine.contains(ws) { surface.visible = ws }
+    updateFloats()
 }
 
 // --- media (Spotify announces itself; the title needs no subprocess) -------
@@ -324,7 +346,7 @@ struct BarItem: Equatable {
 }
 
 // screen order, left to right
-let rightOrder = ["weather", "wifi", "bluetooth", "brightness", "volume", "battery", "clock", "activity"]
+let rightOrder = ["floats", "weather", "wifi", "bluetooth", "brightness", "volume", "battery", "clock", "activity"]
 var rightItems: [String: BarItem] = [:]
 
 func set(_ name: String, _ mutate: (inout BarItem) -> Void) {
@@ -587,22 +609,31 @@ final class BluetoothWatcher: NSObject, CBCentralManagerDelegate {
     private var central: CBCentralManager?
     private var classicStarted = false
 
-    // Only ever touched with the grant already in hand. Creating a
-    // CBCentralManager is itself an access, and TCC judges it by the
-    // RESPONSIBLE process, not this binary: launched from a shell the
-    // whole process is killed (SIGABRT, exit 134, no report), embedded
-    // Info.plist and signature notwithstanding. watcher.swift gets away
-    // with prompting because launchd starts it and is responsible for
-    // it. So this never prompts — under launchd the grant is already
-    // there and the pill appears; run by hand it stays hidden.
+    // Creating a CBCentralManager is itself an access, and TCC judges it
+    // by the RESPONSIBLE process rather than this binary: started from a
+    // shell the whole process is killed (SIGABRT, exit 134, no report),
+    // embedded Info.plist and signature notwithstanding. Under launchd it
+    // is responsible for itself and may prompt — which is the only reason
+    // watcher.swift could. The plist sets OMACOSY_MANAGED so that running
+    // this by hand for a test stays safe instead of dying.
+    private var managed: Bool { ProcessInfo.processInfo.environment["OMACOSY_MANAGED"] != nil }
+
     func start() {
         switch CBCentralManager.authorization {
         case .allowedAlways:
             startClassic()
             central = CBCentralManager(delegate: self, queue: .main)
-        default:
-            tlog("bluetooth: no grant in this launch context — pill hidden")
+        case .denied, .restricted:
+            tlog("bluetooth: permission denied — pill hidden")
             set("bluetooth") { $0.drawing = false }
+        default:
+            guard managed else {
+                tlog("bluetooth: not launchd-managed, so not prompting — pill hidden")
+                set("bluetooth") { $0.drawing = false }
+                return
+            }
+            set("bluetooth") { $0.drawing = false }
+            central = CBCentralManager(delegate: self, queue: .main) // raises the prompt
         }
     }
 
@@ -999,7 +1030,13 @@ func calendarRows() -> [PopupRow] {
     return rows
 }
 
+var nightShiftState = ""
+
 func brightnessRows() -> [PopupRow] {
+    if nightShiftState.isEmpty {
+        nightShiftState = shell("\(NSHomeDirectory())/.local/bin/omacosy-helper", ["nightshift"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     var value: Float = 0
     guard DSGetBrightness(builtinDisplayID(), &value) == 0 else { return [] }
     return [
@@ -1010,6 +1047,12 @@ func brightnessRows() -> [PopupRow] {
                      updateBrightness()
                      refreshPopup()
                  }),
+        PopupRow(text: "night shift \(nightShiftState)", action: {
+            nightShiftState = shell("\(NSHomeDirectory())/.local/bin/omacosy-helper",
+                                    ["nightshift", "toggle"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            refreshPopup()
+        }),
         PopupRow(text: "display settings…", dim: true, action: {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!)
             closePopup()
@@ -1458,10 +1501,10 @@ final class BarWindow: NSWindow {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
-// While this is a comparison slice, sit one bar-height BELOW sketchybar's
-// strip so both are readable at once instead of overdrawing each other.
-// OMACOSY_BAR_TOP=1 puts it where a real bar belongs.
-let stackOffset: CGFloat = ProcessInfo.processInfo.environment["OMACOSY_BAR_TOP"] == nil ? barHeight : 0
+// The bar owns the top strip. OMACOSY_BAR_STACK=1 drops it one bar-height
+// so it can run alongside another bar for comparison, which is how this
+// was built.
+let stackOffset: CGFloat = ProcessInfo.processInfo.environment["OMACOSY_BAR_STACK"] == nil ? 0 : barHeight
 
 // One surface per display. Each owns its screen's workspace set and its
 // own window; everything else it reads from the shared model.

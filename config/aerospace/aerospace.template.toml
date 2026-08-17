@@ -27,9 +27,10 @@ default-root-container-orientation = 'auto'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
-# Tell sketchybar which workspace is focused
+# Tell the bar which workspace is focused — a bash builtin redirect,
+# no extra process, and a regular file so a dead reader cannot wedge it
 exec-on-workspace-change = ['/bin/bash', '-c',
-  '/opt/homebrew/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE; touch /tmp/omacosy-ws-switch; echo "$AEROSPACE_FOCUSED_WORKSPACE" > /tmp/omacosy-bar-ws; $HOME/.local/bin/omacosy-focus-guard'
+  'touch /tmp/omacosy-ws-switch; echo "$AEROSPACE_FOCUSED_WORKSPACE" > /tmp/omacosy-bar-ws; $HOME/.local/bin/omacosy-focus-guard'
 ]
 
 [gaps]
@@ -38,7 +39,7 @@ inner.vertical = 8
 outer.left = 8
 outer.bottom = 8
 outer.right = 8
-# room for sketchybar: measured from the display top on flat monitors,
+# room for the bar: measured from the display top on flat monitors,
 # but from below the notch strip on built-in notched displays (macOS
 # reports usable space starting there), so the laptop needs less
 outer.top = [{ monitor.'built-in' = 10 }, 42]

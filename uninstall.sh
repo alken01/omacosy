@@ -15,18 +15,17 @@ have() { [ -f "$MANIFEST" ] && grep -qxF "$1" "$MANIFEST"; }
 
 # --- 1. Stop the stack ------------------------------------------------------
 # Quitting AeroSpace restores windows it was managing.
-log "Stopping AeroSpace, sketchybar, borders"
+log "Stopping AeroSpace, the bar, borders"
 osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
 osascript -e 'quit app "Karabiner-Elements"' 2>/dev/null || true
-brew services stop sketchybar 2>/dev/null || true
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" "$HOME/.local/bin/omacosy-borders"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" "$HOME/.local/bin/omacosy-ffm"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/omacosy-dwindle"
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" 2>/dev/null || true
-rm -f "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" "$HOME/.local/bin/omacosy-watcher"
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" "$HOME/.local/bin/omacosy-bar"
 # overview is self-daemonizing (no launchd agent) — kill by pidfile
 if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
   kill "$(cat "/tmp/omacosy-overview-$(id -u).pid")" 2>/dev/null || true
@@ -101,7 +100,6 @@ grep '^copied-config ' "$MANIFEST" 2>/dev/null | sed 's/^copied-config //' |
 restore "$HOME/.zshrc"
 restore "$HOME/.config/starship.toml"
 restore "$HOME/.config/aerospace"
-restore "$HOME/.config/sketchybar"
 
 # re-enable Karabiner's helper agents we disabled
 for agent in Karabiner-Menu Karabiner-NotificationWindow; do
@@ -128,7 +126,7 @@ fi
 
 # theme-set / theme-next out of ~/.local/bin — only when they are OUR
 # symlinks (a user's own script of the same name survives)
-for t in theme-set theme-next omacosy-ws omacosy-toggle omacosy-focus-guard omacosy-ws-collapse omacosy-bar-repaint omacosy-float; do
+for t in theme-set theme-next omacosy-ws omacosy-toggle omacosy-focus-guard omacosy-ws-collapse omacosy-float; do
   target="$(readlink "$HOME/.local/bin/$t" 2>/dev/null || true)"
   case "$target" in *omacosy*) rm -f "$HOME/.local/bin/$t" ;; esac
 done

@@ -20,7 +20,7 @@ have() { grep -qxF "$1" "$MANIFEST" 2>/dev/null; }
 export MANIFEST
 
 # Configs are SYMLINKED into the repo so edits go live — but TCC walls
-# launchd consumers (sketchybar, AeroSpace, and the shells they spawn)
+# launchd consumers (the bar, AeroSpace, and the shells they spawn)
 # off from ~/Documents, ~/Desktop and ~/Downloads. A clone there makes
 # every symlinked config unreadable on a machine without Full Disk
 # Access, so such clones get COPIES instead (re-run install.sh after
@@ -111,7 +111,6 @@ log "Linking configs"
 link "$REPO_DIR/zsh/zshrc"           "$HOME/.zshrc"
 link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
 link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
-link "$REPO_DIR/config/sketchybar"   "$HOME/.config/sketchybar"
 
 # Karabiner is COPIED, not symlinked: its background services can't read
 # configs living under ~/Documents (TCC folder protection) without Full
@@ -158,14 +157,16 @@ if [ ! -x "$HOME/.local/bin/omacosy-dwindle" ] || [ "$REPO_DIR/helper/dwindle.sw
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-dwindle" "$REPO_DIR/helper/dwindle.swift"
 fi
 
-# system-events → bar-triggers daemon (deletes the bar's pollers).
-# The embedded Info.plist carries the Bluetooth usage description an
-# unbundled binary otherwise can't declare.
-if [ ! -x "$HOME/.local/bin/omacosy-watcher" ] || [ "$REPO_DIR/helper/watcher.swift" -nt "$HOME/.local/bin/omacosy-watcher" ]; then
-  log "Building omacosy-watcher"
-  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight \
-    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/watcher-info.plist" \
-    -o "$HOME/.local/bin/omacosy-watcher" "$REPO_DIR/helper/watcher.swift"
+# the status bar itself: one process for the surfaces, reading its own
+# publishers (SkyLight, CoreAudio, IOPS, DisplayServices, SCDynamicStore,
+# IOBluetooth) instead of forking scripts. The embedded Info.plist carries
+# the Bluetooth usage description an unbundled binary otherwise cannot
+# declare, and the agent below sets OMACOSY_MANAGED so it knows it may ask.
+if [ ! -x "$HOME/.local/bin/omacosy-bar" ] || [ "$REPO_DIR/helper/bar.swift" -nt "$HOME/.local/bin/omacosy-bar" ]; then
+  log "Building omacosy-bar"
+  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -framework DisplayServices \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/bar-info.plist" \
+    -o "$HOME/.local/bin/omacosy-bar" "$REPO_DIR/helper/bar.swift"
 fi
 
 # focus-follows-mouse daemon (own binary so helper rebuilds never
@@ -188,7 +189,7 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.watcher "$HOME/.local/bin/omacosy-watcher" 2>/dev/null || true
+  codesign -f -s "Apple Development" --identifier com.omacosy.bar "$HOME/.local/bin/omacosy-bar" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
 else
   log "NOTE: no Apple Development signing identity found."
@@ -255,21 +256,26 @@ PLIST
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
 launchctl load "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist"
 
-cat > "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" <<PLIST
+cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.omacosy.watcher</string>
-  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-watcher</string></array>
+  <key>Label</key><string>com.omacosy.bar</string>
+  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-bar</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardErrorPath</key><string>/tmp/omacosy-watcher.err</string>
+  <!-- TCC judges bluetooth by the RESPONSIBLE process: started from a
+       shell the bar would be killed outright for asking. Under launchd it
+       is responsible for itself and may prompt, and this marker is how it
+       knows the difference. -->
+  <key>EnvironmentVariables</key><dict><key>OMACOSY_MANAGED</key><string>1</string></dict>
+  <key>StandardErrorPath</key><string>/tmp/omacosy-bar.err</string>
 </dict>
 </plist>
 PLIST
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.omacosy.watcher.plist"
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null || true
+launchctl load "$HOME/Library/LaunchAgents/com.omacosy.bar.plist"
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"
@@ -341,8 +347,6 @@ fi
 "$REPO_DIR/macos-defaults.sh"
 
 # --- 7. Services ------------------------------------------------------------
-log "Starting sketchybar"
-brew services restart sketchybar
 
 
 log "Starting AeroSpace"

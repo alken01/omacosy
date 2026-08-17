@@ -49,7 +49,6 @@ case "${1:-}" in
     done
     # moving between two HIDDEN workspaces emits no SkyLight event
     # (nothing on screen changed), so poke the bar directly
-    sketchybar --trigger windows_changed 2>/dev/null
     ;;
   restore)
     [ -s "$MAP" ] || exit 0
@@ -66,7 +65,6 @@ case "${1:-}" in
         echo "$(date '+%F %T') restored $wid -> $gws" >>/tmp/omacosy-ws-collapse.log
     done <"$MAP.run"
     rm -f "$MAP.run"
-    sketchybar --trigger windows_changed 2>/dev/null
     ;;
   *)
     echo "usage: omacosy-ws-collapse <collapse|restore>" >&2

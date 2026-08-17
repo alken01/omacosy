@@ -2,17 +2,17 @@
 # omacosy-toggle [on|off|toggle] — park the whole tiling setup without
 # uninstalling. `off`: AeroSpace stops managing (windows untile and
 # move freely, its keybindings go quiet), the hover-focus, borders and
-# trackpad-swipe daemons stop, sketchybar stops. `on` restores all of
+# trackpad-swipe daemons stop, the bar stops. `on` restores all of
 # it. No args = flip.
 #
 # Untouched either way: Karabiner's CapsLock=Super remap (harmless
 # while AeroSpace is off) and the native menu bar's auto-hide default
-# (hover the top edge to use the menu bar while sketchybar is down).
+# (the native menu bar is there once the bar is down).
 set -euo pipefail
 
 STATE="$HOME/.config/omacosy/disabled"
 UID_N="$(id -u)"
-AGENTS=(com.omacosy.ffm com.omacosy.borders com.omacosy.dwindle com.omacosy.watcher com.acsandmann.swipe)
+AGENTS=(com.omacosy.ffm com.omacosy.borders com.omacosy.dwindle com.omacosy.bar com.acsandmann.swipe)
 
 mode="${1:-toggle}"
 if [ "$mode" = toggle ]; then
@@ -25,7 +25,6 @@ case "$mode" in
     for a in "${AGENTS[@]}"; do
       launchctl bootout "gui/$UID_N/$a" 2>/dev/null || true
     done
-    brew services stop sketchybar >/dev/null 2>&1 || true
     mkdir -p "$(dirname "$STATE")" && touch "$STATE"
     echo "omacosy: OFF — vanilla macOS. Restore with: omacosy-toggle on"
     ;;
@@ -33,7 +32,6 @@ case "$mode" in
     for a in "${AGENTS[@]}"; do
       launchctl bootstrap "gui/$UID_N" "$HOME/Library/LaunchAgents/$a.plist" 2>/dev/null || true
     done
-    brew services start sketchybar >/dev/null 2>&1 || true
     aerospace enable on 2>/dev/null || true
     rm -f "$STATE"
     echo "omacosy: ON — tiling restored"

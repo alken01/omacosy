@@ -52,10 +52,9 @@ One-time permission grants (System Settings → Privacy & Security):
 3. **Screen Recording**: `omacosy-overview` (prompts on the first
    swipe-up) — powers the live window previews in the workspace
    overview; without the grant the cards fall back to app icons.
-4. **Bluetooth**: sketchybar
-   (add manually: `/opt/homebrew/opt/sketchybar/bin/sketchybar`),
-   for the bar's bluetooth menu; `omacosy-watcher` (prompts at first
-   start) — instant bluetooth pill updates on connect/disconnect.
+4. **Bluetooth**: omacosy-bar
+   (prompts at first start) — powers the bluetooth pill and its device
+   menu; without the grant the pill simply stays hidden.
 5. Karabiner-Elements: approve its driver extension when prompted.
 
 ## App choices
@@ -80,13 +79,12 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 |---|---|---|
 | Tiling WM | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | `config/aerospace/aerospace.template.toml` |
 | Super key | [Karabiner](https://karabiner-elements.pqrs.org) (Caps Lock → cmd+ctrl+alt) | `config/karabiner/` (copied, not symlinked — TCC) |
-| Status bar | [sketchybar](https://github.com/FelixKratz/SketchyBar) | `config/sketchybar/` |
+| Status bar | omacosy-bar (native, one process) | `helper/bar.swift` |
 | Window borders + fullscreen shroud | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
 | Dwindle layout | `omacosy-dwindle` (self-compiled launchd agent) | `helper/dwindle.swift` |
-| System events → bar triggers | `omacosy-watcher` (self-compiled launchd agent) | `helper/watcher.swift` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
 | Prompt | starship | `config/starship.toml` |
@@ -108,24 +106,31 @@ position, and per-display notch detection. `omacosy-overview` and
 `omacosy-dwindle` exist because neither a workspace overview nor a
 dwindle layout can be had any other way — Mission Control can't see
 virtual workspaces, and bsp is AeroSpace's most-requested missing
-layout. `omacosy-watcher` turns system events — window churn,
-bluetooth connects, network changes, battery ticks, Spotify's
-lifetime — into bar refreshes, so the bar never polls for anything
-macOS actually announces; its only remaining timers are the weather
-fetch and the clock.
+layout. `omacosy-bar` is the status bar itself: one process holding the window
+model in memory and reading its own publishers — SkyLight for window
+churn, IOBluetooth for connects, SCDynamicStore for the network, IOPS
+for battery, CoreAudio for volume, DisplayServices for brightness,
+Spotify's own broadcast for the track — so it polls for nothing macOS
+announces. Its only timers are the weather fetch and the clock. A
+workspace switch repaints in about 2 ms because it asks no one
+anything; the shell bar it replaced took 165 ms to answer the same
+event.
 
 ## The bar
 
-Transparent bar, everything a flat radius-4 pill, one `GAP` constant
-for spacing. Every popup closes when the cursor leaves it.
+One process draws all of it: bar, popups and sliders are surfaces of
+`helper/bar.swift`. Transparent bar, everything a flat radius-4 pill.
+A popup stays open while the pointer is anywhere in the bar OR the
+popup, and closes when it is in neither. The bar hides itself when a
+window takes the whole display.
 
-- **Apple menu** — About, System Settings, Lock, Sleep, Restart, Shut Down,
-  Next Theme, Reload Bar (the menu the hidden native bar took away).
+- **Apple menu** — About, System Settings, Lock, Sleep, Restart, Shut
+  Down, Next Theme (the menu the hidden native bar took away).
 - **Workspaces** — one segmented capsule per monitor showing only that
   monitor's workspaces; accent pill on the focused one; click to jump.
 - **Media** — prev / play-pause / next + track title (Spotify); centered
   on flat displays, left cluster on notched ones (real per-display
-  notch detection — sketchybar's `q` position is unreliable), hidden
+  notch detection via `NSScreen.safeAreaInsets`), hidden
   when Spotify isn't running.
 - **Bluetooth** — device menu (click to connect/disconnect), power
   toggle. **WiFi** — status, IP, power toggle (macOS 26 hides SSIDs
@@ -134,7 +139,8 @@ for spacing. Every popup closes when the cursor leaves it.
   right-click mutes. **Brightness** — built-in display; scroll
   adjusts, click opens a slider (DisplayServices, no deps).
   **Battery** / **Clock** (calendar popup) /
-  **Activity** (floating btop).
+  **Activity** (floating btop) / **Floats** — appears only while the
+  workspace holds floating windows; click surfaces the next one.
 
 ## Keybindings — Super = hold Caps Lock
 
@@ -187,7 +193,8 @@ wallpaper on every display, and any terminal that follows omarchy's
 
 Themes: `tokyo-night`, `catppuccin`, `gruvbox`, `osaka-jade`. Each
 `themes/<name>/` holds `colors.toml` (omarchy's 22-color palette),
-`sketchybar.sh` / `borders.sh` (bar and ring colors — the ring uses the
+`sketchybar.sh` / `borders.sh` (bar and ring colors — the file keeps
+its omarchy name and format; the ring uses the
 theme accent, omarchy's own convention), and `backgrounds/` (wallpapers
 from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 
@@ -261,7 +268,6 @@ teardown that leaves all Homebrew packages in place.
 MIT (see `LICENSE`). Standing on: [omarchy](https://omarchy.org)
 (the whole idea, plus MIT-licensed theme palettes and wallpapers),
 [AeroSpace](https://github.com/nikitabobko/AeroSpace),
-[sketchybar](https://github.com/FelixKratz/SketchyBar),
 [Karabiner-Elements](https://karabiner-elements.pqrs.org),
 [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) (MIT;
 patched here for macOS 26, fixes offered upstream).

@@ -1,14 +1,12 @@
 # omacosy — everything the setup needs, installable via `brew bundle`
 
 tap "nikitabobko/tap"        # aerospace
-tap "FelixKratz/formulae"    # sketchybar, borders
 
 # Window management + bar + borders
 cask "aerospace"
 cask "karabiner-elements"  # Caps Lock -> Super
 cask "ghostty"             # default terminal + floating TUI host (btop)
 cask "raycast"             # Super+Space launcher (the binding assumes it)
-brew "sketchybar"
 
 # CLI stack
 brew "fzf"
@@ -21,5 +19,4 @@ brew "btop"
 brew "starship"
 brew "jq"
 
-# Nerd Font for sketchybar (Korren embeds its own)
 cask "font-jetbrains-mono-nerd-font"
