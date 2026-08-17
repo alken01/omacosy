@@ -22,6 +22,49 @@ Direction, not promises. Ordered roughly by pull.
   Apple Silicon, one external display. Sequoia and Intel are
   unknown territory — reports welcome.
 
+## Native shell (measured experiment, not yet a direction)
+
+`helper/bar.swift` is a deliberate slice, not part of the install: a bar
+surface drawn by one Swift process — workspace chips and the front-app
+pill — on the built-in display, stacked under sketchybar's own bar so
+both can be watched at once. Build and run it by hand:
+
+```
+swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight \
+  -o /tmp/omacosy-bar helper/bar.swift && /tmp/omacosy-bar &
+```
+
+It exists to price one question: how much of the bar's latency is the
+work, and how much is the process boundaries? Measured on this machine,
+same event, from signal received to pixels drawn:
+
+| path | mean | max |
+|---|---|---|
+| sketchybar (`spaces.sh`, excluding its fork and trigger IPC) | 164.79 ms | 191.71 ms |
+| native, model held in memory | 2.50 ms | 3.65 ms |
+
+The difference is not language. It is that `spaces.sh` spawns five
+`aerospace` CLI calls (~23 ms each) to ask what just happened, while the
+native process already holds the window model — fed by the same SkyLight
+notifications three daemons are separately subscribed to today. The slow
+path (which windows exist, where) costs ~65 ms and runs off the main
+queue on window create/destroy only, never on a switch.
+
+Two findings worth keeping even if this goes no further:
+
+- Asking for a font family and **verifying you got it** makes the
+  Hiragino class of bug unrepresentable; sketchybar's `--default` failed
+  silently for months.
+- Running the CLI calls inline on the main queue blocked rendering for
+  7.6 s under contention. The architecture only pays if subprocess work
+  never sits on the path a frame travels — the same discipline, applied
+  one level in.
+
+Not decided: whether to grow this into the whole shell (bar, popups,
+OSD, overview, borders in one process) or leave sketchybar alone. The
+scope that would make sense is those five surfaces — never a lock screen
+(`loginwindow` is protected) or a Notification Center replacement.
+
 ## Wants
 
 - **omarchy's scrolling layout** (`Super+L`, per-workspace) — the

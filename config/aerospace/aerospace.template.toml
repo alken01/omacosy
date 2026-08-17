@@ -29,7 +29,7 @@ on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
 # Tell sketchybar which workspace is focused
 exec-on-workspace-change = ['/bin/bash', '-c',
-  '/opt/homebrew/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE; touch /tmp/omacosy-ws-switch; $HOME/.local/bin/omacosy-focus-guard'
+  '/opt/homebrew/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE; touch /tmp/omacosy-ws-switch; echo "$AEROSPACE_FOCUSED_WORKSPACE" > /tmp/omacosy-bar-ws; $HOME/.local/bin/omacosy-focus-guard'
 ]
 
 [gaps]
