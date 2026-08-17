@@ -173,7 +173,6 @@ final class Model {
     var occupied: Set<String> = []
     var frontApp = ""
     var media = Media()
-    var floating: [String: Int] = [:]
 }
 
 struct Media: Equatable {
@@ -197,7 +196,6 @@ struct Snapshot {
     var perMonitor: [String: (workspaces: [String], visible: String)] = [:]
     var soleApp: [String: String] = [:]
     var occupied: Set<String> = []
-    var floating: [String: Int] = [:] // workspace -> floating windows
 }
 
 let rebuildQueue = DispatchQueue(label: "com.omacosy.bar.rebuild")
@@ -219,10 +217,7 @@ func fetchSnapshot() -> Snapshot {
                            "%{workspace}|%{app-name}|%{window-layout}"]).split(separator: "\n") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         guard f.count >= 3 else { continue }
-        if f[2] == "floating" {
-            s.floating[f[0], default: 0] += 1
-            continue
-        }
+        guard f[2] != "floating" else { continue }
         s.occupied.insert(f[0])
         if let existing = sole[f[0]] {
             if existing != f[1] { count[f[0]] = 2 }
@@ -246,22 +241,8 @@ func apply(_ s: Snapshot) {
     }
     model.occupied = s.occupied
     model.soleApp = s.soleApp
-    model.floating = s.floating
-    updateFloats()
 }
 
-// A float sinks behind the tiles as soon as another app takes focus, so
-// the pill is the only trace it leaves. The count is already in the
-// snapshot, which means a workspace switch needs no query to update it.
-func updateFloats() {
-    let count = model.floating[model.focused] ?? 0
-    set("floats") {
-        $0.drawing = count > 0
-        $0.icon = "\u{f10ac}"
-        $0.iconColor = palette.accent
-        $0.label = count > 0 ? "\(count)" : ""
-    }
-}
 
 // FAST path: a workspace switch changes focus and nothing else. No CLI,
 // no IPC, no shell — every surface already knows the rest, and the one
@@ -269,7 +250,6 @@ func updateFloats() {
 func setFocused(_ ws: String) {
     model.focused = ws
     for surface in surfaces where surface.mine.contains(ws) { surface.visible = ws }
-    updateFloats()
 }
 
 // --- media (Spotify announces itself; the title needs no subprocess) -------
@@ -346,7 +326,7 @@ struct BarItem: Equatable {
 }
 
 // screen order, left to right
-let rightOrder = ["floats", "weather", "wifi", "bluetooth", "brightness", "volume", "battery", "clock", "activity"]
+let rightOrder = ["weather", "wifi", "bluetooth", "brightness", "volume", "battery", "clock", "activity"]
 var rightItems: [String: BarItem] = [:]
 
 func set(_ name: String, _ mutate: (inout BarItem) -> Void) {
@@ -1220,24 +1200,20 @@ let chipPillHeight: CGFloat = 20
 let radius: CGFloat = 4
 let gap: CGFloat = 14
 
-// the terminal the activity pill opens btop in — the same apps.conf the
-// bar and aerospace read, so one config still drives all of them
+// The terminal the activity pill opens btop in. install.sh writes the
+// RESOLVED choice (apps.local.conf overrides already applied) next to the
+// other daemon configs, because a launchd agent cannot read the repo when
+// the clone sits under ~/Documents — which is exactly where this one is.
 let terminalApp: String = {
-    let config = URL(fileURLWithPath: (FileManager.default
-        .destinationOfSymbolicLinkAtPathIfAny("\(NSHomeDirectory())/.config/sketchybar")))
-        .deletingLastPathComponent().appendingPathComponent("apps.conf")
+    let config = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent(".config/omacosy/apps.conf")
     guard let text = try? String(contentsOf: config, encoding: .utf8) else { return "Ghostty" }
     for line in text.split(separator: "\n") where line.hasPrefix("TERMINAL=") {
-        return line.dropFirst("TERMINAL=".count).trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        return line.dropFirst("TERMINAL=".count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
     }
     return "Ghostty"
 }()
-
-extension FileManager {
-    func destinationOfSymbolicLinkAtPathIfAny(_ path: String) -> String {
-        (try? destinationOfSymbolicLink(atPath: path)) ?? path
-    }
-}
 
 final class BarView: NSView {
     weak var surface: BarSurface?
