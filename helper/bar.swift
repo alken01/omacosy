@@ -238,9 +238,11 @@ final class BarView: NSView {
         let appFont = nerdFont("Bold", 13)
 
         // workspace chips, in one bracket
+        // Same rule as the bar: an empty GUEST workspace (the two-digit
+        // set that force-assignment parks here while undocked) is noise,
+        // but an empty primary keeps its slot so the row stays 1..9.
         let shown = model.workspaces.filter {
-            // an empty guest set is noise; same rule the bar already uses
-            model.workspaces.count <= 9 || model.occupied.contains($0) || $0 == model.focused
+            $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
         }
         let bracketW = CGFloat(shown.count) * (chipBox + chipPad * 2)
         let bracket = NSRect(x: padLeft, y: (barHeight - pillHeight) / 2,
@@ -305,16 +307,29 @@ func builtinScreen() -> NSScreen? {
     }
 }
 
-guard let screen = builtinScreen() else {
-    FileHandle.standardError.write("omacosy-bar: no built-in display\n".data(using: .utf8)!)
-    exit(1)
+// The aerospace monitor id is NOT stable across a hotplug: undock and the
+// built-in stops being monitor 2 and becomes monitor 1, at which point a
+// cached id returns "Invalid monitor ID" and the snapshot comes back
+// empty — the bar then renders the last set it knew, silently stale.
+// Resolve the id by display NAME every time the screens change.
+func targetScreen() -> NSScreen? { builtinScreen() ?? NSScreen.main }
+
+func resolveMonitor() {
+    guard let screen = targetScreen() else { return }
+    for line in aerospace(["list-monitors", "--format", "%{monitor-id}|%{monitor-name}"]).split(separator: "\n") {
+        let f = line.split(separator: "|").map(String.init)
+        if f.count == 2, f[1] == screen.localizedName, f[0] != monitorID {
+            tlog("monitor: \(screen.localizedName) is now aerospace monitor \(f[0]) (was \(monitorID))")
+            monitorID = f[0]
+        }
+    }
 }
 
-// match it to aerospace's monitor id by name
-for line in aerospace(["list-monitors", "--format", "%{monitor-id}|%{monitor-name}"]).split(separator: "\n") {
-    let f = line.split(separator: "|").map(String.init)
-    if f.count == 2, f[1] == screen.localizedName { monitorID = f[0] }
+guard let screen = targetScreen() else {
+    FileHandle.standardError.write("omacosy-bar: no usable display\n".data(using: .utf8)!)
+    exit(1)
 }
+resolveMonitor()
 
 // AppKit pushes an ordinary window down out of the menu-bar strip, which
 // is exactly where a bar belongs — 32 px lower than asked for, measured.
@@ -404,6 +419,30 @@ NSWorkspace.shared.notificationCenter.addObserver(
     repaint()
     let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
     tlog(String(format: "frontapp %@ %.2f ms", name, ms))
+}
+
+// Displays come and go: re-resolve which aerospace monitor this screen is
+// now, move the window onto it, and rebuild. Screen parameters arrive
+// before the arrangement settles, so give it a beat (borders.swift learnt
+// the same lesson with a stale CG-to-Cocoa flip after a replug).
+func placeWindow() {
+    guard let screen = targetScreen() else { return }
+    MainActor.assumeIsolated {
+        win.setFrame(NSRect(x: screen.frame.minX,
+                            y: screen.frame.maxY - barHeight - stackOffset,
+                            width: screen.frame.width, height: barHeight), display: true)
+        view.frame = NSRect(origin: .zero, size: win.frame.size)
+    }
+}
+
+NotificationCenter.default.addObserver(
+    forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+) { _ in
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        resolveMonitor()
+        placeWindow()
+        kickRebuild()
+    }
 }
 
 // window create/destroy: the only thing that needs the slow path, and it

@@ -59,6 +59,13 @@ Two findings worth keeping even if this goes no further:
   7.6 s under contention. The architecture only pays if subprocess work
   never sits on the path a frame travels — the same discipline, applied
   one level in.
+- **AeroSpace monitor ids are not stable across a hotplug.** Undock and
+  the built-in stops being monitor 2 and becomes monitor 1; a cached id
+  then answers `Invalid monitor ID`, the snapshot returns empty, and the
+  bar keeps rendering the last set it knew — stale, with no error. Found
+  within an hour of first running it, by unplugging. The id is now
+  re-resolved by display NAME on every screen-parameters change, which is
+  the same trap `borders.swift` hit with a stale CG-to-Cocoa flip.
 
 Not decided: whether to grow this into the whole shell (bar, popups,
 OSD, overview, borders in one process) or leave sketchybar alone. The
