@@ -135,7 +135,14 @@ side gaps too, and a tiled one never does. Note that
 `%{window-is-fullscreen}` reported `false` on a window that measured
 1512x950 — aerospace's own flag could not be used for this.
 
-Still missing before this could replace sketchybar: the apple menu popup, per-display bars, notch-aware layout, and
+The apple menu is the last of the parity list: About This Mac, System
+Settings, Lock Screen, Sleep, Restart, Shut Down, Next Theme. Its popup
+aligns to its LEFT edge, being the leftmost thing on the bar. "Reload
+Bar" has no counterpart on purpose — there is no config to re-read and
+the theme is watched, so a row that did nothing would be worse than a row
+that is absent.
+
+What is left is not features but standing: per-display bars, notch-aware layout, and
 fullscreen hiding. Not decided: whether to grow it into the whole shell
 (bar, popups, OSD, overview, borders in one process) or leave sketchybar
 alone. The scope that would make sense is those five surfaces — never a

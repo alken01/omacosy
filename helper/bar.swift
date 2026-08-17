@@ -930,7 +930,7 @@ func refreshPopup() {
     view.display()
 }
 
-func showPopup(_ name: String, under anchor: NSRect, on surface: BarSurface) {
+func showPopup(_ name: String, under anchor: NSRect, on surface: BarSurface, alignLeft: Bool = false) {
     if openPopup == name { closePopup(); return }
     closePopup()
     let rows = popupRows(for: name)
@@ -944,7 +944,7 @@ func showPopup(_ name: String, under anchor: NSRect, on surface: BarSurface) {
     // right-aligned under the item, clamped to the screen it opened on
     let screen = surface.screen
     let barBottom = surface.window.frame.minY
-    var x = anchor.maxX - size.width
+    var x = alignLeft ? anchor.minX : anchor.maxX - size.width
     x = min(max(screen.frame.minX + 6, x), screen.frame.maxX - size.width - 6)
     let window = PopupWindow(contentRect: NSRect(x: x, y: barBottom - size.height - 4,
                                                  width: size.width, height: size.height),
@@ -1108,8 +1108,39 @@ func weatherRows() -> [PopupRow] {
     return rows
 }
 
+// The system menu the hidden native menu bar used to carry, plus the two
+// omacosy actions. "Reload Bar" has no counterpart here on purpose: there
+// is no config to re-read, the theme is watched, and a row that did
+// nothing would be worse than a row that is absent.
+func appleRows() -> [PopupRow] {
+    func settings(_ pane: String) -> () -> Void {
+        { NSWorkspace.shared.open(URL(string: pane)!); closePopup() }
+    }
+    func run(_ launch: String, _ args: [String]) -> () -> Void {
+        {
+            closePopup()
+            DispatchQueue.global(qos: .userInitiated).async { _ = shell(launch, args) }
+        }
+    }
+    func systemEvents(_ verb: String) -> () -> Void {
+        run("/usr/bin/osascript", ["-e", "tell application \"System Events\" to \(verb)"])
+    }
+    return [
+        PopupRow(text: "About This Mac", hero: true,
+                 action: settings("x-apple.systempreferences:com.apple.SystemProfiler.AboutExtension")),
+        PopupRow(text: "System Settings…", action: run("/usr/bin/open", ["-a", "System Settings"])),
+        PopupRow(text: "Lock Screen", action: run("/usr/bin/pmset", ["displaysleepnow"])),
+        PopupRow(text: "Sleep", action: run("/usr/bin/pmset", ["sleepnow"])),
+        PopupRow(text: "Restart…", action: systemEvents("restart")),
+        PopupRow(text: "Shut Down…", action: systemEvents("shut down")),
+        PopupRow(text: "Next Theme", dim: true,
+                 action: run("\(NSHomeDirectory())/.local/bin/theme-next", [])),
+    ]
+}
+
 func popupRows(for name: String) -> [PopupRow] {
     switch name {
+    case "apple": return appleRows()
     case "clock": return calendarRows()
     case "weather": return weatherRows()
     case "brightness": return brightnessRows()
@@ -1170,6 +1201,7 @@ final class BarView: NSView {
     var chipRects: [(String, NSRect)] = []
     var itemRects: [(String, NSRect)] = []
     var mediaRects: [(String, NSRect)] = []
+    var appleRect: NSRect = .zero
 
     override var isFlipped: Bool { false }
 
@@ -1234,13 +1266,27 @@ final class BarView: NSView {
         let shown = surface.workspaces.filter {
             $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
         }
+        // apple pill: the system menu the hidden native menu bar carried
+        let appleAttrs: [NSAttributedString.Key: Any] =
+            [.font: nerdFont("Bold", 15), .foregroundColor: palette.accent]
+        let appleGlyph = "\u{f179}"
+        let appleW = (appleGlyph as NSString).size(withAttributes: appleAttrs).width + 16
+        let apple = NSRect(x: padLeft, y: (barHeight - pillHeight) / 2, width: appleW, height: pillHeight)
+        palette.itemBG.setFill()
+        NSBezierPath(roundedRect: apple, xRadius: radius, yRadius: radius).fill()
+        let appleSize = (appleGlyph as NSString).size(withAttributes: appleAttrs)
+        (appleGlyph as NSString).draw(at: NSPoint(x: apple.midX - appleSize.width / 2,
+                                                 y: apple.midY - appleSize.height / 2),
+                                      withAttributes: appleAttrs)
+        appleRect = NSRect(x: apple.minX, y: 0, width: appleW, height: barHeight)
+
         let bracketW = CGFloat(shown.count) * (chipBox + chipPad * 2)
-        let bracket = NSRect(x: padLeft, y: (barHeight - pillHeight) / 2,
+        let bracket = NSRect(x: apple.maxX + 10, y: (barHeight - pillHeight) / 2,
                              width: bracketW, height: pillHeight)
         palette.itemBG.setFill()
         NSBezierPath(roundedRect: bracket, xRadius: radius, yRadius: radius).fill()
 
-        var x = padLeft
+        var x = bracket.minX
         for ws in shown {
             let slot = NSRect(x: x, y: 0, width: chipBox + chipPad * 2, height: barHeight)
             let box = slot.insetBy(dx: chipPad, dy: 0)
@@ -1336,6 +1382,13 @@ final class BarView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if appleRect.contains(p), let surface {
+            // aligned to its LEFT edge: it is the leftmost thing on the bar,
+            // so a right-aligned popup would hang off the screen
+            showPopup("apple", under: window?.convertToScreen(convert(appleRect, to: nil)) ?? appleRect,
+                      on: surface, alignLeft: true)
+            return
+        }
         if let ws = chipRects.first(where: { $0.1.contains(p) })?.0 {
             DispatchQueue.global(qos: .userInitiated).async { aerospace(["workspace", ws]) }
             return
