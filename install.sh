@@ -362,8 +362,16 @@ fi
 log "Starting AeroSpace"
 open -a AeroSpace
 
-log "Starting Karabiner-Elements (Caps Lock -> Super)"
-open -a Karabiner-Elements
+# The remapping runs in launchd-managed services; the app itself is only
+# the settings window, and it costs ~92MB resident to leave open. Launch
+# it only when the service is not already up — i.e. a first run, where it
+# is needed to approve the driver extension.
+if launchctl list 2>/dev/null | grep -q org.pqrs.service.agent.karabiner_console_user_server; then
+  log "Karabiner already running (Caps Lock -> Super)"
+else
+  log "Starting Karabiner-Elements (approve its driver extension, then quit the app)"
+  open -a Karabiner-Elements
+fi
 
 cat <<'EOF'
 
