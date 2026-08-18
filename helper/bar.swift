@@ -814,11 +814,8 @@ final class PopupView: NSView {
     func measure() -> NSSize {
         var width: CGFloat = 0
         for row in rows {
-            let attrs: [NSAttributedString.Key: Any] = [.font: font(row)]
-            var w = (row.text as NSString).size(withAttributes: attrs).width
-            if !row.icon.isEmpty {
-                w += (row.icon as NSString).size(withAttributes: [.font: nerdFont("Bold", 13)]).width + 8
-            }
+            var w = advance(row.text, font(row))
+            if !row.icon.isEmpty { w += inkBox(row.icon, nerdFont("Bold", 13)).width + 8 }
             if row.slider != nil { w = max(w, 150) }
             width = max(width, w)
         }
@@ -845,12 +842,13 @@ final class PopupView: NSView {
             }
             var x = rect.minX + 4
             if !row.icon.isEmpty {
-                let iconAttrs: [NSAttributedString.Key: Any] =
-                    [.font: nerdFont("Bold", 13), .foregroundColor: palette.accent]
-                let size = (row.icon as NSString).size(withAttributes: iconAttrs)
-                (row.icon as NSString).draw(at: NSPoint(x: x, y: rect.midY - size.height / 2),
-                                            withAttributes: iconAttrs)
-                x += size.width + 8
+                // same strategy as the bar: glyphs centre on ink, text on
+                // cap height — one way of placing things in this file
+                let iconFont = nerdFont("Bold", 13)
+                let w = inkBox(row.icon, iconFont).width
+                drawIcon(row.icon, iconFont, palette.accent,
+                         centeredIn: NSRect(x: x, y: rect.minY, width: w, height: rect.height))
+                x += w + 8
             }
             if let value = row.slider {
                 // track, then filled portion — the readout is the row's text
@@ -862,18 +860,10 @@ final class PopupView: NSView {
                 NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY,
                                                  width: track.width * CGFloat(value), height: track.height),
                              xRadius: 3, yRadius: 3).fill()
-                let attrs: [NSAttributedString.Key: Any] =
-                    [.font: font(row), .foregroundColor: color(row)]
-                let size = (row.text as NSString).size(withAttributes: attrs)
-                (row.text as NSString).draw(
-                    at: NSPoint(x: rect.maxX - size.width - 4, y: rect.midY - size.height / 2),
-                    withAttributes: attrs)
+                drawText(row.text, font(row), color(row),
+                         leftAt: rect.maxX - advance(row.text, font(row)) - 4, midY: rect.midY)
             } else {
-                let attrs: [NSAttributedString.Key: Any] =
-                    [.font: font(row), .foregroundColor: color(row)]
-                let size = (row.text as NSString).size(withAttributes: attrs)
-                (row.text as NSString).draw(at: NSPoint(x: x, y: rect.midY - size.height / 2),
-                                            withAttributes: attrs)
+                drawText(row.text, font(row), color(row), leftAt: x, midY: rect.midY)
             }
             rowRects.append((index, rect))
             y += rowHeight
@@ -1180,6 +1170,59 @@ extension String {
 
 // --- view -----------------------------------------------------------------
 
+// Text positioning, done properly.
+//
+// `NSString.size(withAttributes:)` returns the TYPOGRAPHIC box — advance
+// width and line height — which is what you want to flow a paragraph and
+// exactly wrong for centring one glyph in a pill. A glyph's ink does not
+// fill its advance (Nerd Font icons carry lopsided side bearings), and a
+// line box reserves descender room that digits never use. Measured on the
+// live bar, that put the wifi glyph 4 px right of centre and every label
+// about 1 px high.
+//
+// So: icons centre on their INK box, text centres on CAP HEIGHT. Cap
+// height rather than ink for text because it does not move when the
+// content changes — "28°C" and "8:05 PM" sit on the same baseline.
+func inkBox(_ s: String, _ font: NSFont) -> CGRect {
+    let line = CTLineCreateWithAttributedString(
+        NSAttributedString(string: s, attributes: [.font: font]))
+    return CTLineGetImageBounds(line, nil) // baseline at y = 0
+}
+
+func advance(_ s: String, _ font: NSFont) -> CGFloat {
+    let line = CTLineCreateWithAttributedString(
+        NSAttributedString(string: s, attributes: [.font: font]))
+    return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+}
+
+// draws with `origin` as the BASELINE origin, which is the only anchor
+// that means the same thing for every string
+func drawLine(_ s: String, _ font: NSFont, _ color: NSColor, baseline origin: CGPoint) {
+    guard !s.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
+    let line = CTLineCreateWithAttributedString(NSAttributedString(
+        string: s, attributes: [.font: font, .foregroundColor: color]))
+    ctx.textPosition = origin
+    CTLineDraw(line, ctx)
+}
+
+// one glyph, centred on its ink in both axes
+func drawIcon(_ s: String, _ font: NSFont, _ color: NSColor, centeredIn box: CGRect) {
+    let ink = inkBox(s, font)
+    drawLine(s, font, color,
+             baseline: CGPoint(x: box.midX - ink.midX, y: box.midY - ink.midY))
+}
+
+// a text run: advance-centred across, cap-height-centred down
+func drawText(_ s: String, _ font: NSFont, _ color: NSColor, centeredIn box: CGRect) {
+    drawLine(s, font, color,
+             baseline: CGPoint(x: box.midX - advance(s, font) / 2,
+                               y: box.midY - font.capHeight / 2))
+}
+
+func drawText(_ s: String, _ font: NSFont, _ color: NSColor, leftAt x: CGFloat, midY: CGFloat) {
+    drawLine(s, font, color, baseline: CGPoint(x: x, y: midY - font.capHeight / 2))
+}
+
 // Icons come from the running app and are cached by name: a redraw must
 // not walk the process list.
 var iconCache: [String: NSImage] = [:]
@@ -1227,11 +1270,35 @@ final class BarView: NSView {
     // the media capsule: transport glyphs then the title, one pill. Its
     // width is measured, not cached — sketchybar needs an md5-keyed width
     // cache here only because it cannot measure text before laying out.
+    // The capsule was measured from a glyph string with spaces in it and
+    // then drawn glyph-by-glyph with different spacing, so the pill came
+    // out 7 px wider than its contents. One layout, used by both.
+    private func mediaGlyphs() -> [(String, String)] {
+        [("prev", "󰒮"), ("play", model.media.playing ? "󰏤" : "󰐊"), ("next", "󰒭")]
+    }
+
+    // Positions first, size second: the pill is as wide as what it holds
+    // plus equal padding, so the two can never disagree. Both ends measure
+    // INK, so the trailing edge is not padded by a character's unused
+    // advance the way the leading edge is not.
+    private func mediaLayout(_ titleFont: NSFont, _ iconFont: NSFont)
+        -> (width: CGFloat, glyphs: [(String, String, CGFloat, CGFloat)], titleX: CGFloat) {
+        var x: CGFloat = 10
+        var placed: [(String, String, CGFloat, CGFloat)] = []
+        for (name, glyph) in mediaGlyphs() {
+            let w = inkBox(glyph, iconFont).width
+            placed.append((name, glyph, x, w))
+            x += w + 6
+        }
+        x += 6 // transport-to-title gap, on top of the 6 already added
+        let titleX = x
+        let ink = inkBox(clippedTitle, titleFont)
+        return (titleX + ink.maxX + 10, placed, titleX)
+    }
+
     private func mediaSize(_ titleFont: NSFont, _ iconFont: NSFont) -> CGFloat {
         guard model.media.running, !model.media.title.isEmpty else { return 0 }
-        let glyphs = ("󰒮 󰐊 󰒭" as NSString).size(withAttributes: [.font: iconFont]).width
-        let title = (clippedTitle as NSString).size(withAttributes: [.font: titleFont]).width
-        return 10 + glyphs + 12 + title + 12
+        return mediaLayout(titleFont, iconFont).width
     }
 
     private var clippedTitle: String {
@@ -1247,26 +1314,20 @@ final class BarView: NSView {
         palette.itemBG.setFill()
         NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
 
-        var x = pill.minX + 10
-        for (name, glyph) in [("prev", "󰒮"), ("play", model.media.playing ? "󰏤" : "󰐊"), ("next", "󰒭")] {
-            let attrs: [NSAttributedString.Key: Any] = [.font: iconFont, .foregroundColor: palette.label]
-            let size = (glyph as NSString).size(withAttributes: attrs)
-            (glyph as NSString).draw(at: NSPoint(x: x, y: pill.midY - size.height / 2), withAttributes: attrs)
-            mediaRects.append((name, NSRect(x: x - 4, y: 0, width: size.width + 8, height: barHeight)))
-            x += size.width + 6
+        let layout = mediaLayout(titleFont, iconFont)
+        for (name, glyph, dx, w) in layout.glyphs {
+            drawIcon(glyph, iconFont, palette.label,
+                     centeredIn: NSRect(x: pill.minX + dx, y: pill.minY, width: w, height: pill.height))
+            mediaRects.append((name, NSRect(x: pill.minX + dx - 4, y: 0, width: w + 8, height: barHeight)))
         }
-        let attrs: [NSAttributedString.Key: Any] = [.font: titleFont, .foregroundColor: palette.label]
-        let size = (clippedTitle as NSString).size(withAttributes: attrs)
-        (clippedTitle as NSString).draw(at: NSPoint(x: x + 6, y: pill.midY - size.height / 2),
-                                        withAttributes: attrs)
-        mediaRects.append(("title", NSRect(x: x + 6, y: 0, width: size.width, height: barHeight)))
+        drawText(clippedTitle, titleFont, palette.label,
+                 leftAt: pill.minX + layout.titleX, midY: pill.midY)
+        mediaRects.append(("title", NSRect(x: pill.minX + layout.titleX, y: 0,
+                                           width: advance(clippedTitle, titleFont), height: barHeight)))
     }
 
     private func draw(_ s: String, _ font: NSFont, _ color: NSColor, centeredIn box: NSRect) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        let size = (s as NSString).size(withAttributes: attrs)
-        let at = NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2)
-        (s as NSString).draw(at: at, withAttributes: attrs)
+        drawText(s, font, color, centeredIn: box)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1286,17 +1347,13 @@ final class BarView: NSView {
             $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
         }
         // apple pill: the system menu the hidden native menu bar carried
-        let appleAttrs: [NSAttributedString.Key: Any] =
-            [.font: nerdFont("Bold", 15), .foregroundColor: palette.accent]
         let appleGlyph = "\u{f179}"
-        let appleW = (appleGlyph as NSString).size(withAttributes: appleAttrs).width + 16
+        let appleFont = nerdFont("Bold", 15)
+        let appleW = inkBox(appleGlyph, appleFont).width + 20
         let apple = NSRect(x: padLeft, y: (barHeight - pillHeight) / 2, width: appleW, height: pillHeight)
         palette.itemBG.setFill()
         NSBezierPath(roundedRect: apple, xRadius: radius, yRadius: radius).fill()
-        let appleSize = (appleGlyph as NSString).size(withAttributes: appleAttrs)
-        (appleGlyph as NSString).draw(at: NSPoint(x: apple.midX - appleSize.width / 2,
-                                                 y: apple.midY - appleSize.height / 2),
-                                      withAttributes: appleAttrs)
+        drawIcon(appleGlyph, appleFont, palette.accent, centeredIn: apple)
         appleRect = NSRect(x: apple.minX, y: 0, width: appleW, height: barHeight)
 
         let bracketW = CGFloat(shown.count) * (chipBox + chipPad * 2)
@@ -1332,8 +1389,7 @@ final class BarView: NSView {
         // front-app pill
         var leftEdge = bracket.maxX
         if !model.frontApp.isEmpty {
-            let attrs: [NSAttributedString.Key: Any] = [.font: appFont, .foregroundColor: palette.accent]
-            let textW = (model.frontApp as NSString).size(withAttributes: attrs).width
+            let textW = advance(model.frontApp, appFont)
             let pill = NSRect(x: bracket.maxX + gap, y: (barHeight - pillHeight) / 2,
                               width: textW + 20, height: pillHeight)
             palette.itemBG.setFill()
@@ -1356,24 +1412,32 @@ final class BarView: NSView {
         for name in rightOrder.reversed() {
             guard let item = rightItems[name], item.drawing,
                   !(item.icon.isEmpty && item.label.isEmpty) else { continue }
-            let iconAttrs: [NSAttributedString.Key: Any] =
-                [.font: iconFont, .foregroundColor: item.iconColor ?? palette.label]
-            let labelAttrs: [NSAttributedString.Key: Any] =
-                [.font: chipFont, .foregroundColor: palette.label]
-            let iconSize = (item.icon as NSString).size(withAttributes: iconAttrs)
-            let labelSize = (item.label as NSString).size(withAttributes: labelAttrs)
-            // icon.padding_left 10, icon-to-label 7, label.padding_right 10
-            let width = 10 + iconSize.width + (item.label.isEmpty ? 10 : 7 + labelSize.width + 10)
+            let labelFont = chipFont
+            let iconColor = item.iconColor ?? palette.label
+            let hasIcon = !item.icon.isEmpty
+            let hasLabel = !item.label.isEmpty
+            // An icon-only pill is sized and centred on the glyph's INK, so
+            // a lopsided side bearing cannot push it off centre. A pill with
+            // a label flows icon-then-text, and the gap between them exists
+            // only when both do — the weather pill has no icon (its glyph
+            // lives in the label) and inherited the gap anyway, which is the
+            // 7 px it sat right of centre by.
+            let iconInk = hasIcon ? inkBox(item.icon, iconFont).width : 0
+            let labelAdv = hasLabel ? advance(item.label, labelFont) : 0
+            let innerGap: CGFloat = hasIcon && hasLabel ? 7 : 0
+            let width = 10 + iconInk + innerGap + labelAdv + 10
             let pill = NSRect(x: cursor - width, y: (barHeight - pillHeight) / 2,
                               width: width, height: pillHeight)
             palette.itemBG.setFill()
             NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
-            (item.icon as NSString).draw(
-                at: NSPoint(x: pill.minX + 10, y: pill.midY - iconSize.height / 2), withAttributes: iconAttrs)
-            if !item.label.isEmpty {
-                (item.label as NSString).draw(
-                    at: NSPoint(x: pill.minX + 10 + iconSize.width + 7, y: pill.midY - labelSize.height / 2),
-                    withAttributes: labelAttrs)
+            if hasIcon {
+                drawIcon(item.icon, iconFont, iconColor,
+                         centeredIn: NSRect(x: pill.minX + 10, y: pill.minY,
+                                            width: iconInk, height: pill.height))
+            }
+            if hasLabel {
+                drawText(item.label, labelFont, palette.label,
+                         leftAt: pill.minX + 10 + iconInk + innerGap, midY: pill.midY)
             }
             itemRects.append((name, NSRect(x: pill.minX, y: 0, width: width, height: barHeight)))
             cursor = pill.minX - gap
