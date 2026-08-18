@@ -122,10 +122,33 @@ cmd-ctrl-alt-shift-7 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 7 move'
 cmd-ctrl-alt-shift-8 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 8 move'
 cmd-ctrl-alt-shift-9 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 9 move'
 
-cmd-ctrl-alt-tab = 'workspace-back-and-forth'
+# Workspace navigation (omarchy: Super+Tab / Super+Shift+Tab). These
+# cycle within the focused MONITOR's own set — aerospace's own
+# `workspace next` walks every workspace on the machine and hops
+# displays, and undocked it wanders into the parked 11-19 guests.
+cmd-ctrl-alt-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 next'
+cmd-ctrl-alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 prev'
+# Back-and-forth loses Super+Tab to the above. omarchy puts it on
+# Super+Ctrl+Tab, which we cannot express: Super IS cmd+ctrl+alt, so
+# ctrl and alt are already spent and only Shift is left as a layer.
+cmd-ctrl-alt-b = 'workspace-back-and-forth'
+
+# Cycle windows WITHIN the workspace (omarchy: Alt+Tab). macOS's own
+# switcher is Cmd+Tab and switches APPS; nothing reaches a third window
+# on a workspace without this.
+# Not `focus dfs-next`: it ignores --boundaries workspace, measured — it
+# walked from a window on workspace 3 to Slack on 4 and then Arc on 1.
+# omacosy-cycle walks this workspace's own window list instead, floats
+# included, so it is also the one switcher that reaches a sunken float.
+alt-tab = 'exec-and-forget $HOME/.local/bin/omacosy-cycle next'
+alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-cycle prev'
+
+# Cycle focus between monitors (omarchy: Ctrl+Alt+Tab, and free here)
+ctrl-alt-tab = 'focus-monitor next --wrap-around'
+
 # throw the focused WINDOW to the same slot on the other monitor
 # (whole-workspace moves conflict with the per-monitor assignment)
-cmd-ctrl-alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw'
+cmd-ctrl-alt-shift-o = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw'
 # throw the WHOLE workspace (every window) to its twin on the other monitor
 cmd-ctrl-alt-shift-space = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw-all'
 
@@ -133,6 +156,9 @@ cmd-ctrl-alt-shift-space = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw-
 cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files
 cmd-ctrl-alt-shift-m = 'exec-and-forget open -a @MUSIC@' # music
 cmd-ctrl-alt-shift-g = 'exec-and-forget open -a @MESSENGER@'   # messenger (omarchy: G)
+
+# Lock the screen (omarchy: Super+Ctrl+L — ctrl is spent, so Shift+L)
+cmd-ctrl-alt-shift-l = 'exec-and-forget pmset displaysleepnow'
 
 # Theme cycle (T for theme; float lives on plain Super+T)
 cmd-ctrl-alt-shift-t = 'exec-and-forget $HOME/.local/bin/theme-next'

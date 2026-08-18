@@ -171,6 +171,12 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 
 | Chord | Action |
 |---|---|
+| `Super+tab` / `Super+shift+tab` | next / previous workspace (this display's set) |
+| `Alt+tab` / `Alt+shift+tab` | cycle windows on this workspace (floats included) |
+| `Ctrl+Alt+tab` | cycle focus between displays |
+| `Super+b` | back to the previous workspace |
+| `Super+shift+o` | throw window to the other display |
+| `Super+shift+l` | lock the screen |
 | `Super+enter` | new terminal window |
 | `Super+shift+enter` | browser |
 | `Super+space` | launcher (Raycast) |

@@ -22,6 +22,31 @@ case "$op" in
     ws="$(pick "$mon" "$slot")"
     [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
     ;;
+  next | prev) # cycle within the workspaces that BELONG to this monitor
+    # `aerospace workspace next` walks every workspace on the machine, so
+    # it hops monitors. Its own monitor set is not enough either: on ONE
+    # display the force-assignment parks the 11-19 guests here too, and
+    # cycling wandered into them (prev from 1 landed on 19). Docked, a
+    # monitor's set IS its own; undocked, only the primary 1-9 are home.
+    cur="$("$A" list-workspaces --focused)"
+    nmon="$("$A" list-monitors | wc -l | tr -d ' ')"
+    if [ "$nmon" = 1 ]; then
+      all="$("$A" list-workspaces --monitor "$mon" | grep -E '^[0-9]$' | tr '\n' ' ')"
+    else
+      all="$("$A" list-workspaces --monitor "$mon" | tr '\n' ' ')"
+    fi
+    target="$(printf '%s\n' $all | awk -v cur="$cur" -v dir="$op" '
+      { ws[NR] = $0 }
+      END {
+        if (NR == 0) exit
+        at = 0
+        for (i = 1; i <= NR; i++) if (ws[i] == cur) at = i
+        if (at == 0) { print (dir == "prev" ? ws[NR] : ws[1]); exit }
+        i = (dir == "prev") ? (at == 1 ? NR : at - 1) : (at == NR ? 1 : at + 1)
+        print ws[i]
+      }')"
+    [ -n "$target" ] && "$A" workspace "$target"
+    ;;
   throw-all) # EVERY window of the focused workspace to the twin slot
     cur="$("$A" list-workspaces --focused)"
     s="${cur: -1}"
