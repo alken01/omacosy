@@ -145,8 +145,10 @@ the theme is watched, so a row that did nothing would be worse than a row
 that is absent.
 
 What is left is not features but standing: per-display bars, notch-aware layout, and
-fullscreen hiding. Memory, measured after the move: the whole stack idles at 377MB. The bar
-itself is 55MB against a bare sketchybar's 24MB — AppKit costs more
+fullscreen hiding. Memory, measured after the move: the stack idles at 155MB of physical
+footprint (325MB RSS — RSS counts shared framework pages once per
+process, so it roughly doubles the truth). The bar is 27MB of footprint,
+54MB RSS, against a bare sketchybar's 24MB RSS — AppKit costs more
 resident memory than a lean C program, and no amount of architecture
 argues that away. What pays for it is `omacosy-watcher` no longer
 existing (~20MB) and every plugin's fork storm no longer happening. Call
@@ -158,8 +160,9 @@ earlier draft of this file called folding them in "the obvious next
 step", which the measurements do not support as stated.
 
 A minimal AppKit daemon with one empty window is 32.5MB resident before
-it does anything. borders is 31.7MB — essentially all runtime tax for
-one CAShapeLayer ring — and overview is 39.1MB. Folding both into the
+it does anything. borders is 30MB RSS / 11MB footprint — essentially all
+runtime tax for one CAShapeLayer ring — and overview is 37MB either way,
+being the one that actually holds capture buffers. Folding both into the
 bar reclaims two AppKit runtimes, about 55-65MB, and deletes real
 duplication: bar and borders each hold their own WindowServer connection
 draining overlapping create/destroy/move/resize events, three kqueue

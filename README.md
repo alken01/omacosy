@@ -10,11 +10,27 @@ bootstrapped from this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
-The whole desktop environment idles around **375MB all-in** — WM, bar,
-four background daemons, swipe daemon — and a third of that (119MB) is
-Karabiner's driver stack. It is mostly self-built: six small signed
-Swift binaries replace what would otherwise be a pile of dependencies
-(several of which are broken on macOS 26 — see below).
+The whole desktop environment idles at about **155MB** of physical
+footprint — what Activity Monitor calls Memory — across WM, bar, four
+background daemons, the swipe daemon and Karabiner. Resident set size
+reads ~325MB, but RSS counts each process's share of the same shared
+system frameworks, so footprint is the honest figure. Measured on this
+machine, largest first:
+
+| | footprint | RSS |
+|---|---|---|
+| AeroSpace | 37MB | 76MB |
+| `omacosy-overview` | 37MB | 37MB |
+| Karabiner (3 services) | 25MB+ | 71MB |
+| `omacosy-bar` | 27MB | 54MB |
+| `omacosy-borders` | 11MB | 30MB |
+| `omacosy-ffm` | 9MB | 24MB |
+| aerospace-swipe | 8MB | 24MB |
+| `omacosy-dwindle` | 4MB | 9MB |
+
+It is mostly self-built: six small signed Swift binaries replace what
+would otherwise be a pile of dependencies (several of which are broken
+on macOS 26 — see below).
 
 > **Posture**: built for macOS 26 (Tahoe) on one desk — a MacBook Pro
 > plus one external display. It generalizes deliberately (roles instead
