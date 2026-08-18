@@ -336,6 +336,9 @@ func set(_ name: String, _ mutate: (inout BarItem) -> Void) {
     let t0 = DispatchTime.now().uptimeNanoseconds
     rightItems[name] = item
     repaint()
+    // an open popup shows the same state as its pill — the brightness
+    // popup kept whatever value it was built with while the pill moved
+    if openPopup == name { refreshPopup() }
     tlog(String(format: "item %@ %.2f ms", name, Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000))
 }
 
@@ -551,7 +554,6 @@ func setShade(_ value: Double) {
     applyShade()
     try? String(format: "%.3f", shade).write(toFile: shadeFile, atomically: true, encoding: .utf8)
     updateBrightness()
-    if openPopup == "brightness" { refreshPopup() }
 }
 
 // --- brightness (DisplayServices publishes; built-in panel only)
@@ -982,7 +984,9 @@ func closePopup() {
 func refreshPopup() {
     guard let name = openPopup, let view = popupView, let window = popupWindow else { return }
     view.rows = popupRows(for: name)
-    let size = view.measure()
+    var size = view.measure()
+    size.width = max(size.width, window.frame.width)
+    size.height = max(size.height, window.frame.height)
     window.setContentSize(size)
     view.frame = NSRect(origin: .zero, size: size)
     view.needsDisplay = true
@@ -1073,7 +1077,6 @@ func brightnessRows() -> [PopupRow] {
                  onSlide: { fraction in
                      _ = DSSetBrightness(builtinDisplayID(), Float(fraction))
                      updateBrightness()
-                     refreshPopup()
                  }),
         PopupRow(icon: "\u{F0594}", text: "\(Int((shade * 100).rounded()))%",
                  slider: shade,
@@ -1099,7 +1102,6 @@ func volumeRows() -> [PopupRow] {
                  onSlide: { fraction in
                      writeVolume(Int((fraction * 100).rounded()))
                      updateVolume()
-                     refreshPopup()
                  }),
     ]
     // output devices, current one marked — the same list `omacosy-helper
