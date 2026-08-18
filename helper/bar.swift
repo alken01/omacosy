@@ -1790,6 +1790,12 @@ func fullscreenDisplays() -> Set<CGDirectDisplayID> {
 // resting level of -20 is what hides it in the first place — and it drops
 // back down when the pointer leaves.
 let barBaseLevel = NSWindow.Level(rawValue: -20)
+// Revealed, the bar has to clear omacosy-borders' fullscreen shroud, which
+// sits at .screenSaver (1000) and blacks out the camera strip so that
+// aerospace-fullscreen reads as true fullscreen on a notched display.
+// At .statusBar the shroud covered all but the bottom 2 px of the bar —
+// which looked like macOS chrome winning, and was our own daemon.
+let barRevealLevel = NSWindow.Level(rawValue: 1002)
 let revealEdge: CGFloat = 2 // how close to the top edge counts as asking
 var revealed = false
 
@@ -1797,7 +1803,7 @@ func setRevealed(_ show: Bool) {
     guard show != revealed else { return }
     revealed = show
     for surface in surfaces {
-        surface.window.level = show ? .statusBar : barBaseLevel
+        surface.window.level = show ? barRevealLevel : barBaseLevel
     }
     updateBarVisibility()
 }
