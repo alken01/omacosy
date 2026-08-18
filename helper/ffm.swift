@@ -87,7 +87,7 @@ func displayBounds() -> [CGRect] {
     return (0..<Int(n)).map { CGDisplayBounds(ids[$0]) }
 }
 
-typealias Cand = (pid: pid_t, num: Int, rect: CGRect, owner: String)
+typealias Cand = (pid: pid_t, num: Int, rect: CGRect, owner: String, blocking: Bool)
 
 // Front-to-back layer-0 windows that pass the visibility filter.
 // (Side effect vs the old single pass: an ignore-listed
@@ -99,13 +99,31 @@ func windowCandidates() -> [Cand] {
     let screens = displayBounds()
     var cands: [Cand] = []
     for w in list { // list is front-to-back
-        guard (w["kCGWindowLayer"] as? Int) == 0,
+        guard let layer = w["kCGWindowLayer"] as? Int,
             let b = w["kCGWindowBounds"] as? [String: Any],
             let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
             let wd = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat,
             let pid = w["kCGWindowOwnerPID"] as? pid_t,
             let num = w["kCGWindowNumber"] as? Int
         else { continue }
+        let owner = (w["kCGWindowOwnerName"] as? String) ?? ""
+        // Windows ABOVE layer 0 are floating panels — 1Password's Touch
+        // ID prompt sits at 101 — and hover-focus must not tunnel
+        // through them to the tile underneath, which is precisely how
+        // that prompt kept losing focus to whatever it covered. They
+        // are not focus targets either, so they are carried as blockers:
+        // hovering one leaves focus exactly where it is.
+        //
+        // Two things above layer 0 are emphatically NOT panels, and
+        // treating them as such would freeze focus everywhere: our own
+        // border overlay, which sits at layer 3 stretched over the
+        // focused window, and the Window Server's own windows — the
+        // CURSOR is one of them, at layer 2147483630, and it covers the
+        // hit-test point by definition.
+        let blocking = layer > 0
+            && !owner.hasPrefix("omacosy-borders")
+            && owner != "Window Server"
+        guard layer == 0 || blocking else { continue }
         let rect = CGRect(x: x, y: y, width: wd, height: h)
         // AeroSpace hides inactive-workspace windows mostly offscreen
         // with a sliver visible — ignore anything <30% on-screen
@@ -116,7 +134,7 @@ func windowCandidates() -> [Cand] {
         if rect.width * rect.height > 0, visible / (rect.width * rect.height) < 0.3 {
             continue
         }
-        cands.append((pid, num, rect, (w["kCGWindowOwnerName"] as? String) ?? ""))
+        cands.append((pid, num, rect, owner, blocking))
     }
     return cands
 }
@@ -124,6 +142,10 @@ func windowCandidates() -> [Cand] {
 func topWindowUnder(_ p: CGPoint, _ cands: [Cand]) -> (pid: pid_t, key: String, rect: CGRect, wid: UInt32, covered: Bool)? {
     for (i, c) in cands.enumerated() {
         guard c.rect.contains(p) else { continue }
+        // a floating panel is under the cursor: same stance as the
+        // ignore list — leave focus exactly where it is rather than
+        // falling through to whatever it covers
+        if c.blocking { return nil }
         // topmost window is ignore-listed: leave focus alone entirely
         // (don't fall through to the window beneath)
         if ignoredApps.contains(c.owner.lowercased()) { return nil }
