@@ -510,6 +510,50 @@ func updateVolume() {
     set("volume") { $0.icon = icon; $0.iconColor = nil; $0.label = v.muted ? "mute" : "\(v.percent)%" }
 }
 
+// --- shade (below the hardware minimum, without an overlay window) -------
+// QuickShade and friends float a translucent black window over everything.
+// That works, but the window is real: it sits in the z-order, it covers
+// the bar, and it turns every screenshot black — including yours. Scaling
+// the display's GAMMA instead dims at scanout, so there is no window, it
+// applies over fullscreen apps, and captures come out normal.
+//
+// It also fails safe. Gamma set by a process is reset when that process
+// exits (verified), so a crash or an uninstall restores the screen by
+// itself and there is no way to be left staring at a dark display.
+//
+// Bonus: unlike DisplayServices this reaches EXTERNAL displays, which have
+// no backlight API without DDC.
+let shadeFile = "\(NSHomeDirectory())/.local/state/omacosy/shade"
+let shadeFloor: Double = 0.15 // never darker than this fraction of output
+
+var shade: Double = {
+    guard let t = try? String(contentsOfFile: shadeFile, encoding: .utf8),
+          let v = Double(t.trimmingCharacters(in: .whitespacesAndNewlines)) else { return 0 }
+    return min(1, max(0, v))
+}()
+
+func applyShade() {
+    let scale = Float(1 - shade * (1 - shadeFloor))
+    var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+    var count: UInt32 = 0
+    guard CGGetActiveDisplayList(8, &ids, &count) == .success else { return }
+    for i in 0..<Int(count) {
+        if shade <= 0.001 {
+            CGDisplayRestoreColorSyncSettings()
+        } else {
+            CGSetDisplayTransferByFormula(ids[i], 0, scale, 1, 0, scale, 1, 0, scale, 1)
+        }
+    }
+}
+
+func setShade(_ value: Double) {
+    shade = min(1, max(0, value))
+    applyShade()
+    try? String(format: "%.3f", shade).write(toFile: shadeFile, atomically: true, encoding: .utf8)
+    updateBrightness()
+    if openPopup == "brightness" { refreshPopup() }
+}
+
 // --- brightness (DisplayServices publishes; built-in panel only)
 func builtinDisplayID() -> CGDirectDisplayID {
     var count: UInt32 = 0
@@ -526,6 +570,17 @@ func updateBrightness() {
         return
     }
     let pct = Int((value * 100).rounded())
+    // Shaded reads as BELOW zero, because that is what it is: past the
+    // point the backlight can go. The moon says which side of zero you are on.
+    if shade > 0.001 {
+        set("brightness") {
+            $0.drawing = true
+            $0.icon = "\u{F0594}"
+            $0.iconColor = palette.muted
+            $0.label = "−\(Int((shade * 100).rounded()))%"
+        }
+        return
+    }
     let icon = pct >= 66 ? "󰃠" : (pct >= 33 ? "󰃟" : "󰃞")
     set("brightness") { $0.drawing = true; $0.icon = icon; $0.iconColor = nil; $0.label = "\(pct)%" }
 }
@@ -1020,6 +1075,9 @@ func brightnessRows() -> [PopupRow] {
                      updateBrightness()
                      refreshPopup()
                  }),
+        PopupRow(icon: "\u{F0594}", text: "\(Int((shade * 100).rounded()))%",
+                 slider: shade,
+                 onSlide: { setShade($0) }),
         PopupRow(text: "night shift \(nightShiftState)", action: {
             nightShiftState = shell("\(NSHomeDirectory())/.local/bin/omacosy-helper",
                                     ["nightshift", "toggle"])
@@ -1525,8 +1583,15 @@ final class BarView: NSView {
         case "brightness":
             var value: Float = 0
             guard DSGetBrightness(builtinDisplayID(), &value) == 0 else { return }
-            _ = DSSetBrightness(builtinDisplayID(), min(1, max(0, value + Float(step) / 100)))
-            updateBrightness()
+            // one continuous scale: the backlight down to 0, then shade
+            if step < 0, value <= 0.001 {
+                setShade(shade + 0.08)
+            } else if step > 0, shade > 0.001 {
+                setShade(shade - 0.08) // come out of shade before raising the backlight
+            } else {
+                _ = DSSetBrightness(builtinDisplayID(), min(1, max(0, value + Float(step) / 100)))
+                updateBrightness()
+            }
         default: break
         }
     }
@@ -1799,6 +1864,7 @@ NotificationCenter.default.addObserver(
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
         closePopup() // its anchor may not exist any more
         rebuildSurfaces()
+        applyShade() // a new display arrives at full output
         kickRebuild()
     }
 }
@@ -1998,6 +2064,11 @@ if let store = SCDynamicStoreCreate(nil, "omacosy-bar" as CFString,
 // bluetooth: gated on the privacy grant, which the watcher above also needs
 bluetoothWatcher.start()
 
+// waking clears the gamma table, so the shade has to be reasserted
+NSWorkspace.shared.notificationCenter.addObserver(
+    forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+) { _ in applyShade() }
+
 // media: Spotify broadcasts every state change itself, and the payload
 // already carries the track — so the pill repaints without asking anyone
 // anything. Launch and quit are the one pair it cannot announce.
@@ -2040,6 +2111,7 @@ guard !surfaces.isEmpty else {
 }
 apply(fetchSnapshot()) // blocking is fine here: the run loop has not started
 rightItems["activity"] = BarItem(icon: "󰍛", iconColor: palette.accent)
+applyShade() // restore the level this machine was left at
 updateBattery()
 updateBrightness()
 updateWifi()

@@ -17,7 +17,6 @@ Direction, not promises. Ordered roughly by pull.
   user-driven switch and slips through. A denylist for known
   offenders (messengers on non-visible workspaces) is the likely
   escalation.
-- **Sub-minimum screen dimming** (QuickShade-style gamma overlay).
 - **macOS support matrix.** Built and tested on macOS 26 (Tahoe),
   Apple Silicon, one external display. Sequoia and Intel are
   unknown territory — reports welcome.

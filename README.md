@@ -152,8 +152,13 @@ window takes the whole display.
   toggle. **WiFi** — status, IP, power toggle (macOS 26 hides SSIDs
   from CLI tools). **Weather** — wttr.in, cached details popup.
   **Volume** — scroll adjusts, click opens slider + output-device menu,
-  right-click mutes. **Brightness** — built-in display; scroll
-  adjusts, click opens a slider (DisplayServices, no deps).
+  right-click mutes. **Brightness** — scroll adjusts, click opens a slider
+  (DisplayServices, no deps). Scrolling past 0 keeps going: a **shade**
+  dims the display below its hardware minimum by scaling gamma, so there
+  is no overlay window in the z-order and screenshots come out normal.
+  It reaches external displays too, which have no backlight API. Gamma
+  is reset when the setting process exits, so a crash or an uninstall
+  restores the screen by itself.
   **Battery** / **Clock** (calendar popup) /
   **Activity** (floating btop) / **Floats** — appears only while the
   workspace holds floating windows; click surfaces the next one.
