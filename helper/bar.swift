@@ -1782,10 +1782,48 @@ func fullscreenDisplays() -> Set<CGDirectDisplayID> {
     return covered
 }
 
+// Hidden by fullscreen, but reachable: put the pointer at the very top of
+// the screen and the bar comes back, the way the menu bar does. Watching a
+// film and wanting the brightness slider should not mean leaving the film.
+//
+// While revealed the bar has to climb ABOVE the fullscreen window — its
+// resting level of -20 is what hides it in the first place — and it drops
+// back down when the pointer leaves.
+let barBaseLevel = NSWindow.Level(rawValue: -20)
+let revealEdge: CGFloat = 2 // how close to the top edge counts as asking
+var revealed = false
+
+func setRevealed(_ show: Bool) {
+    guard show != revealed else { return }
+    revealed = show
+    for surface in surfaces {
+        surface.window.level = show ? .statusBar : barBaseLevel
+    }
+    updateBarVisibility()
+}
+
+// Called on every pointer move, so it stays a coordinate comparison and
+// nothing more.
+func pointerAtScreenTop() {
+    let p = NSEvent.mouseLocation
+    // The rect has to be grown, not just used: CGRect.contains treats maxY
+    // as exclusive, so the pointer sitting on the very top row of pixels —
+    // exactly the gesture this listens for — counts as being on NO screen.
+    guard let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: 0, dy: -2).contains(p) })
+    else { return }
+    let fromTop = screen.frame.maxY - p.y
+    if fromTop <= revealEdge {
+        setRevealed(true)
+    } else if revealed, openPopup == nil, fromTop > barHeight + 12 {
+        // a popup keeps it up: its anchor must not vanish under the pointer
+        setRevealed(false)
+    }
+}
+
 func updateBarVisibility() {
     let covered = fullscreenDisplays()
     for surface in surfaces {
-        let hide = covered.contains(screenID(surface.screen))
+        let hide = covered.contains(screenID(surface.screen)) && !revealed
         // unconditional either way: isVisible can desync from the window
         // server, which is how borders.swift ended up with a stuck shroud
         if hide {
@@ -1987,6 +2025,14 @@ func pointerLeftTheHull() -> Bool {
 // the monitor must be RETAINED — dropping the returned token deregisters
 // it immediately, and the popup then never closes on its own
 var popupGuardToken: Any?
+var revealToken: Any?
+revealToken = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { _ in pointerAtScreenTop() }
+var revealLocalToken: Any?
+revealLocalToken = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { e in
+    pointerAtScreenTop()
+    return e
+}
+
 popupGuardToken = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { _ in
     // a click that lands in another app dismisses the popup; hover-exit
     // is the tracking areas' job

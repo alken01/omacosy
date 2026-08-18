@@ -140,7 +140,11 @@ One process draws all of it: bar, popups and sliders are surfaces of
 `helper/bar.swift`. Transparent bar, everything a flat radius-4 pill.
 A popup stays open while the pointer is anywhere in the bar OR the
 popup, and closes when it is in neither. The bar hides itself when a
-window takes the whole display.
+window takes the whole display — and comes back if you put the pointer
+on the very top edge, the way the menu bar does, so brightness and
+volume stay reachable mid-film without leaving fullscreen. While
+revealed it climbs above the fullscreen window and drops back down
+behind everything when the pointer leaves.
 
 - **Apple menu** — About, System Settings, Lock, Sleep, Restart, Shut
   Down, Next Theme (the menu the hidden native bar took away).
