@@ -66,6 +66,14 @@ func SLEventCreateNextEvent(_ cid: Int32) -> Unmanaged<CGEvent>?
 
 let EVENT_WINDOW_MOVE: UInt32 = 806
 let EVENT_WINDOW_RESIZE: UInt32 = 807
+// Sending a window to another workspace ORDERS IT OUT, it does not move
+// it: measured with a SkyLight probe, a workspace switch fires
+// 806/808/815 but a window changing workspace fires only 808 and 815.
+// Watching 806 for that is why the chips sat stale until some unrelated
+// app next opened a window. They arrive as a pair; both are watched
+// because the pairing is observed behaviour, not a documented promise.
+let EVENT_WINDOW_ORDER: UInt32 = 808
+let EVENT_WINDOW_VISIBILITY: UInt32 = 815
 let EVENT_WINDOW_CREATE: UInt32 = 1325
 let EVENT_WINDOW_DESTROY: UInt32 = 1326
 
@@ -202,13 +210,22 @@ let rebuildQueue = DispatchQueue(label: "com.omacosy.bar.rebuild")
 
 func fetchSnapshot() -> Snapshot {
     var s = Snapshot()
-    // one pass per display, plus one window list for all of them
+    // ONE call for every monitor's set and which of them is visible: the
+    // old loop spent two subprocesses per display, so docking doubled it
+    // to four and the rebuild grew with the display count — on a path a
+    // window move now waits behind
+    var sets: [String: [String]] = [:]
+    var visible: [String: String] = [:]
+    for line in aerospace(["list-workspaces", "--all", "--format",
+                           "%{workspace}|%{monitor-id}|%{workspace-is-visible}"])
+        .split(separator: "\n") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 3 else { continue }
+        sets[f[1], default: []].append(f[0])
+        if f[2] == "true" { visible[f[1]] = f[0] }
+    }
     for id in surfaces.map({ $0.monitorID }) {
-        let workspaces = aerospace(["list-workspaces", "--monitor", id])
-            .split(separator: "\n").map(String.init)
-        let visible = aerospace(["list-workspaces", "--monitor", id, "--visible"])
-            .split(separator: "\n").map(String.init).first ?? ""
-        s.perMonitor[id] = (workspaces, visible)
+        s.perMonitor[id] = (sets[id] ?? [], visible[id] ?? "")
     }
 
     var sole: [String: String] = [:]
@@ -230,17 +247,27 @@ func fetchSnapshot() -> Snapshot {
     return s
 }
 
-func apply(_ s: Snapshot) {
+// Reports whether anything actually moved. A workspace switch produces
+// window moves too, and those snapshots come back identical — saying so
+// keeps the repaint (and the log line) for the times something changed.
+@discardableResult
+func apply(_ s: Snapshot) -> Bool {
+    var changed = false
     for surface in surfaces {
         guard let part = s.perMonitor[surface.monitorID] else { continue }
-        if !part.workspaces.isEmpty {
+        if !part.workspaces.isEmpty, surface.workspaces != part.workspaces {
             surface.workspaces = part.workspaces
             surface.mine = Set(part.workspaces)
+            changed = true
         }
-        if !part.visible.isEmpty { surface.visible = part.visible }
+        if !part.visible.isEmpty, surface.visible != part.visible {
+            surface.visible = part.visible
+            changed = true
+        }
     }
-    model.occupied = s.occupied
-    model.soleApp = s.soleApp
+    if model.occupied != s.occupied { model.occupied = s.occupied; changed = true }
+    if model.soleApp != s.soleApp { model.soleApp = s.soleApp; changed = true }
+    return changed
 }
 
 
@@ -1996,6 +2023,17 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
     src.resume()
 }
 
+// A window sent from one HIDDEN workspace to another moves nothing on
+// screen, so SkyLight reports nothing at all — measured with a probe:
+// not an order change, not a visibility change, no event of any kind.
+// No publisher exists for it, so the commands that do the moving say so
+// themselves (omacosy-ws, and the overview's drag-reorder).
+let movedPath = "/tmp/omacosy-bar-moved"
+watch(movedPath, create: true) {
+    tlog("moved poke")
+    kickRebuild()
+}
+
 let wsPath = "/tmp/omacosy-bar-ws"
 watch(wsPath, create: true) {
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -2050,7 +2088,7 @@ func kickRebuild() {
             let fetched = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
             DispatchQueue.main.async {
                 let t1 = DispatchTime.now().uptimeNanoseconds
-                apply(snapshot)
+                guard apply(snapshot) else { return } // nothing moved
                 repaint()
                 let drawn = Double(DispatchTime.now().uptimeNanoseconds - t1) / 1_000_000
                 tlog(String(format: "rebuild fetch %.2f ms (off-main) + paint %.2f ms", fetched, drawn))
@@ -2058,7 +2096,10 @@ func kickRebuild() {
         }
     }
     pending = w
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
+    // 0.3s was priced against a snapshot that cost four subprocesses;
+    // one call later the coalescing window can be the part a person
+    // actually waits through
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: w)
 }
 
 let cid = SLSMainConnectionID()
@@ -2097,6 +2138,13 @@ let notify: NotifyProc = { event, _, _, _ in
         if event == EVENT_WINDOW_CREATE || event == EVENT_WINDOW_DESTROY {
             kickRebuild()
             rebuildSubscriptions()
+        } else if event == EVENT_WINDOW_ORDER || event == EVENT_WINDOW_VISIBILITY {
+            // the chips are only as fresh as this: a window changing
+            // workspace shows up here and nowhere else. A plain
+            // workspace switch lands here too and fetches a snapshot
+            // that changed nothing, which apply() reports so the
+            // repaint is skipped.
+            kickRebuild()
         }
         kickVisibility()
     }
@@ -2105,6 +2153,8 @@ _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_CREATE, nil)
 _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_DESTROY, nil)
 _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_MOVE, nil)
 _ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_RESIZE, nil)
+_ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_ORDER, nil)
+_ = SLSRegisterNotifyProc(notify, EVENT_WINDOW_VISIBILITY, nil)
 rebuildSubscriptions()
 var eventPort: mach_port_t = 0
 if SLSGetEventPort(cid, &eventPort).rawValue == 0, eventPort != 0 {

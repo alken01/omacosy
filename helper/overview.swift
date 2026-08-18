@@ -441,6 +441,9 @@ func reorderWorkspaces(from slots: [String], to order: [String]) {
                 _ = aerospace(["move-node-to-workspace", "--window-id", wid, slot])
             }
         }
+        // a rotation between hidden workspaces moves nothing on screen,
+        // so the bar's workspace icons have no event to learn from
+        FileManager.default.createFile(atPath: "/tmp/omacosy-bar-moved", contents: nil)
         DispatchQueue.main.async {
             if overlayVisible { // take key back the way showOverlay takes it
                 win.makeKeyAndOrderFront(nil)

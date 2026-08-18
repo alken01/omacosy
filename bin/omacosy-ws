@@ -12,6 +12,11 @@ pick() { # monitor-id, slot -> that monitor's workspace ending in slot
     | awk -v s="$2" 'substr($0, length($0)) == s { print; exit }'
 }
 
+# A window moved between two HIDDEN workspaces changes nothing on
+# screen, so the window server has no event to give the bar and its
+# workspace icons would sit stale. Builtin redirect, no extra process.
+moved() { : > /tmp/omacosy-bar-moved; }
+
 mon="$("$A" list-monitors --focused --format '%{monitor-id}')"
 case "$op" in
   switch)
@@ -20,7 +25,7 @@ case "$op" in
     ;;
   move)
     ws="$(pick "$mon" "$slot")"
-    [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
+    [ -n "$ws" ] && { "$A" move-node-to-workspace --focus-follows-window "$ws"; moved; }
     ;;
   next | prev) # cycle within the workspaces that BELONG to this monitor
     # `aerospace workspace next` walks every workspace on the machine, so
@@ -57,6 +62,7 @@ case "$op" in
     "$A" list-windows --workspace "$cur" --format '%{window-id}' | while read -r wid; do
       [ -n "$wid" ] && "$A" move-node-to-workspace --window-id "$wid" "$ws"
     done
+    moved
     "$A" workspace "$ws"
     ;;
   throw) # focused WINDOW to the same slot on the other monitor
@@ -65,6 +71,6 @@ case "$op" in
     other="$("$A" list-monitors --format '%{monitor-id}' | grep -vx "$mon" | head -1 || true)"
     [ -n "$other" ] || exit 0
     ws="$(pick "$other" "$s")"
-    [ -n "$ws" ] && "$A" move-node-to-workspace --focus-follows-window "$ws"
+    [ -n "$ws" ] && { "$A" move-node-to-workspace --focus-follows-window "$ws"; moved; }
     ;;
 esac
