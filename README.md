@@ -58,21 +58,65 @@ the AeroSpace config from your app choices, symlinks configs (backing
 up anything it would replace), hides the native menu bar, applies the
 default theme, and starts services.
 
-One-time permission grants (System Settings → Privacy & Security):
+See [Permissions](#permissions) for the grants this asks of you, what
+each one buys, and what breaks without it. Karabiner-Elements also asks
+you to approve its driver extension.
 
-1. **Accessibility**: AeroSpace, AerospaceSwipe (each prompts), and
-   `omacosy-ffm` (add `~/.local/bin/omacosy-ffm` manually). With an
-   Apple Development signing identity present, binaries are codesigned
-   so rebuilds keep their grants; without one, re-grant after rebuilds.
-2. **Input Monitoring**: Karabiner (prompts) and AerospaceSwipe
-   (add manually: `~/.local/share/aerospace-swipe/AerospaceSwipe.app`).
-3. **Screen Recording**: `omacosy-overview` (prompts on the first
-   swipe-up) — powers the live window previews in the workspace
-   overview; without the grant the cards fall back to app icons.
-4. **Bluetooth**: omacosy-bar
-   (prompts at first start) — powers the bluetooth pill and its device
-   menu; without the grant the pill simply stays hidden.
-5. Karabiner-Elements: approve its driver extension when prompted.
+## Permissions
+
+A window manager is an intrusive thing to install, so here is the whole
+list — every grant, which binary asks, what it is used for, and what
+you lose by refusing it. Everything here is refusable; the parts that
+depend on a grant hide themselves rather than half-work.
+
+| Grant | Who asks | What it does | Without it |
+|---|---|---|---|
+| **Accessibility** | AeroSpace, AerospaceSwipe, `omacosy-ffm` | Move, resize and focus other apps' windows. This is the tiling itself, and it is the broadest permission here. | Nothing tiles. Not optional in practice. |
+| **Input Monitoring** | Karabiner-Elements, AerospaceSwipe | Karabiner reads keys to remap Caps Lock; AerospaceSwipe reads raw trackpad contacts, because macOS 26 stopped carrying touch data in normal events. | No Super key, no swipe gestures. |
+| **Screen Recording** | `omacosy-overview` | Captures a thumbnail per window for the overview cards — including windows AeroSpace has stashed offscreen, which is why it needs the real thing and not a screenshot of the visible screen. | Cards fall back to app icons and titles. |
+| **Bluetooth** | `omacosy-bar` | Reads adapter power and the paired-device list for the bluetooth pill and its menu. | The pill hides itself. |
+| **Automation** | `omacosy-bar`, `theme-set` | Apple Events to **Spotify** (what is playing; play/pause/next from the media pill) and to **System Events** (sleep, lock and restart from the Apple menu; setting the wallpaper). | The media pill hides; those menu rows do nothing. |
+| **Files and Folders** | `omacosy-bar` | Only if your clone lives in `~/Documents`, `~/Desktop` or `~/Downloads` — the bar reads its palette from the theme directory inside the repo, and macOS walls launchd agents off from those folders. | The bar **hangs at startup** waiting on the prompt. Clone to `~/.local/share/omacosy` and this never comes up. |
+
+### What it does not do
+
+- **No Location.** macOS classes the wi-fi network's name as location
+  data, so the wi-fi pill shows a signal icon and no name. Asking for
+  the grant does not fix it: measured on macOS 26.3, an unbundled
+  binary reads `nil` from CoreWLAN even with Location authorized and
+  updates running, and `ipconfig` prints `SSID : <redacted>` for the
+  same reason. Shipping the bar as an `.app` might lift it; that is not
+  worth a location prompt, so the bar does not ask.
+- **No telemetry, no analytics, no crash reporting.** Nothing is sent
+  anywhere about you or this machine.
+- **One network call**, ever: `https://wttr.in/?format=j1` on a long
+  timer, for the weather pill. wttr.in infers your city from the IP the
+  request arrives on — no coordinates are gathered or sent, and the bar
+  holds no location API. Delete the weather pill and nothing leaves the
+  machine.
+- **omacosy's own binaries never run as root.** `install.sh` uses no
+  sudo, installs no LaunchDaemon, and every helper it builds runs as
+  you, in your login session.
+- **Karabiner-Elements does, and you should know that before
+  installing.** It is a Homebrew dependency here, purely to turn Caps
+  Lock into Super — and it ships a DriverKit system extension plus
+  daemons that run as **root** (`Karabiner-VirtualHIDDevice-Daemon`,
+  `Karabiner-Core-Service`). That is what the driver-extension approval
+  during install is. It is the single most privileged thing this repo
+  puts on your Mac, and it is third-party. Skip it if that trade is
+  wrong for you; you lose the Super key and keep everything else.
+- **Nothing here reads your keystrokes.** No omacosy binary opens a
+  keyboard event tap — only Karabiner sees keys, which is inherent to
+  remapping one. AerospaceSwipe's event tap is gesture-only and
+  listen-only (`1 << NSEventTypeGesture`,
+  `kCGEventTapOptionListenOnly`), so it cannot see or alter a
+  keystroke. Debug logs (`/tmp/omacosy-*.log`) carry window titles,
+  app names and workspace numbers — never input.
+
+Grants are tied to a binary's code signature. With an Apple Development
+identity present, `install.sh` signs every helper with a stable
+identifier so rebuilds keep their grants; without one, macOS treats
+each rebuild as a new app and you re-grant after every install.
 
 ## App choices
 
@@ -155,8 +199,11 @@ behind everything when the pointer leaves.
   notch detection via `NSScreen.safeAreaInsets`), hidden
   when Spotify isn't running.
 - **Bluetooth** — device menu (click to connect/disconnect), power
-  toggle. **WiFi** — status, IP, power toggle (macOS 26 hides SSIDs
-  from CLI tools). **Weather** — wttr.in, cached details popup.
+  toggle. **WiFi** — ip and router, signal with a verdict, link rate and
+  security generation, channel with its band and width. No network name:
+  macOS classes the SSID as location data and will not hand it to an
+  unbundled binary at all (see [Permissions](#permissions)).
+  **Weather** — wttr.in, cached details popup.
   **Volume** — scroll adjusts, click opens slider + output-device menu,
   right-click mutes. **Brightness** — scroll adjusts, click opens a slider
   (DisplayServices, no deps). Scrolling past 0 keeps going: a **shade**

@@ -697,11 +697,12 @@ func updateWifi() {
         set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
         return
     }
-    // The SSID is location-sensitive data: without the Location grant
-    // CoreWLAN returns nil AND ipconfig prints "SSID : <redacted>", so
-    // the subprocess this used to fork bought exactly nothing. Ask
-    // CoreWLAN in process — same answer now, and the real name the
-    // moment the grant exists.
+    // The SSID is location-sensitive data and this bar cannot have it:
+    // measured on macOS 26.3, an unbundled binary reads nil even with
+    // Location authorized (authz=3, services on, updates running), and
+    // ipconfig prints "SSID : <redacted>" for the same reason. The
+    // subprocess this used to fork bought nothing, so it asks CoreWLAN
+    // in process and the pill simply carries no name.
     let named = CWWiFiClient.shared().interface()?.ssid() ?? ""
     set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
 }

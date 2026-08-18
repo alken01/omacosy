@@ -168,7 +168,12 @@ fi
 # IOBluetooth) instead of forking scripts. The embedded Info.plist carries
 # the Bluetooth usage description an unbundled binary otherwise cannot
 # declare, and the agent below sets OMACOSY_MANAGED so it knows it may ask.
-if [ ! -x "$HOME/.local/bin/omacosy-bar" ] || [ "$REPO_DIR/helper/bar.swift" -nt "$HOME/.local/bin/omacosy-bar" ]; then
+# the plist is compiled INTO the binary, so a change to it alone still
+# needs a rebuild — the usage strings live there and a stale binary asks
+# for nothing
+if [ ! -x "$HOME/.local/bin/omacosy-bar" ] \
+  || [ "$REPO_DIR/helper/bar.swift" -nt "$HOME/.local/bin/omacosy-bar" ] \
+  || [ "$REPO_DIR/helper/bar-info.plist" -nt "$HOME/.local/bin/omacosy-bar" ]; then
   log "Building omacosy-bar"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -framework DisplayServices \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/bar-info.plist" \
