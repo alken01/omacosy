@@ -11,23 +11,29 @@ bootstrapped from this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
-The whole desktop environment idles at about **155MB** of physical
+The whole desktop environment idles at about **171MB** of physical
 footprint — what Activity Monitor calls Memory — across WM, bar, four
 background daemons, the swipe daemon and Karabiner. Resident set size
-reads ~325MB, but RSS counts each process's share of the same shared
+reads ~367MB, but RSS counts each process's share of the same shared
 system frameworks, so footprint is the honest figure. Measured on this
-machine, largest first:
+machine **docked to a second display**, largest first:
 
 | | footprint | RSS |
 |---|---|---|
-| AeroSpace | 37MB | 76MB |
-| `omacosy-overview` | 37MB | 37MB |
-| Karabiner (3 services) | 25MB+ | 71MB |
-| `omacosy-bar` | 27MB | 54MB |
-| `omacosy-borders` | 11MB | 30MB |
-| `omacosy-ffm` | 9MB | 24MB |
+| AeroSpace | 46MB | 94MB |
+| `omacosy-overview` | 36MB | 58MB |
+| `omacosy-bar` | 28MB | 57MB |
+| Karabiner (4 processes) | 24MB | 69MB |
+| `omacosy-borders` | 15MB | 31MB |
+| `omacosy-ffm` | 9MB | 25MB |
 | aerospace-swipe | 8MB | 24MB |
-| `omacosy-dwindle` | 4MB | 9MB |
+| `omacosy-dwindle` | 5MB | 8MB |
+
+A second display is not free: the bar and the border overlay each draw
+per-screen, and AeroSpace carries a second workspace set. On one
+display the same set measured ~155MB. Packaging the bar as an `.app`
+(which is what buys the wi-fi network name) cost about 1MB — the bundle
+is a directory and an Info.plist, not a second copy of anything.
 
 It is mostly self-built: six small signed Swift binaries replace what
 would otherwise be a pile of dependencies (several of which are broken
