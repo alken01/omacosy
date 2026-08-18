@@ -670,21 +670,13 @@ func updateWifi() {
         set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
         return
     }
-    rebuildQueue.async {
-        // CoreWLAN hands out the SSID only with Location permission; the
-        // bar has always read it from ipconfig instead, so do the same
-        let summary = shell("/usr/sbin/ipconfig", ["getsummary", wifiDevice])
-        var ssid = ""
-        for line in summary.split(separator: "\n") where line.contains(" SSID : ") {
-            ssid = line.components(separatedBy: " SSID : ").last?
-                .trimmingCharacters(in: .whitespaces) ?? ""
-            break
-        }
-        let named = ssid.isEmpty || ssid.hasPrefix("<") ? "" : ssid
-        DispatchQueue.main.async {
-            set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
-        }
-    }
+    // The SSID is location-sensitive data: without the Location grant
+    // CoreWLAN returns nil AND ipconfig prints "SSID : <redacted>", so
+    // the subprocess this used to fork bought exactly nothing. Ask
+    // CoreWLAN in process — same answer now, and the real name the
+    // moment the grant exists.
+    let named = CWWiFiClient.shared().interface()?.ssid() ?? ""
+    set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
 }
 
 // --- bluetooth (IOBluetooth publishes connect/disconnect)
@@ -1195,19 +1187,71 @@ func volumeRows() -> [PopupRow] {
     return rows
 }
 
+// SCDynamicStore answers both in process. The popup used to fork
+// ipconfig on the click path just for the address — and the router,
+// the one number you actually want when the network misbehaves, was
+// never shown at all.
+func wifiIPv4() -> (ip: String, router: String) {
+    guard let store = SCDynamicStoreCreate(nil, "omacosy-bar-ipv4" as CFString, nil, nil)
+    else { return ("", "") }
+    let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString)
+        as? [String: Any]
+    let iface = SCDynamicStoreCopyValue(store,
+        "State:/Network/Interface/\(wifiDevice)/IPv4" as CFString) as? [String: Any]
+    return ((iface?["Addresses"] as? [String])?.first ?? "",
+            global?["Router"] as? String ?? "")
+}
+
+// Name only what is certain — the generic personal/enterprise cases
+// cover several generations and guessing one would be a lie.
+func securityName(_ s: CWSecurity) -> String? {
+    switch s {
+    case .none: return "open"
+    case .WEP, .dynamicWEP: return "WEP"
+    case .wpaPersonal, .wpaPersonalMixed, .wpaEnterprise, .wpaEnterpriseMixed: return "WPA"
+    case .wpa2Personal, .wpa2Enterprise: return "WPA2"
+    case .wpa3Personal, .wpa3Enterprise, .wpa3Transition: return "WPA3"
+    case .OWE, .oweTransition: return "OWE"
+    default: return nil
+    }
+}
+
 func wifiRows() -> [PopupRow] {
     let interface = CWWiFiClient.shared().interface()
     var rows: [PopupRow] = [
         PopupRow(text: (rightItems["wifi"]?.label.isEmpty ?? true) ? "wi-fi" : rightItems["wifi"]!.label,
                  hero: true),
     ]
-    rows.append(PopupRow(text: "ip \(shell("/usr/sbin/ipconfig", ["getifaddr", wifiDevice]).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty("none"))"))
+    let net = wifiIPv4()
+    rows.append(PopupRow(text: "ip \(net.ip.ifEmpty("none"))"))
+    if !net.router.isEmpty { rows.append(PopupRow(text: "router \(net.router)")) }
     if let rssi = interface?.rssiValue(), rssi != 0 {
         let verdict = rssi >= -55 ? "excellent" : (rssi >= -67 ? "good" : (rssi >= -75 ? "fair" : "weak"))
         rows.append(PopupRow(text: "signal \(rssi) dBm  \(verdict)"))
     }
+    // how fast, and how safe — the two questions the old rows left open
+    var link: [String] = []
+    if let rate = interface?.transmitRate(), rate > 0 { link.append("\(Int(rate)) Mbps") }
+    if let sec = interface?.security(), let name = securityName(sec) { link.append(name) }
+    if !link.isEmpty { rows.append(PopupRow(text: "link " + link.joined(separator: "  "))) }
     if let channel = interface?.wlanChannel() {
-        rows.append(PopupRow(text: "channel \(channel.channelNumber)"))
+        // a bare channel number means nothing to most people; the band
+        // is what says "you are on the fast radio"
+        var parts = ["channel \(channel.channelNumber)"]
+        switch channel.channelBand {
+        case .band2GHz: parts.append("2.4 GHz")
+        case .band5GHz: parts.append("5 GHz")
+        case .band6GHz: parts.append("6 GHz")
+        default: break
+        }
+        switch channel.channelWidth {
+        case .width20MHz: parts.append("20 MHz")
+        case .width40MHz: parts.append("40 MHz")
+        case .width80MHz: parts.append("80 MHz")
+        case .width160MHz: parts.append("160 MHz")
+        default: break
+        }
+        rows.append(PopupRow(text: parts.joined(separator: "  ")))
     }
     rows.append(PopupRow(text: "network settings…", dim: true, action: {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
