@@ -27,6 +27,7 @@
 import AppKit
 import CoreAudio
 import CoreBluetooth
+import CoreLocation
 import CoreWLAN
 import IOBluetooth
 import IOKit.ps
@@ -614,6 +615,45 @@ func updateBrightness() {
     set("brightness") { $0.drawing = true; $0.icon = icon; $0.iconColor = nil; $0.label = "\(pct)%" }
 }
 
+// --- location (what the network name costs) -------------------------------
+// macOS classes the SSID as location data. Two things are required and
+// neither alone is enough: this grant, and a BUNDLED binary — measured,
+// an unbundled build reads nil with authorisation held, services on and
+// updates running, while a bundled one reads the name the instant the
+// answer lands. Nothing here reads a coordinate; the authorisation IS
+// the API, and the manager exists only to ask for it.
+//
+// Gated like bluetooth: TCC judges the RESPONSIBLE process, so only the
+// launchd-started bar may prompt and running it by hand stays quiet.
+final class LocationGate: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var managed: Bool { ProcessInfo.processInfo.environment["OMACOSY_MANAGED"] != nil }
+
+    func start() {
+        manager.delegate = self
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorized:
+            updateWifi() // the name is readable now; the pill may predate it
+        case .denied, .restricted:
+            tlog("location: denied — the wi-fi pill stays nameless")
+        default:
+            guard managed else {
+                tlog("location: not launchd-managed, so not prompting")
+                return
+            }
+            manager.requestWhenInUseAuthorization()
+        }
+    }
+
+    // the name appears the moment the answer lands — no restart, and no
+    // polling for a permission that publishes
+    func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
+        tlog("location: authorization now \(m.authorizationStatus.rawValue)")
+        updateWifi()
+    }
+}
+let locationGate = LocationGate()
+
 // --- night shift (CBBlueLightClient publishes) ---------------------------
 // Private CoreBrightness, reached by reflection the way omacosy-helper
 // reaches it. It has a publisher: setStatusNotificationBlock fires on
@@ -697,12 +737,12 @@ func updateWifi() {
         set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
         return
     }
-    // The SSID is location-sensitive data and this bar cannot have it:
-    // measured on macOS 26.3, an unbundled binary reads nil even with
-    // Location authorized (authz=3, services on, updates running), and
-    // ipconfig prints "SSID : <redacted>" for the same reason. The
-    // subprocess this used to fork bought nothing, so it asks CoreWLAN
-    // in process and the pill simply carries no name.
+    // The SSID is location-sensitive data: it needs the Location grant
+    // AND a bundled binary. Measured on macOS 26.3 — unbundled reads nil
+    // however it is authorised, bundled + authorised reads the name — so
+    // the bar ships inside a .app (see install.sh). ipconfig is redacted
+    // under the same rule, which is why the subprocess this used to fork
+    // bought nothing.
     let named = CWWiFiClient.shared().interface()?.ssid() ?? ""
     set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
 }
@@ -2292,6 +2332,9 @@ if let store = SCDynamicStoreCreate(nil, "omacosy-bar" as CFString,
 } else {
     tlog("SCDynamicStoreCreate failed — wifi pill will not update")
 }
+
+// location: the network name's price, same responsible-process rules
+locationGate.start()
 
 // bluetooth: gated on the privacy grant, which the watcher above also needs
 bluetoothWatcher.start()

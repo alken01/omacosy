@@ -75,18 +75,21 @@ depend on a grant hide themselves rather than half-work.
 | **Input Monitoring** | Karabiner-Elements, AerospaceSwipe | Karabiner reads keys to remap Caps Lock; AerospaceSwipe reads raw trackpad contacts, because macOS 26 stopped carrying touch data in normal events. | No Super key, no swipe gestures. |
 | **Screen Recording** | `omacosy-overview` | Captures a thumbnail per window for the overview cards — including windows AeroSpace has stashed offscreen, which is why it needs the real thing and not a screenshot of the visible screen. | Cards fall back to app icons and titles. |
 | **Bluetooth** | `omacosy-bar` | Reads adapter power and the paired-device list for the bluetooth pill and its menu. | The pill hides itself. |
+| **Location** | `omacosy-bar` | Reads **only** the wi-fi network's name, which macOS classes as location data. No coordinate is ever requested; the authorisation itself is what unlocks `CWInterface.ssid()`. | The wi-fi pill shows signal and no name. Everything else is unaffected. |
 | **Automation** | `omacosy-bar`, `theme-set` | Apple Events to **Spotify** (what is playing; play/pause/next from the media pill) and to **System Events** (sleep, lock and restart from the Apple menu; setting the wallpaper). | The media pill hides; those menu rows do nothing. |
 | **Files and Folders** | `omacosy-bar` | Only if your clone lives in `~/Documents`, `~/Desktop` or `~/Downloads` — the bar reads its palette from the theme directory inside the repo, and macOS walls launchd agents off from those folders. | The bar **hangs at startup** waiting on the prompt. Clone to `~/.local/share/omacosy` and this never comes up. |
 
+On **Location**, the one that sounds worst: it buys exactly one string.
+macOS classes the wi-fi network's name as location data, so the pill
+cannot name your network without it. The bar requests authorisation and
+then reads `ssid()` — it never asks for a position, holds no coordinate
+and starts no location updates. Two things are required and neither
+alone is enough: measured on macOS 26.3 an unbundled binary reads `nil`
+however it is authorised, which is why the bar ships inside a minimal
+`.app`. Refuse it and you lose the name, nothing else.
+
 ### What it does not do
 
-- **No Location.** macOS classes the wi-fi network's name as location
-  data, so the wi-fi pill shows a signal icon and no name. Asking for
-  the grant does not fix it: measured on macOS 26.3, an unbundled
-  binary reads `nil` from CoreWLAN even with Location authorized and
-  updates running, and `ipconfig` prints `SSID : <redacted>` for the
-  same reason. Shipping the bar as an `.app` might lift it; that is not
-  worth a location prompt, so the bar does not ask.
 - **No telemetry, no analytics, no crash reporting.** Nothing is sent
   anywhere about you or this machine.
 - **One network call**, ever: `https://wttr.in/?format=j1` on a long
@@ -199,10 +202,10 @@ behind everything when the pointer leaves.
   notch detection via `NSScreen.safeAreaInsets`), hidden
   when Spotify isn't running.
 - **Bluetooth** — device menu (click to connect/disconnect), power
-  toggle. **WiFi** — ip and router, signal with a verdict, link rate and
-  security generation, channel with its band and width. No network name:
-  macOS classes the SSID as location data and will not hand it to an
-  unbundled binary at all (see [Permissions](#permissions)).
+  toggle. **WiFi** — network name, ip and router, signal with a verdict,
+  link rate and security generation, channel with its band and width.
+  The name needs the Location grant, because macOS classes an SSID as
+  location data (see [Permissions](#permissions)).
   **Weather** — wttr.in, cached details popup.
   **Volume** — scroll adjusts, click opens slider + output-device menu,
   right-click mutes. **Brightness** — scroll adjusts, click opens a slider

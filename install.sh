@@ -168,17 +168,30 @@ fi
 # IOBluetooth) instead of forking scripts. The embedded Info.plist carries
 # the Bluetooth usage description an unbundled binary otherwise cannot
 # declare, and the agent below sets OMACOSY_MANAGED so it knows it may ask.
-# the plist is compiled INTO the binary, so a change to it alone still
-# needs a rebuild — the usage strings live there and a stale binary asks
-# for nothing
-if [ ! -x "$HOME/.local/bin/omacosy-bar" ] \
-  || [ "$REPO_DIR/helper/bar.swift" -nt "$HOME/.local/bin/omacosy-bar" ] \
-  || [ "$REPO_DIR/helper/bar-info.plist" -nt "$HOME/.local/bin/omacosy-bar" ]; then
+#
+# It ships inside a minimal .app because macOS will not give the wi-fi
+# network name to an unbundled binary: measured on 26.3, a bundled app
+# with Location authorised reads the SSID and a bare Mach-O reads nil no
+# matter what it is granted. The signing identifier is unchanged, so
+# existing grants ride through.
+#
+# the plist is compiled INTO the binary AND copied in as the bundle's
+# Info.plist, so a change to it alone still needs a rebuild — the usage
+# strings live there and a stale binary asks for nothing
+BAR_APP="$HOME/.local/share/omacosy/omacosy-bar.app"
+BAR_BIN="$BAR_APP/Contents/MacOS/omacosy-bar"
+if [ ! -x "$BAR_BIN" ] \
+  || [ "$REPO_DIR/helper/bar.swift" -nt "$BAR_BIN" ] \
+  || [ "$REPO_DIR/helper/bar-info.plist" -nt "$BAR_BIN" ]; then
   log "Building omacosy-bar"
+  mkdir -p "$BAR_APP/Contents/MacOS"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -framework DisplayServices \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/bar-info.plist" \
-    -o "$HOME/.local/bin/omacosy-bar" "$REPO_DIR/helper/bar.swift"
+    -o "$BAR_BIN" "$REPO_DIR/helper/bar.swift"
 fi
+cp "$REPO_DIR/helper/bar-info.plist" "$BAR_APP/Contents/Info.plist"
+mark "built-bar-app"
+rm -f "$HOME/.local/bin/omacosy-bar"   # the pre-bundle binary, if any
 
 # focus-follows-mouse daemon (own binary so helper rebuilds never
 # invalidate its Accessibility grant); runs as a launchd agent
@@ -200,7 +213,8 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.bar "$HOME/.local/bin/omacosy-bar" 2>/dev/null || true
+  # the BUNDLE is signed now; the identifier is what grants key on
+  codesign -f -s "Apple Development" --identifier com.omacosy.bar "$BAR_APP" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
 else
   log "NOTE: no Apple Development signing identity found."
@@ -278,7 +292,7 @@ cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.omacosy.bar</string>
-  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-bar</string></array>
+  <key>ProgramArguments</key><array><string>$BAR_BIN</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <!-- TCC judges bluetooth by the RESPONSIBLE process: started from a

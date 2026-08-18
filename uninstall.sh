@@ -26,6 +26,7 @@ launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/n
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/omacosy-dwindle"
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" "$HOME/.local/bin/omacosy-bar"
+rm -rf "$HOME/.local/share/omacosy/omacosy-bar.app"
 # overview is self-daemonizing (no launchd agent) — kill by pidfile
 if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
   kill "$(cat "/tmp/omacosy-overview-$(id -u).pid")" 2>/dev/null || true
