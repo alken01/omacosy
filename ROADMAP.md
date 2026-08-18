@@ -153,9 +153,34 @@ existing (~20MB) and every plugin's fork storm no longer happening. Call
 memory a wash; the win was always latency, and it should be described
 that way.
 
-Still separate processes: borders and the overview. Folding those in is
-the obvious next step — never a lock screen (`loginwindow` is protected)
-or a Notification Center replacement.
+Still separate processes: borders, the overview, ffm and dwindle. An
+earlier draft of this file called folding them in "the obvious next
+step", which the measurements do not support as stated.
+
+A minimal AppKit daemon with one empty window is 32.5MB resident before
+it does anything. borders is 31.7MB — essentially all runtime tax for
+one CAShapeLayer ring — and overview is 39.1MB. Folding both into the
+bar reclaims two AppKit runtimes, about 55-65MB, and deletes real
+duplication: bar and borders each hold their own WindowServer connection
+draining overlapping create/destroy/move/resize events, three kqueue
+watches sit on the same theme directory, and both handle display hotplug
+separately, which is why each hit its own version of that bug.
+
+Against it: blast radius (a borders crash currently leaves the bar up)
+and the permission surface. TCC grants are tied to the signature, so one
+binary holding Screen Recording, Bluetooth and Accessibility loses all
+three whenever a rebuild invalidates it, where today they fail
+independently.
+
+So: borders is the clear candidate — nearly pure runtime tax, the same
+event stream, the same hotplug logic, no extra grant. Overview is
+marginal, needing Screen Recording and holding capture buffers either
+way. ffm stays out precisely to keep its Accessibility grant isolated,
+and dwindle stays out because at 9.2MB with no AppKit it is already the
+cheapest thing here.
+
+Never a lock screen (`loginwindow` is protected) or a Notification
+Center replacement.
 
 ## Wants
 
