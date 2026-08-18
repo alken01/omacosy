@@ -336,6 +336,13 @@ fi
 if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-macos26-raw-multitouch.patch" 2>/dev/null; then
   git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-macos26-raw-multitouch.patch"
 fi
+# docking fix: one socket timeout used to strand the client in CLI mode
+# for the whole session, and that CLI mode ran a bare `aerospace` a
+# launch agent's PATH cannot resolve — so every swipe after plugging in
+# a display silently did nothing. Retry the socket, resolve the binary.
+if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-socket-recovery.patch" 2>/dev/null; then
+  git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-socket-recovery.patch"
+fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
 log "Building aerospace-swipe (grant Accessibility when prompted)"
