@@ -1574,7 +1574,19 @@ final class BarSurface {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
-        window.level = .statusBar // sketchybar's own windows sit at layer -20
+        // Below normal windows, where sketchybar's own windows sat. Verified:
+        // the bar still renders there and still receives clicks — AppKit
+        // honours a negative level, and aerospace's outer.top gap keeps
+        // tiled windows off the strip (a tiled window measures y=42 here
+        // against the bar's 0..34).
+        //
+        // This does NOT make the fullscreen check redundant, which was the
+        // hope. On a notched display a fullscreen window starts BELOW the
+        // notch — measured at y=32 — so it cannot cover a bar drawn from
+        // y=0 by z-order alone. Being below windows is still worth it: the
+        // bar can never float over an app, and on a flat display fullscreen
+        // covers it for free.
+        window.level = NSWindow.Level(rawValue: -20)
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         window.acceptsMouseMovedEvents = true // tracking areas need the moves
         view = BarView(frame: NSRect(origin: .zero, size: frame.size))
