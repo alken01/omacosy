@@ -145,7 +145,15 @@ the theme is watched, so a row that did nothing would be worse than a row
 that is absent.
 
 What is left is not features but standing: per-display bars, notch-aware layout, and
-fullscreen hiding. Still separate processes: borders and the overview. Folding those in is
+fullscreen hiding. Memory, measured after the move: the whole stack idles at 377MB. The bar
+itself is 55MB against a bare sketchybar's 24MB — AppKit costs more
+resident memory than a lean C program, and no amount of architecture
+argues that away. What pays for it is `omacosy-watcher` no longer
+existing (~20MB) and every plugin's fork storm no longer happening. Call
+memory a wash; the win was always latency, and it should be described
+that way.
+
+Still separate processes: borders and the overview. Folding those in is
 the obvious next step — never a lock screen (`loginwindow` is protected)
 or a Notification Center replacement.
 

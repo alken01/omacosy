@@ -56,7 +56,13 @@ brew trust felixkratz/formulae 2>/dev/null || true
 log "Installing packages (brew bundle)"
 PRE_FORMULAE="$(brew list --formula 2>/dev/null | sort)"
 PRE_CASKS="$(brew list --cask 2>/dev/null | sort)"
-brew bundle --file="$REPO_DIR/Brewfile"
+# One package failing must not abort the install: the rest of the desktop
+# does not depend on it, and `set -e` would otherwise take a cask that
+# merely needs sudo to adopt an existing app and turn it into a dead stop.
+if ! brew bundle --file="$REPO_DIR/Brewfile"; then
+  log "WARNING: some Homebrew packages failed to install (see above)."
+  log "  Continuing — re-run install.sh after resolving them."
+fi
 # record only packages that brew bundle ACTUALLY added
 comm -13 <(printf '%s\n' "$PRE_FORMULAE") <(brew list --formula 2>/dev/null | sort) \
   | while read -r f; do [ -n "$f" ] && mark "brew-formula $f"; done
@@ -287,7 +293,6 @@ link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"
 link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
 link "$REPO_DIR/bin/omacosy-ws-collapse" "$HOME/.local/bin/omacosy-ws-collapse"
-link "$REPO_DIR/bin/omacosy-bar-repaint" "$HOME/.local/bin/omacosy-bar-repaint"
 link "$REPO_DIR/bin/omacosy-float" "$HOME/.local/bin/omacosy-float"
 
 # --- 3. omarchy theme convention -------------------------------------------
