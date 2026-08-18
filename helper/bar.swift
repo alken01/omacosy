@@ -795,8 +795,11 @@ final class PopupView: NSView {
     var rows: [PopupRow] = []
     private var rowRects: [(Int, NSRect)] = []
 
-    override var isFlipped: Bool { true }
-
+    // NOT flipped: CTLineDraw draws in the CONTEXT's coordinates, so a
+    // flipped view renders every glyph mirrored. NSString.draw hid that
+    // difference, which is why this only broke when the text layer moved to
+    // CoreText — the bar is unflipped and looked fine. Rows are laid out
+    // downward explicitly instead of flipping the view.
     func font(_ row: PopupRow) -> NSFont {
         if row.hero { return nerdFont("Bold", 13) }
         if row.dim { return nerdFont("Regular", 12) }
@@ -833,7 +836,7 @@ final class PopupView: NSView {
         body.lineWidth = 1
         body.stroke()
 
-        var y = popupPad
+        var y = bounds.height - popupPad - rowHeight
         for (index, row) in rows.enumerated() {
             let rect = NSRect(x: popupPad, y: y, width: bounds.width - popupPad * 2, height: rowHeight)
             if row.highlight {
@@ -866,7 +869,7 @@ final class PopupView: NSView {
                 drawText(row.text, font(row), color(row), leftAt: x, midY: rect.midY)
             }
             rowRects.append((index, rect))
-            y += rowHeight
+            y -= rowHeight
         }
     }
 
