@@ -316,6 +316,9 @@ final class KeyWindow: NSPanel {
 var shownIds: [String] = []
 var allIds: [String] = []
 var overlayVisible = false
+// a reorder is moving windows: the resulting app activations are ours,
+// not the user leaving — see reorderWorkspaces()
+var reordering = false
 
 let win = KeyWindow(contentRect: NSScreen.main!.frame,
     styleMask: [.borderless, .nonactivatingPanel],
@@ -399,12 +402,96 @@ func switchTo(_ ws: String) {
     }
 }
 
+// AeroSpace workspaces cannot be renamed or resequenced — the name IS
+// the position. So what a drag reorders is their CONTENT: sliding a
+// card left rotates the windows through every slot between where it
+// was and where it landed, and the row reads in the dragged order
+// afterwards. `slots` is the row's workspace names in position order,
+// `order` the same names in the order the user dropped them.
+//
+// The windows arrive as flat siblings, so a split layout inside a
+// moved workspace does not survive the trip.
+func reorderWorkspaces(from slots: [String], to order: [String]) {
+    let moves = zip(slots, order).filter { $0.0 != $0.1 }
+    guard !moves.isEmpty else { return }
+    tlog("reorder \(slots) -> \(order)")
+    // whatever the overlay was restoring focus to may be on another
+    // workspace in a moment; dismissal must not chase it
+    previousFront = nil
+    // moving a window activates its app, which takes key away from the
+    // panel — measured: one drag and the overview vanished mid-gesture.
+    // The overlay owns focus for the length of the reorder even when
+    // the window server briefly disagrees.
+    reordering = true
+    DispatchQueue.global().async {
+        // re-read: the snapshot behind the cards is as old as the
+        // overlay, and moving a window id that has since closed is a
+        // silent no-op that would leave the row half-rotated
+        var wins: [String: [String]] = [:]
+        for line in aerospace(["list-windows", "--all", "--format",
+            "%{workspace}\t%{window-id}"]).split(separator: "\n") {
+            let f = line.split(separator: "\t").map(String.init)
+            guard f.count == 2 else { continue }
+            wins[f[0], default: []].append(f[1])
+        }
+        // every move reads that ONE snapshot, so a window that lands in
+        // a slot which is itself a source is not picked up twice
+        for (slot, src) in moves {
+            for wid in wins[src] ?? [] {
+                _ = aerospace(["move-node-to-workspace", "--window-id", wid, slot])
+            }
+        }
+        DispatchQueue.main.async {
+            if overlayVisible { // take key back the way showOverlay takes it
+                win.makeKeyAndOrderFront(nil)
+                win.makeFirstResponder(win.contentView)
+                slpsFocus(pid: getpid(), wid: UInt32(win.windowNumber))
+            }
+            rebuildCards()
+            // aerospace's own focus pass lands after ours; the truce
+            // holds until it has settled
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { reordering = false }
+        }
+    }
+}
+
+// the digit on a card belongs to its SLOT, not to the windows that
+// just moved into it — after a reorder the only honest redraw is a
+// fresh snapshot
+func rebuildCards() {
+    guard overlayVisible, let content = win.contentView as? ContentView else { return }
+    let mon = monitorUnderCursor()
+    DispatchQueue.global().async {
+        let snap = snapshotWorkspaces(mon: mon)
+        DispatchQueue.main.async {
+            guard overlayVisible, win.contentView === content else { return }
+            buildOverlay(snap, into: content)
+        }
+    }
+}
+
 final class ContentView: NSView {
-    var cardRects: [(NSRect, String)] = []
+    // cards are the occupied workspaces in grid order, slots the grid
+    // positions they sit in; a drag permutes the first over the second
+    // and reorderWorkspaces() makes the windows follow
+    var cardOrder: [String] = []
+    var cardSlots: [NSRect] = []
+    var cardViews: [String: NSView] = [:]
+    var chipRects: [(NSRect, String)] = [] // empty workspaces: drop targets
     // hover feedback: (rect, ws, view, isChip); focusedWs keeps its ring
     var hoverItems: [(NSRect, String, NSView, Bool)] = []
     var focusedWs = ""
     var hovered: String? = nil
+    struct Drag {
+        let ws: String
+        let view: NSView
+        let home: NSRect
+        let start: NSPoint
+        var live = false // past the threshold — a click until then
+        var order: [String] // the row as it would land right now
+        var chip: String? = nil // hovering an empty slot instead
+    }
+    var drag: Drag? = nil
     // MC-style backdrop: screenshot of the desktop zooming back under
     // a dim wash while the cards fade in
     let wallLayer = CALayer() // wallpaper backdrop
@@ -418,14 +505,85 @@ final class ContentView: NSView {
     }
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        tlog("mouseDown at \(Int(p.x)),\(Int(p.y)) cards=\(cardRects.count)")
-        for (r, ws) in cardRects where r.contains(p) {
-            tlog("  hit card \(ws)")
+        tlog("mouseDown at \(Int(p.x)),\(Int(p.y)) cards=\(cardOrder.count)")
+        // a press on a card is not yet a switch — it may become a drag,
+        // so the action waits for mouseUp
+        if let i = cardSlots.firstIndex(where: { $0.contains(p) }),
+            let v = cardViews[cardOrder[i]] {
+            tlog("  press card \(cardOrder[i])")
+            drag = Drag(ws: cardOrder[i], view: v,
+                home: cardSlots[i], start: p, order: cardOrder)
+            return
+        }
+        for (r, ws) in chipRects where r.contains(p) {
+            tlog("  hit chip \(ws)")
             switchTo(ws)
             return
         }
         tlog("  backdrop -> hide")
         hideOverlay()
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard var d = drag else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if !d.live {
+            guard hypot(p.x - d.start.x, p.y - d.start.y) > 6 else { return }
+            d.live = true
+            tlog("  drag \(d.ws) begins")
+            cards.addSubview(d.view, positioned: .above, relativeTo: nil)
+            d.view.layer?.shadowColor = NSColor.black.cgColor
+            d.view.layer?.shadowOpacity = 0.55
+            d.view.layer?.shadowRadius = 18
+            d.view.layer?.shadowOffset = CGSize(width: 0, height: -6)
+            d.view.layer?.borderColor = accent.cgColor
+            d.view.layer?.borderWidth = 2
+        }
+        d.view.frame = d.home.offsetBy(dx: p.x - d.start.x, dy: p.y - d.start.y)
+        // an empty slot means "move there", not "reorder" — the row
+        // stays put and the chip lights up instead
+        let chip = chipRects.first { $0.0.contains(p) }?.1
+        var order = cardOrder
+        if chip == nil, let i = cardSlots.firstIndex(where: { $0.contains(p) }) {
+            order.removeAll { $0 == d.ws }
+            order.insert(d.ws, at: min(i, order.count))
+        }
+        if order != d.order || chip != d.chip {
+            d.order = order
+            d.chip = chip
+            // the rest of the row makes room, so the drop is visible
+            // before it commits
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.16
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 1.0, 0.3, 1.0)
+                for (i, ws) in order.enumerated() where ws != d.ws {
+                    cardViews[ws]?.animator().frame = cardSlots[i]
+                }
+            }
+            for (_, ws, v, isChip) in hoverItems where isChip {
+                v.layer?.backgroundColor = NSColor(
+                    calibratedWhite: ws == chip ? 0.22 : 0.09, alpha: 1).cgColor
+            }
+        }
+        drag = d
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard let d = drag else { return }
+        drag = nil
+        guard d.live else { switchTo(d.ws); return } // never moved: a click
+        var landing = d.home
+        if d.chip == nil, let i = d.order.firstIndex(of: d.ws) { landing = cardSlots[i] }
+        d.view.layer?.shadowOpacity = 0
+        if d.ws != focusedWs { d.view.layer?.borderWidth = 0 }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 1.0, 0.3, 1.0)
+            d.view.animator().frame = landing
+        }
+        if let chip = d.chip {
+            reorderWorkspaces(from: [chip], to: [d.ws])
+        } else if d.order != cardOrder {
+            reorderWorkspaces(from: cardOrder, to: d.order)
+        }
     }
     override func mouseMoved(with event: NSEvent) {
         let pt = convert(event.locationInWindow, from: nil)
@@ -505,6 +663,15 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
     shownIds = shown
     allIds = all
     thumbViews.removeAll()
+    // a rebuild after a reorder draws into the SAME view — everything
+    // positional has to go, or the old rects keep taking the clicks
+    content.cards.subviews.forEach { $0.removeFromSuperview() }
+    content.cardOrder.removeAll()
+    content.cardSlots.removeAll()
+    content.cardViews.removeAll()
+    content.chipRects.removeAll()
+    content.hoverItems.removeAll()
+    content.hovered = nil
     let screen = win.screen ?? NSScreen.main!
 
     // adaptive card sizing: few workspaces get big readable previews,
@@ -592,7 +759,9 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
                 card.addSubview(more)
             }
             content.cards.addSubview(card)
-            content.cardRects.append((rect, ws))
+            content.cardOrder.append(ws)
+            content.cardSlots.append(rect)
+            content.cardViews[ws] = card
             content.hoverItems.append((rect, ws, card, false))
             x += cardW + gap
         }
@@ -624,13 +793,13 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             d.frame = NSRect(x: 0, y: 4, width: chipW, height: 16)
             chip.addSubview(d)
             content.cards.addSubview(chip)
-            content.cardRects.append((rect, ws))
+            content.chipRects.append((rect, ws))
             content.hoverItems.append((rect, ws, chip, true))
             cx += chipW + chipGap
         }
     }
 
-    let hint = label("click / 1-9 to switch · esc or swipe down to close",
+    let hint = label("click / 1-9 to switch · drag a card to reorder · esc or swipe down to close",
         size: 12, weight: .regular, color: NSColor(calibratedWhite: 0.5, alpha: 1))
     hint.alignment = .center
     hint.frame = NSRect(x: 0,
@@ -638,8 +807,14 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
         width: screen.frame.width, height: 18)
     content.cards.addSubview(hint)
 
+    tlog("laid out cards \(content.cardOrder) at "
+        + "\(content.cardSlots.map { "\(Int($0.midX)),\(Int($0.midY))" }) "
+        + "chips \(content.chipRects.map { "\($0.1)@\(Int($0.0.midX)),\(Int($0.0.midY))" })")
+
     win.makeFirstResponder(content)
-    revealCards(content)
+    // the open animation belongs to the OPEN; a rebuild after a
+    // reorder must not replay it
+    if content.cards.alphaValue < 1 { revealCards(content) }
     refreshThumbs(shown.flatMap { (wins[$0] ?? []).prefix(4).map(\.id) })
 }
 
@@ -750,6 +925,10 @@ NotificationCenter.default.addObserver(
     forName: NSWindow.didResignKeyNotification, object: win, queue: .main) { _ in
     let front = NSWorkspace.shared.frontmostApplication
     tlog("didResignKey -> frontmost now: \(front?.localizedName ?? "?") pid=\(front?.processIdentifier ?? -1)")
+    guard !reordering else {
+        tlog("  reorder in flight — keeping the overview up")
+        return
+    }
     hideOverlay()
 }
 

@@ -286,6 +286,13 @@ jump; empty workspaces show as small chips (digits work for them too —
 straight to a clean screen). **Swipe down**, Esc, or a backdrop click
 dismisses. Resident daemon, so it opens instantly.
 
+**Drag a card** to reorganize: the row makes room as you move, and the
+drop slides everything between the old and new position over by one.
+AeroSpace workspaces cannot be renamed or resequenced — the name IS the
+position — so what actually moves is their windows, which means a
+split layout inside a moved workspace comes back as a flat row.
+Dropping a card on an empty chip moves that workspace there instead.
+
 ## Parking the setup
 
 `omacosy-toggle off` returns to a vanilla Mac in one command (AeroSpace
