@@ -1474,13 +1474,17 @@ final class BarView: NSView {
         let iconFont = nerdFont("Bold", 14)
         guard let surface else { return }
 
-        // workspace chips, in one bracket — this display's set only
-        // Same rule as the bar: an empty GUEST workspace (the two-digit
-        // set that force-assignment parks here while undocked) is noise,
-        // but an empty primary keeps its slot so the row stays 1..9.
-        let shown = surface.workspaces.filter {
-            $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
-        }
+        // workspace chips, in one bracket — this display's set only.
+        // Undocked, force-assignment parks the GUEST set (11-19) on the
+        // single display, where its empty slots would render as
+        // duplicate digits — so they are hidden and an empty primary
+        // keeps its slot to hold the row at 1..9. Docked, this
+        // surface's list IS its own set: every slot belongs on the row,
+        // and filtering left the laptop showing two lonely icons.
+        let shown = surfaces.count > 1 ? surface.workspaces
+            : surface.workspaces.filter {
+                $0.count == 1 || model.occupied.contains($0) || $0 == model.focused
+            }
         // apple pill: the system menu the hidden native menu bar carried
         let appleGlyph = "\u{f179}"
         let appleFont = nerdFont("Bold", 15)
@@ -1501,14 +1505,17 @@ final class BarView: NSView {
         for ws in shown {
             let slot = NSRect(x: x, y: 0, width: chipBox + chipPad * 2, height: barHeight)
             let box = slot.insetBy(dx: chipPad, dy: 0)
-            if ws == model.focused {
+            // each display marks the workspace IT is showing. The
+            // globally focused workspace is not a useful answer on the
+            // other screen's bar: docked, it never matched there and
+            // the laptop had no "you are here" at all.
+            if ws == surface.visible {
                 let pill = NSRect(x: box.minX, y: (barHeight - chipPillHeight) / 2,
                                   width: chipBox, height: chipPillHeight)
                 palette.accent.setFill()
                 NSBezierPath(roundedRect: pill, xRadius: radius, yRadius: radius).fill()
             }
-            let tint: NSColor = ws == model.focused ? palette.barBG
-                : (ws == surface.visible ? palette.label : palette.muted)
+            let tint: NSColor = ws == surface.visible ? palette.barBG : palette.muted
             // a workspace holding exactly one app shows that app's icon —
             // free here, where NSRunningApplication hands the icon over,
             // versus sketchybar's image-registration dance
