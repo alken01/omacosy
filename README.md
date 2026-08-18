@@ -2,7 +2,8 @@
 
 omakase + macOS + cosy. An [omarchy](https://omarchy.org)-style setup for
 macOS: tiling window management with a real Super key and Hyprland's
-dwindle layout, a fully interactive themed status bar,
+dwindle layout, a themed status bar written for it (bar, popups,
+sliders and screen dimming in one process),
 focus-follows-mouse, trackpad workspace swipes with a Mission-Control-
 style workspace overview (live previews included), focused-window
 border rings, and unified theme switching down to the wallpaper —
@@ -95,12 +96,13 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 |---|---|---|
 | Tiling WM | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | `config/aerospace/aerospace.template.toml` |
 | Super key | [Karabiner](https://karabiner-elements.pqrs.org) (Caps Lock → cmd+ctrl+alt) | `config/karabiner/` (copied, not symlinked — TCC) |
-| Status bar | omacosy-bar (native, one process) | `helper/bar.swift` |
+| Status bar, popups, shade | `omacosy-bar` (self-compiled launchd agent — one process draws all of it) | `helper/bar.swift` |
 | Window borders + fullscreen shroud | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
 | Dwindle layout | `omacosy-dwindle` (self-compiled launchd agent) | `helper/dwindle.swift` |
+| Workspace / window navigation | `omacosy-ws`, `omacosy-cycle`, `omacosy-float` | `bin/` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
 | Prompt | starship | `config/starship.toml` |
@@ -171,42 +173,51 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 
 | Chord | Action |
 |---|---|
-| `Super+tab` / `Super+shift+tab` | next / previous workspace (this display's set) |
-| `Alt+tab` / `Alt+shift+tab` | cycle windows on this workspace (floats included) |
+| **Navigation** | |
+| `Super+1..9` | switch to this display's workspace N |
+| `Super+tab` / `Super+shift+tab` | next / previous workspace, within this display's set |
+| `Super+b` | back and forth between the last two workspaces |
+| `Alt+tab` / `Alt+shift+tab` | cycle windows **on this workspace**, floats included |
 | `Ctrl+Alt+tab` | cycle focus between displays |
-| `Super+b` | back to the previous workspace |
-| `Super+shift+o` | throw window to the other display |
-| `Super+shift+l` | lock the screen |
-| `Super+enter` | new terminal window |
-| `Super+shift+enter` | browser |
-| `Super+space` | launcher (Raycast) |
+| `Super+arrows` | focus the window in that direction |
+| `Super+s` | surface the next floating window (and bring the cursor) |
+| **Moving windows** | |
+| `Super+shift+arrows` | move the window in that direction |
+| `Super+shift+1..9` | move the window to workspace N and follow it |
+| `Super+shift+o` | throw the window to the same slot on the other display |
+| `Super+shift+space` | throw the WHOLE workspace to the other display |
+| **Layout** | |
 | `Super+w` | close window |
-| `Super+arrows` | focus window |
-| `Super+shift+arrows` | move window |
-| `Super+1..9` | switch workspace |
-| `Super+shift+1..9` | move window to workspace (and follow) |
-| `Super+s` / `Super+shift+s` | scratchpad workspace (toggle / send window) |
-| `Super+tab` | previous workspace |
-| `Super+shift+tab` | throw window to same slot on other monitor |
-| `Super+shift+space` | throw WHOLE workspace to other monitor |
-| `Super+f` | fullscreen — on notched displays the camera strip is blacked out so it reads as true fullscreen, while the window stays in its workspace (swipes still reach it) |
-| `Super+n` | native macOS fullscreen (a separate Space — outside the workspace model, avoid unless an app needs it) |
 | `Super+t` | toggle floating |
 | `Super+j` | toggle split direction |
 | `Super+-` / `Super+=` | resize |
-| `Super+shift+f/m/g` | files / music / messenger |
-| `Super+shift+b` | btop (floating) |
-| `Super+shift+t` | next theme |
-| `Super+l` | lock screen |
-| `Super+esc` |  system menu |
+| `Super+f` | fullscreen — on notched displays the camera strip is blacked out so it reads as true fullscreen, while the window stays in its workspace (swipes still reach it) |
+| `Super+n` | native macOS fullscreen (a separate Space — outside the workspace model, avoid unless an app needs it) |
 | `Super+r` | resize mode (`h/j/k/l`, `-`/`=`, `esc`) |
 | `Super+shift+;` | service mode (`esc` reload, `r` flatten, `⌫` close others) |
+| **Apps and system** | |
+| `Super+enter` / `Super+shift+enter` | terminal / browser |
+| `Super+space` | launcher (Raycast) |
+| `Super+shift+f` / `+m` / `+g` | files / music / messenger (set in `apps.conf`) |
+| `Super+shift+t` | next theme |
+| `Super+shift+l` | lock the screen |
+
+Screenshots, clipboard and app switching stay macOS's own (`Cmd+Shift+3/4/5`,
+`Cmd+C/V`, `Cmd+Tab`) — `Alt+Tab` above is the *window*-scoped switcher
+macOS lacks.
+
+**On the modifier space.** omarchy layers `Super+Ctrl` and `Super+Alt` on
+top of `Super`. This setup cannot: Super IS `cmd+ctrl+alt`, so those
+modifiers are already spent and **Shift is the only layer left** — two
+against omarchy's four. Bindings that would collide are re-homed by
+mnemonic (lock is `Super+Shift+L`, not `Super+Ctrl+L`), and the overflow
+lives in binding modes instead.
 
 Each display owns an independent set of NINE workspaces, omarchy
 style: main holds 1–9, secondary holds 11–19 — same last digit = same
 slot, and the bar and overview render only the slot digit. `Super+N`
 switches the focused monitor's slot N (via `omacosy-ws`);
-`Super+Shift+N` moves the window to that slot; `Super+Shift+Tab`
+`Super+Shift+N` moves the window to that slot; `Super+Shift+O`
 throws the window to the same slot on the other monitor. On a single
 display the secondary set falls back to main and sits empty. Windows
 open on the workspace you're on; nothing is auto-assigned by app.
