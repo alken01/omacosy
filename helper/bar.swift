@@ -2106,6 +2106,22 @@ NSWorkspace.shared.notificationCenter.addObserver(
 // now, move the window onto it, and rebuild. Screen parameters arrive
 // before the arrangement settles, so give it a beat (borders.swift learnt
 // the same lesson with a stale CG-to-Cocoa flip after a replug).
+//
+// This is also where the guest set gets folded and unfolded. Undocked,
+// AeroSpace parks workspaces 11-19 on the one display, and omacosy-ws
+// only ever matches single-digit slots — so anything left on a guest
+// workspace is unreachable by Super+N or Super+Tab until a display
+// comes back. omacosy-ws-collapse moves those windows into the empty
+// 1-9 slots and remembers where they came from.
+//
+// It used to be driven by sketchybar's display_change.sh, which went
+// out with sketchybar; nothing has called it since, so the first undock
+// after that stranded a workspace's worth of apps. The bar is the only
+// long-lived process already watching for this, so it owns it now.
+// Guarded on the COUNT changing: this notification also fires for
+// resolution and arrangement changes, and re-folding on those would
+// shuffle windows for no reason.
+var monitorCount = NSScreen.screens.count
 NotificationCenter.default.addObserver(
     forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
 ) { _ in
@@ -2114,6 +2130,19 @@ NotificationCenter.default.addObserver(
         rebuildSurfaces()
         applyShade() // a new display arrives at full output
         kickRebuild()
+        let now = NSScreen.screens.count
+        guard now != monitorCount else { return }
+        let wasSingle = monitorCount == 1
+        monitorCount = now
+        let op = now == 1 ? "collapse" : (wasSingle ? "restore" : "")
+        guard !op.isEmpty else { return }
+        tlog("displays: \(now) — running ws-collapse \(op)")
+        // off-main: it shells out to aerospace per window, and restore
+        // deliberately sleeps while aerospace re-adopts the monitor
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = shell("\(NSHomeDirectory())/.local/bin/omacosy-ws-collapse", [op])
+            DispatchQueue.main.async { kickRebuild() }
+        }
     }
 }
 

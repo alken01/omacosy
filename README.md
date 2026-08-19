@@ -278,9 +278,18 @@ style: main holds 1–9, secondary holds 11–19 — same last digit = same
 slot, and the bar and overview render only the slot digit. `Super+N`
 switches the focused monitor's slot N (via `omacosy-ws`);
 `Super+Shift+N` moves the window to that slot; `Super+Shift+O`
-throws the window to the same slot on the other monitor. On a single
-display the secondary set falls back to main and sits empty. Windows
-open on the workspace you're on; nothing is auto-assigned by app.
+throws the window to the same slot on the other monitor. Windows open
+on the workspace you're on; nothing is auto-assigned by app.
+
+**Unplugging folds the second display's workspaces into the first.**
+AeroSpace parks 11–19 on the remaining display, but `Super+N` and
+`Super+Tab` only ever match single-digit slots — so without help, every
+window on a secondary workspace would be stranded where no keybinding
+reaches it. On a monitor-count change the bar runs
+`omacosy-ws-collapse`: each occupied guest workspace empties into the
+lowest free 1–9 slot, occupied slots are never touched, and every moved
+window is recorded with its origin. Plug the display back in and they
+go home individually, so anything you opened while undocked stays put.
 
 ## Themes
 

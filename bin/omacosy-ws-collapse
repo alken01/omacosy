@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # omacosy-ws-collapse <collapse|restore> — fold the second display's
 # workspaces into the primary set when a monitor unplugs, and unfold
-# on replug. Called by display_change.sh on monitor-count changes.
+# on replug. Called by omacosy-bar when the monitor count changes
+# (it is the one long-lived process already watching for that).
 #
 # collapse: every non-empty guest workspace (two-digit id) empties
 #   into the lowest EMPTY 1-9 slot — used slots are never touched.
@@ -49,6 +50,7 @@ case "${1:-}" in
     done
     # moving between two HIDDEN workspaces emits no SkyLight event
     # (nothing on screen changed), so poke the bar directly
+    : > /tmp/omacosy-bar-moved
     ;;
   restore)
     [ -s "$MAP" ] || exit 0
@@ -65,6 +67,7 @@ case "${1:-}" in
         echo "$(date '+%F %T') restored $wid -> $gws" >>/tmp/omacosy-ws-collapse.log
     done <"$MAP.run"
     rm -f "$MAP.run"
+    : > /tmp/omacosy-bar-moved
     ;;
   *)
     echo "usage: omacosy-ws-collapse <collapse|restore>" >&2
