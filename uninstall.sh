@@ -28,8 +28,17 @@ launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null 
 rm -f "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" "$HOME/.local/bin/omacosy-bar"
 rm -rf "$HOME/.local/share/omacosy/omacosy-bar.app"
 # overview is self-daemonizing (no launchd agent) — kill by pidfile
-if [ -f "/tmp/omacosy-overview-$(id -u).pid" ]; then
-  kill "$(cat "/tmp/omacosy-overview-$(id -u).pid")" 2>/dev/null || true
+# /tmp is shared. `[ -f ]` follows symlinks, so without the -L check a
+# link planted at this path could point at a file holding someone
+# else's pid and we would signal that instead. The contents are also
+# only trusted as far as "digits".
+PIDFILE="/tmp/omacosy-overview-$(id -u).pid"
+if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
+  OVERVIEW_PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+  case "$OVERVIEW_PID" in
+    '' | *[!0-9]*) : ;;
+    *) kill "$OVERVIEW_PID" 2>/dev/null || true ;;
+  esac
 fi
 rm -f "$HOME/.local/bin/omacosy-overview" "$HOME/.local/bin/omacosy-toggle"
 rm -f /tmp/omacosy-*.log /tmp/omacosy-*.err "/tmp/omacosy-overview-$(id -u).pid" \

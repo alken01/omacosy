@@ -107,8 +107,36 @@ link() {
 }
 
 # generate aerospace.toml from the template + app choices
-source "$REPO_DIR/config/apps.conf"
-[ -f "$REPO_DIR/config/apps.local.conf" ] && source "$REPO_DIR/config/apps.local.conf"
+#
+# These are READ, not sourced. apps.local.conf is a file the README
+# invites you to paste values into, and `source` would execute whatever
+# is in it. The values then go through sed into single-quoted TOML
+# strings, so a name carrying a quote or a newline could close the
+# string and add its own aerospace command: anything outside a plain app
+# name is refused rather than substituted.
+read_apps() {
+  local f="$1" line k v
+  [ -f "$f" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    k="${line%%=*}"; v="${line#*=}"
+    [ "$k" = "$line" ] && continue          # no '=' on the line
+    v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+    case "$v" in
+      ''|*[!A-Za-z0-9\ ._-]*)
+        log "ignoring $k in $(basename "$f"): an app name cannot contain '$v'"
+        continue ;;
+    esac
+    case "$k" in
+      TERMINAL) TERMINAL="$v" ;;
+      BROWSER) BROWSER="$v" ;;
+      MUSIC) MUSIC="$v" ;;
+      MESSENGER) MESSENGER="$v" ;;
+    esac
+  done < "$f"
+}
+read_apps "$REPO_DIR/config/apps.conf"
+read_apps "$REPO_DIR/config/apps.local.conf"
 sed -e "s|@TERMINAL@|$TERMINAL|g" -e "s|@BROWSER@|$BROWSER|g" \
     -e "s|@MUSIC@|$MUSIC|g" -e "s|@MESSENGER@|$MESSENGER|g" \
   "$REPO_DIR/config/aerospace/aerospace.template.toml" > "$REPO_DIR/config/aerospace/aerospace.toml"

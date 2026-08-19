@@ -194,10 +194,21 @@ func focus(pid: pid_t, rect: CGRect, allowRaise: Bool) {
             guard AXUIElementCopyAttributeValue(win, kAXPositionAttribute as CFString, &posRef) == .success,
                 AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sizeRef) == .success
             else { continue }
+            // These come from ANOTHER app's accessibility tree, so the
+            // type is that app's word. Swift cannot check it for us —
+            // a cast to a CoreFoundation type is unchecked and "always
+            // succeeds" — so the type ID is checked by hand, and the
+            // results are only used when AXValueGetValue says it filled
+            // them in. Ignoring that return compared a zeroed point
+            // against a real frame and silently never matched.
             var pos = CGPoint.zero
             var size = CGSize.zero
-            AXValueGetValue(posRef as! AXValue, .cgPoint, &pos)
-            AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+            guard let posRef, let sizeRef,
+                CFGetTypeID(posRef) == AXValueGetTypeID(),
+                CFGetTypeID(sizeRef) == AXValueGetTypeID(),
+                AXValueGetValue(posRef as! AXValue, .cgPoint, &pos),
+                AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+            else { continue }
             dbg("  ax win pos=(\(Int(pos.x)),\(Int(pos.y))) size=(\(Int(size.width))x\(Int(size.height))) vs cg=(\(Int(rect.origin.x)),\(Int(rect.origin.y))) \(Int(rect.width))x\(Int(rect.height))")
             if abs(pos.x - rect.origin.x) < 2, abs(pos.y - rect.origin.y) < 2,
                 abs(size.width - rect.width) < 2, abs(size.height - rect.height) < 2 {
