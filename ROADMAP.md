@@ -75,7 +75,7 @@ Findings worth keeping even if this goes no further:
 
 - Asking for a font family and **verifying you got it** makes the
   Hiragino class of bug unrepresentable; sketchybar's `--default` failed
-  silently for months.
+  silently, and nothing in the output ever said so.
 - Running the CLI calls inline on the main queue blocked rendering for
   7.6 s under contention. The architecture only pays if subprocess work
   never sits on the path a frame travels — the same discipline, applied

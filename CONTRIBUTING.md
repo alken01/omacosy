@@ -22,8 +22,9 @@ Small repo, strong opinions. PRs are welcome when they keep these.
   window create/destroy only. A workspace switch touches no subprocess.
 - **Ask for a font family and VERIFY you got it.** Requesting a family
   that is not installed does not fail, it silently substitutes; that is
-  how half a bar spent months in Hiragino Sans. `nerdFont()` checks the
-  family it got back and says so, once, when it had to fall back.
+  how half a bar ended up rendering in Hiragino Sans without one error
+  anywhere. `nerdFont()` checks the family it got back and says so,
+  once, when it had to fall back.
 - **Popups are views, not items.** A popup is a list of rows in its own
   window, built fresh each time it opens. There is no naming convention
   to respect and nothing to clean up: closing the window takes the rows
