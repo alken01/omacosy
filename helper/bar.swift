@@ -737,14 +737,12 @@ func updateWifi() {
         set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
         return
     }
-    // The SSID is location-sensitive data: it needs the Location grant
-    // AND a bundled binary. Measured on macOS 26.3 — unbundled reads nil
-    // however it is authorised, bundled + authorised reads the name — so
-    // the bar ships inside a .app (see install.sh). ipconfig is redacted
-    // under the same rule, which is why the subprocess this used to fork
-    // bought nothing.
-    let named = CWWiFiClient.shared().interface()?.ssid() ?? ""
-    set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = named }
+    // The name lives in the POPUP, not the pill. A network called
+    // "Martin Routerking" is 150pt of bar, and the right cluster is
+    // right-aligned — on the notched display that pushed the far end
+    // of it under the notch. The icon says connected; a click says to
+    // what.
+    set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = "" }
 }
 
 // --- bluetooth (IOBluetooth publishes connect/disconnect)
@@ -1287,8 +1285,11 @@ func securityName(_ s: CWSecurity) -> String? {
 func wifiRows() -> [PopupRow] {
     let interface = CWWiFiClient.shared().interface()
     var rows: [PopupRow] = [
-        PopupRow(text: (rightItems["wifi"]?.label.isEmpty ?? true) ? "wi-fi" : rightItems["wifi"]!.label,
-                 hero: true),
+        // the SSID is location-sensitive data: it needs the Location
+        // grant AND a bundled binary (measured on macOS 26.3 — an
+        // unbundled build reads nil however it is authorised), which
+        // is why the bar ships inside a .app. See install.sh.
+        PopupRow(text: interface?.ssid() ?? "wi-fi", hero: true),
     ]
     let net = wifiIPv4()
     rows.append(PopupRow(text: "ip \(net.ip.ifEmpty("none"))"))
