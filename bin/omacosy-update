@@ -50,11 +50,17 @@ if [ "$LOCAL" = "$REMOTE" ]; then
   exit 0
 fi
 
-# a remote that has diverged rather than moved ahead means someone
-# rewrote history; merging that silently is how a clone ends up in a
-# state nobody can reason about
+# Being AHEAD is normal if you commit to your own clone, and is not an
+# error: there is simply nothing to pull. Only a genuine divergence
+# (both sides moved) is refused, because merging that silently is how a
+# clone ends up in a state nobody can reason about.
+if git -C "$REPO" merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
+  AHEAD="$(git -C "$REPO" rev-list --count "$REMOTE..$LOCAL")"
+  say "nothing to pull — you are $AHEAD commit(s) ahead of origin/$BRANCH"
+  exit 0
+fi
 if ! git -C "$REPO" merge-base --is-ancestor "$LOCAL" "$REMOTE"; then
-  die "your branch has diverged from origin/$BRANCH — resolve it by hand"
+  die "your branch and origin/$BRANCH have both moved — resolve by hand"
 fi
 
 COUNT="$(git -C "$REPO" rev-list --count "$LOCAL..$REMOTE")"
