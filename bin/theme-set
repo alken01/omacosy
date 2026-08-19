@@ -49,7 +49,15 @@ if [ -n "$WALL" ]; then
   if [ -x "$HOME/.local/bin/omacosy-helper" ]; then
     "$HOME/.local/bin/omacosy-helper" wallpaper "$WALL" >/dev/null 2>&1 || true
   else
-    osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$WALL\"" >/dev/null 2>&1 || true
+    # the path is an ARGUMENT, not spliced into the script text: it is a
+    # filename out of a theme pack, and a theme is third-party content.
+    # A wallpaper named  x" & (do shell script "...") & ".jpg  would
+    # otherwise close the AppleScript string and run.
+    osascript - "$WALL" >/dev/null 2>&1 <<'APPLESCRIPT' || true
+on run argv
+  tell application "System Events" to tell every desktop to set picture to (item 1 of argv)
+end run
+APPLESCRIPT
   fi
 fi
 
