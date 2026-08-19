@@ -218,6 +218,8 @@ behind everything when the pointer leaves.
   (DisplayServices, no deps). Scrolling past 0 keeps going: a **shade**
   dims the display below its hardware minimum by scaling gamma, so there
   is no overlay window in the z-order and screenshots come out normal.
+  It survives sleep/wake, and it fails safe: gamma is restored if the
+  bar ever exits.
   It reaches external displays too, which have no backlight API. Gamma
   is reset when the setting process exits, so a crash or an uninstall
   restores the screen by itself.
@@ -330,7 +332,9 @@ aiming at something you cannot see.
 
 `omacosy-ffm`: hover focuses (no raise over floating windows — floats
 stay in front), event-driven off mouse *movement* so a parked cursor
-never steals focus from a launching window, never during drags,
+never steals focus from a launching window, never during drags, never
+through an always-on-top panel (hovering a Touch ID prompt leaves focus
+exactly where it is instead of falling through to the window beneath),
 per-app opt-out in `config/ffm-ignore` (omarchy's JetBrains-style
 exception). 4-finger swipes left/right switch workspaces on **the
 display under the cursor** (native-Spaces semantics), wrap-around, any

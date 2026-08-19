@@ -98,9 +98,16 @@ Findings worth keeping even if this goes no further:
   bar therefore never prompts; it checks `CBCentralManager.authorization`
   and hides the pill unless the grant is already held, which it will be
   once this runs as a launchd agent like every other daemon here.
-- The SSID comes back as `<redacted>` from `ipconfig` without Location
-  permission, so the pill shows the icon alone rather than printing the
-  word — hide, don't lie.
+- **The SSID needs the Location grant AND a bundled binary**, and
+  neither alone is enough. Without the grant every source refuses —
+  CoreWLAN returns nil, `ipconfig` prints `<redacted>`, `networksetup`
+  claims you are not associated. With the grant an unbundled binary
+  STILL reads nil: measured with authorisation held, services on and
+  updates running. A throwaway `.app` built to isolate the variable
+  read the name immediately, so the bar ships inside a minimal bundle
+  and the pill prints the network. The bundle is a new TCC subject,
+  which costs a round of re-grants (bluetooth, automation, and the
+  palette read if the clone sits under ~/Documents).
 
 Popups are there now — calendar, volume (slider plus output devices),
 brightness (slider plus display settings), wifi and bluetooth. They are
@@ -117,8 +124,14 @@ the only subprocess left is the one a click sends, where 20 ms does not
 show. There is now one window per screen, each drawing its own workspace
 set, and the media capsule sits centred or in the left cluster depending
 on whether that screen has a notch — read from `safeAreaInsets` rather
-than asked of a helper. Verified on one display; the two-display case
-gets its real test at the next dock.
+than asked of a helper. The two-display case has now had its real test,
+and it found two bugs that a single display could not show: the chip
+filter hid empty guest workspaces (right undocked, where the guest set
+is parked on the one display; wrong docked, where 11-19 ARE the second
+display's own set), and the accent marking "you are here" keyed off the
+globally focused workspace, so the display without focus could not say
+which workspace it was showing. Both fixed; each surface now marks its
+own visible workspace.
 
 The weather popup and fullscreen hiding close the list. One j1 fetch now
 feeds both the pill and its popup; weather.sh needs a cache file written
