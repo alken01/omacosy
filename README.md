@@ -316,7 +316,7 @@ from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 
 ## Tiling: dwindle
 
-![Two windows tiled side by side, accent border ring on the focused one](docs/screenshots/tiling.jpg)
+![Three terminals in a dwindle layout — README, git log and btop — accent border ring on the focused one](docs/screenshots/tiling.jpg)
 
 AeroSpace natively inserts new windows as equal siblings (three
 windows = three columns). `omacosy-dwindle` grafts Hyprland's dwindle
