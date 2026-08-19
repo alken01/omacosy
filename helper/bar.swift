@@ -737,11 +737,10 @@ func updateWifi() {
         set("wifi") { $0.icon = "󰖪"; $0.iconColor = nil; $0.label = "off" }
         return
     }
-    // The name lives in the POPUP, not the pill. A network called
-    // "Martin Routerking" is 150pt of bar, and the right cluster is
-    // right-aligned — on the notched display that pushed the far end
-    // of it under the notch. The icon says connected; a click says to
-    // what.
+    // The name lives in the POPUP, not the pill: a seventeen-character
+    // SSID is ~150pt of bar, and the right cluster is right-aligned, so
+    // on the notched display it pushed the far end under the notch. The
+    // icon says connected; a click says to what.
     set("wifi") { $0.icon = "󰖩"; $0.iconColor = nil; $0.label = "" }
 }
 
