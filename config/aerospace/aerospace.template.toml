@@ -58,6 +58,22 @@ run = 'layout floating'
 [[on-window-detected]]
 if.window-title-regex-substring = 'omacosy-activity'
 run = 'layout floating'
+# dwindle's trigger. AeroSpace tells us the moment it adopts a window,
+# ~610ms after launch, while the window is not painted until ~940ms —
+# early enough for the spiral join to land before anything is on
+# screen, so there is ONE layout change to see instead of two. The old
+# trigger was a SkyLight create event plus a debounce guessing when
+# AeroSpace had finished; this is that fact from the component that
+# knows it.
+#
+# LAST of these blocks deliberately: AeroSpace stops at the first
+# matching callback unless check-further-callbacks is set, so the
+# floating rules above still win and this fires only for windows that
+# will actually be tiled.
+[[on-window-detected]]
+if = 'true'
+run = ['exec-and-forget /usr/bin/touch /tmp/omacosy-dwindle-tick']
+
 
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
 # omarchy: Super for window management, Super+Shift for moving and apps.

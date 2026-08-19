@@ -17,23 +17,6 @@
 // and only a FRESH window id may be acted on).
 import AppKit
 
-// --- SkyLight window-create events (borders.swift recipe) ---------------
-
-typealias NotifyProc = @convention(c) (UInt32, UnsafeMutableRawPointer?, Int, UnsafeMutableRawPointer?) -> Void
-
-@_silgen_name("SLSMainConnectionID")
-func SLSMainConnectionID() -> Int32
-@_silgen_name("SLSRegisterNotifyProc")
-func SLSRegisterNotifyProc(_ proc: NotifyProc, _ event: UInt32, _ context: UnsafeMutableRawPointer?) -> CGError
-@_silgen_name("SLSGetEventPort")
-func SLSGetEventPort(_ cid: Int32, _ port: UnsafeMutablePointer<mach_port_t>) -> CGError
-@_silgen_name("SLEventCreateNextEvent")
-func SLEventCreateNextEvent(_ cid: Int32) -> Unmanaged<CGEvent>?
-@_silgen_name("_CFMachPortSetOptions")
-func _CFMachPortSetOptions(_ port: CFMachPort, _ options: Int32)
-
-let EVENT_WINDOW_CREATE: UInt32 = 1325
-
 // --- plumbing ------------------------------------------------------------
 
 let aerospaceBin = ["/opt/homebrew/bin/aerospace", "/usr/local/bin/aerospace"]
@@ -123,39 +106,43 @@ func settle() {
 // still serializing settles against each other.
 let settleQueue = DispatchQueue(label: "com.omacosy.dwindle.settle")
 var pending: DispatchWorkItem? = nil
-// 0.25s was three quarters of the visible artifact. Measured with a
-// SkyLight probe: the create event arrives 36ms before AeroSpace
-// touches a frame and its first layout finishes ~138ms after, so the
-// tree this reads is settled well inside 120ms — and the second layout
-// then lands close enough to the first to read as one rearrangement
-// rather than two. It still coalesces an app that opens several
-// windows at once, which is what the debounce is actually for.
-let settleDelay = 0.12
-func kick() {
-    pending?.cancel()
-    let work = DispatchWorkItem { settle() }
-    pending = work
-    settleQueue.asyncAfter(deadline: .now() + settleDelay, execute: work)
+// AeroSpace tells us itself. Its on-window-detected callback pokes
+// this file, and that fires ~610ms after launch while the window is
+// not painted until ~940ms — so the join lands BEFORE anything is on
+// screen and there is one layout to see rather than two. The old
+// trigger was a SkyLight create event plus a debounce guessing when
+// AeroSpace had finished adopting the window; the callback IS that
+// fact, from the only component that knows it.
+//
+// Serialized on settleQueue so the poke never runs two settles at
+// once; no debounce, because there is nothing left to wait for.
+let tickPath = "/tmp/omacosy-dwindle-tick"
+func watchTick(_ handler: @escaping () -> Void) {
+    if !FileManager.default.fileExists(atPath: tickPath) {
+        FileManager.default.createFile(atPath: tickPath, contents: nil)
+    }
+    let fd = open(tickPath, O_EVTONLY)
+    guard fd >= 0 else {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { watchTick(handler) }
+        return
+    }
+    let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd,
+        eventMask: [.write, .attrib, .delete, .rename], queue: .main)
+    src.setEventHandler {
+        let ev = src.data
+        handler()
+        if ev.contains(.delete) || ev.contains(.rename) { src.cancel() }
+    }
+    src.setCancelHandler {
+        close(fd)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { watchTick(handler) }
+    }
+    src.resume()
 }
 
 // --- event wiring --------------------------------------------------------
 
-let cid = SLSMainConnectionID()
-let callback: NotifyProc = { _, _, _, _ in kick() }
-_ = SLSRegisterNotifyProc(callback, EVENT_WINDOW_CREATE, nil)
-
-let portCallback: CFMachPortCallBack = { _, _, _, _ in
-    while let e = SLEventCreateNextEvent(SLSMainConnectionID()) { e.release() }
-}
-var eventPort: mach_port_t = 0
-if SLSGetEventPort(cid, &eventPort).rawValue == 0,
-    let machPort = CFMachPortCreateWithPort(nil, eventPort, portCallback, nil, nil) {
-    _CFMachPortSetOptions(machPort, 0x40)
-    let source = CFMachPortCreateRunLoopSource(nil, machPort, 0)
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .defaultMode)
-} else {
-    tlog("SLSGetEventPort failed — create events unavailable")
-}
+watchTick { settleQueue.async { settle() } }
 
 // No heartbeat: settle() refreshes `known` on every run, and the
 // focused-must-be-fresh guard already blocks a stale diff from
