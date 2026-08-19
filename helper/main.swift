@@ -1,6 +1,8 @@
 // omacosy-helper — tiny compiled utility replacing four brew dependencies
 // (cliclick, desktoppr, switchaudio-osx, blueutil):
 //   cursor                  print the cursor position as "x,y" (CG top-left)
+//   cursor set <x> <y>      warp it there (no synthetic movement, so
+//                           focus-follows-mouse cannot react)
 //   displays                per display (arrangement order): "index<TAB>notched"
 //   wallpaper <path>        set the desktop picture on every screen
 //   audio list              output devices: "*<TAB>name" (current) / "-<TAB>name"
@@ -106,6 +108,15 @@ func deviceName(_ id: AudioDeviceID) -> String {
 let args = CommandLine.arguments
 switch args.count > 1 ? args[1] : "" {
 case "cursor":
+    // `cursor set X Y` warps without synthesising movement, which is
+    // exactly what a script wants: focus-follows-mouse is movement-gated,
+    // so placing the pointer this way cannot make it steal focus.
+    if args.count > 2, args[2] == "set" {
+        guard args.count > 4, let x = Double(args[3]), let y = Double(args[4])
+        else { fail("usage: cursor set <x> <y>") }
+        CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+        break
+    }
     guard let e = CGEvent(source: nil) else { exit(1) }
     print("\(Int(e.location.x)),\(Int(e.location.y))")
 

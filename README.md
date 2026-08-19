@@ -269,6 +269,8 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+shift+l` | lock the screen |
 | `Super+k` | keybinding cheatsheet (this table, rendered from the config) |
 
+![The keybinding cheatsheet — every binding, parsed from aerospace.toml](docs/screenshots/cheatsheet.jpg)
+
 Screenshots, clipboard and app switching stay macOS's own (`Cmd+Shift+3/4/5`,
 `Cmd+C/V`, `Cmd+Tab`) — `Alt+Tab` above is the *window*-scoped switcher
 macOS lacks.
