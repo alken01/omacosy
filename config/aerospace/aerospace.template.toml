@@ -86,6 +86,11 @@ cmd-ctrl-alt-shift-right = 'move right'
 
 # Layout (omarchy: Super+T float toggle, Super+J split toggle, Super+F fullscreen)
 cmd-ctrl-alt-t = 'layout floating tiling'
+# Keybinding cheatsheet (omarchy: Super+K) — the bar renders it from
+# THIS file, so the sheet cannot drift from the keys it documents.
+cmd-ctrl-alt-k = 'exec-and-forget /usr/bin/touch /tmp/omacosy-bar-cheatsheet'
+
+# Floats
 # Surface the next float on this workspace (S for surface). macOS
 # z-orders windows per APP, so a float sinks behind whichever app you
 # focus next and cannot be pinned on top without a private window-level
@@ -128,7 +133,8 @@ cmd-ctrl-alt-shift-9 = 'exec-and-forget $HOME/.local/bin/omacosy-ws 9 move'
 # displays, and undocked it wanders into the parked 11-19 guests.
 cmd-ctrl-alt-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 next'
 cmd-ctrl-alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 prev'
-# Back-and-forth loses Super+Tab to the above. omarchy puts it on
+# Back-and-forth
+# Super+Tab is spent on the above, so omarchy puts it on
 # Super+Ctrl+Tab, which we cannot express: Super IS cmd+ctrl+alt, so
 # ctrl and alt are already spent and only Shift is left as a layer.
 cmd-ctrl-alt-b = 'workspace-back-and-forth'
@@ -146,10 +152,12 @@ alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-cycle prev'
 # Cycle focus between monitors (omarchy: Ctrl+Alt+Tab, and free here)
 ctrl-alt-tab = 'focus-monitor next --wrap-around'
 
-# throw the focused WINDOW to the same slot on the other monitor
+# Throw window to the other monitor
+# the same slot, so the twin workspace keeps its meaning
 # (whole-workspace moves conflict with the per-monitor assignment)
 cmd-ctrl-alt-shift-o = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw'
-# throw the WHOLE workspace (every window) to its twin on the other monitor
+# Throw the whole workspace
+# every window, to its twin on the other monitor
 cmd-ctrl-alt-shift-space = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw-all'
 
 # Apps (omarchy: Super+Shift+letter)
@@ -158,9 +166,10 @@ cmd-ctrl-alt-shift-m = 'exec-and-forget open -a @MUSIC@' # music
 cmd-ctrl-alt-shift-g = 'exec-and-forget open -a @MESSENGER@'   # messenger (omarchy: G)
 
 # Lock the screen (omarchy: Super+Ctrl+L — ctrl is spent, so Shift+L)
-cmd-ctrl-alt-shift-l = 'exec-and-forget pmset displaysleepnow'
+cmd-ctrl-alt-shift-l = 'exec-and-forget $HOME/.local/bin/omacosy-helper lock'
 
-# Theme cycle (T for theme; float lives on plain Super+T)
+# Theme cycle
+# T for theme; float lives on plain Super+T
 cmd-ctrl-alt-shift-t = 'exec-and-forget $HOME/.local/bin/theme-next'
 
 # Modes

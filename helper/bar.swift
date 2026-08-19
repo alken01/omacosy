@@ -1389,7 +1389,10 @@ func appleRows() -> [PopupRow] {
         PopupRow(text: "About This Mac", hero: true,
                  action: settings("x-apple.systempreferences:com.apple.SystemProfiler.AboutExtension")),
         PopupRow(text: "System Settings…", action: run("/usr/bin/open", ["-a", "System Settings"])),
-        PopupRow(text: "Lock Screen", action: run("/usr/bin/pmset", ["displaysleepnow"])),
+        // pmset displaysleepnow only darkens the panel — whether that
+        // locks depends on the screenLock delay, so it usually did not
+        PopupRow(text: "Lock Screen",
+                 action: run("\(NSHomeDirectory())/.local/bin/omacosy-helper", ["lock"])),
         PopupRow(text: "Sleep", action: run("/usr/bin/pmset", ["sleepnow"])),
         PopupRow(text: "Restart…", action: systemEvents("restart")),
         PopupRow(text: "Shut Down…", action: systemEvents("shut down")),
@@ -1413,6 +1416,233 @@ func popupRows(for name: String) -> [PopupRow] {
 
 extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
+// --- cheatsheet (Super+K) --------------------------------------------------
+// Rendered from the LIVE aerospace config, never from a list kept here: a
+// cheatsheet that can disagree with the keys is worse than no cheatsheet.
+// The config's own section comments become the headings, so the grouping
+// is the author's rather than a second opinion about it.
+
+struct CheatEntry {
+    let group: String
+    let key: String
+    let action: String
+}
+
+// "cmd-ctrl-alt-shift-1" -> "Super+Shift+1". Super IS cmd-ctrl-alt here
+// (Caps Lock sends it), so it is collapsed back into the one key the
+// user actually presses.
+func prettyKey(_ raw: String) -> String {
+    var rest = raw
+    var parts: [String] = []
+    if rest.hasPrefix("cmd-ctrl-alt-") {
+        parts.append("Super")
+        rest = String(rest.dropFirst("cmd-ctrl-alt-".count))
+    }
+    while let dash = rest.firstIndex(of: "-") {
+        let mod = String(rest[rest.startIndex..<dash])
+        guard ["shift", "ctrl", "alt", "cmd"].contains(mod) else { break }
+        parts.append(mod == "cmd" ? "Cmd" : mod.capitalized)
+        rest = String(rest[rest.index(after: dash)...])
+    }
+    parts.append(rest.count == 1 ? rest.uppercased() : rest.capitalized)
+    return parts.joined(separator: "+")
+}
+
+// The command IS the description — printing it keeps this honest. Only
+// the noise a reader cannot use is removed, by rule and not per binding.
+func prettyAction(_ raw: String) -> String {
+    var s = raw
+    // the binary's directory AND its omacosy- prefix go together: doing
+    // them separately rewrote /tmp/omacosy-bar-cheatsheet into a path
+    // that does not exist, which is worse than the noise
+    for noise in ["exec-and-forget ", "\(NSHomeDirectory())/.local/bin/omacosy-",
+                  "$HOME/.local/bin/omacosy-", "\(NSHomeDirectory())/.local/bin/",
+                  "$HOME/.local/bin/", "/usr/bin/", "/bin/"] {
+        s = s.replacingOccurrences(of: noise, with: "")
+    }
+    return s.trimmingCharacters(in: .whitespaces)
+}
+
+func cheatEntries() -> [CheatEntry] {
+    let path = "\(NSHomeDirectory())/.config/aerospace/aerospace.toml"
+    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+    var entries: [CheatEntry] = []
+    var group = ""
+    var inSection = false
+    var lastWasComment = false
+    for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        let line = raw.trimmingCharacters(in: .whitespaces)
+        if line.hasPrefix("[") {
+            inSection = line == "[mode.main.binding]"
+            continue
+        }
+        guard inSection else { continue }
+        if line.hasPrefix("#") {
+            // only the FIRST line of a comment block is a heading; the
+            // rest is prose explaining why, which belongs in the config
+            if !lastWasComment {
+                var title = String(line.dropFirst()).trimmingCharacters(in: .whitespaces)
+                // "(omarchy: ...)" is a provenance note, not part of the
+                // heading; a colon or full stop starts the explanation
+                if let p = title.range(of: " (omarchy") { title = String(title[..<p.lowerBound]) }
+                if let c = title.firstIndex(where: { $0 == ":" || $0 == "." }) {
+                    title = String(title[..<c])
+                }
+                title = title.trimmingCharacters(in: .whitespaces)
+                if title.count > 34 { title = String(title.prefix(33)) + "…" }
+                group = title
+            }
+            lastWasComment = true
+            continue
+        }
+        lastWasComment = false
+        guard let eq = line.firstIndex(of: "="), line.first?.isLetter == true else { continue }
+        let key = line[line.startIndex..<eq].trimmingCharacters(in: .whitespaces)
+        // read BETWEEN the quotes: a trailing `# comment` on the line is
+        // config prose, not part of the command
+        let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+        guard let q = value.first, q == "'" || q == "\"",
+            let close = value.dropFirst().firstIndex(of: q)
+        else { continue }
+        let action = String(value[value.index(after: value.startIndex)..<close])
+        guard !key.isEmpty, !action.isEmpty else { continue }
+        entries.append(CheatEntry(group: group, key: prettyKey(key), action: prettyAction(action)))
+    }
+    return entries
+}
+
+let cheatColumns = 3
+let cheatRowH: CGFloat = 20
+let cheatPad: CGFloat = 18
+
+final class CheatsheetView: NSView {
+    var entries: [CheatEntry] = []
+    private var keyFont: NSFont { nerdFont("Bold", 12) }
+    private var actFont: NSFont { nerdFont("Regular", 12) }
+    private var headFont: NSFont { nerdFont("Bold", 13) }
+
+    // rows are (heading?, entry?) laid into balanced columns
+    private func rows() -> [(String?, CheatEntry?)] {
+        var out: [(String?, CheatEntry?)] = []
+        var seen = ""
+        for e in entries {
+            if e.group != seen {
+                if !out.isEmpty { out.append((nil, nil)) } // breathing room
+                out.append((e.group, nil))
+                seen = e.group
+            }
+            out.append((nil, e))
+        }
+        return out
+    }
+
+    private func columns() -> [[(String?, CheatEntry?)]] {
+        let all = rows()
+        guard !all.isEmpty else { return [] }
+        let per = Int((Double(all.count) / Double(cheatColumns)).rounded(.up))
+        return stride(from: 0, to: all.count, by: per).map {
+            Array(all[$0..<min($0 + per, all.count)])
+        }
+    }
+
+    private func columnWidths() -> [(key: CGFloat, total: CGFloat)] {
+        columns().map { col in
+            var k: CGFloat = 0, a: CGFloat = 0
+            for (head, e) in col {
+                if let head { k = max(k, advance(head, headFont)) }
+                if let e {
+                    k = max(k, advance(e.key, keyFont))
+                    a = max(a, advance(e.action, actFont))
+                }
+            }
+            return (k, k + 14 + a)
+        }
+    }
+
+    func measure() -> NSSize {
+        let cols = columns()
+        guard !cols.isEmpty else { return NSSize(width: 320, height: 80) }
+        let widths = columnWidths()
+        let w = widths.reduce(0) { $0 + $1.total } + CGFloat(cols.count - 1) * 28
+        let tallest = cols.map(\.count).max() ?? 0
+        return NSSize(width: w + cheatPad * 2,
+                      height: CGFloat(tallest) * cheatRowH + cheatPad * 2 + 26)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let body = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: popupRadius, yRadius: popupRadius)
+        palette.barBG.setFill()
+        body.fill()
+        palette.accent.setStroke()
+        body.lineWidth = 1
+        body.stroke()
+
+        let title = "keybindings — Super is Caps Lock · Super+K or click to close"
+        drawText(title, nerdFont("Bold", 12), palette.accent.withAlphaComponent(0.8),
+                 leftAt: cheatPad, midY: bounds.maxY - cheatPad - 6)
+
+        var x = cheatPad
+        for (i, col) in columns().enumerated() {
+            let width = columnWidths()[i]
+            var y = bounds.maxY - cheatPad - 30
+            for (head, e) in col {
+                if let head {
+                    drawText(head, headFont, palette.accent, leftAt: x, midY: y - cheatRowH / 2)
+                } else if let e {
+                    drawText(e.key, keyFont, palette.label, leftAt: x, midY: y - cheatRowH / 2)
+                    drawText(e.action, actFont, palette.muted,
+                             leftAt: x + width.key + 14, midY: y - cheatRowH / 2)
+                }
+                y -= cheatRowH
+            }
+            x += width.total + 28
+        }
+    }
+
+    // no key focus is taken, so there is no Esc to listen for — a click
+    // is the dismissal that does not cost the user their focused window
+    override func mouseDown(with event: NSEvent) { hideCheatsheet() }
+}
+
+var cheatWindow: PopupWindow?
+
+func hideCheatsheet() {
+    cheatWindow?.orderOut(nil)
+    cheatWindow = nil
+}
+
+func toggleCheatsheet() {
+    if cheatWindow != nil { hideCheatsheet(); return }
+    let entries = cheatEntries()
+    guard !entries.isEmpty else {
+        tlog("cheatsheet: no bindings parsed from aerospace.toml")
+        return
+    }
+    let view = CheatsheetView(frame: .zero)
+    view.entries = entries
+    let size = view.measure()
+    view.frame = NSRect(origin: .zero, size: size)
+    // centred on the display holding the cursor, like every other
+    // full-surface thing here
+    let mouse = NSEvent.mouseLocation
+    let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main!
+    let window = PopupWindow(
+        contentRect: NSRect(x: screen.frame.midX - size.width / 2,
+                            y: screen.frame.midY - size.height / 2,
+                            width: size.width, height: size.height),
+        styleMask: .borderless, backing: .buffered, defer: false)
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.hasShadow = true
+    window.level = .popUpMenu
+    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    window.contentView = view
+    window.orderFrontRegardless()
+    cheatWindow = window
+    tlog("cheatsheet: \(entries.count) bindings")
 }
 
 // --- view -----------------------------------------------------------------
@@ -2069,6 +2299,10 @@ func watch(_ path: String, create: Bool, handler: @escaping () -> Void) {
 // not an order change, not a visibility change, no event of any kind.
 // No publisher exists for it, so the commands that do the moving say so
 // themselves (omacosy-ws, and the overview's drag-reorder).
+// Super+K writes this; the bar has no key tap and should not grow one
+let cheatPath = "/tmp/omacosy-bar-cheatsheet"
+watch(cheatPath, create: true) { toggleCheatsheet() }
+
 let movedPath = "/tmp/omacosy-bar-moved"
 watch(movedPath, create: true) {
     tlog("moved poke")
@@ -2241,6 +2475,7 @@ watch(FileManager.default.homeDirectoryForCurrentUser
     palette = loadPalette()
     iconCache.removeAll()
     repaint()
+    if cheatWindow != nil { hideCheatsheet(); toggleCheatsheet() } // repaint in the new palette
     let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
     tlog(String(format: "theme %.2f ms", ms))
 }

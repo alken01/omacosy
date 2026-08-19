@@ -263,6 +263,7 @@ typing or app shortcuts. Caps Lock tapped alone is Escape.
 | `Super+shift+f` / `+m` / `+g` | files / music / messenger (set in `apps.conf`) |
 | `Super+shift+t` | next theme |
 | `Super+shift+l` | lock the screen |
+| `Super+k` | keybinding cheatsheet (this table, rendered from the config) |
 
 Screenshots, clipboard and app switching stay macOS's own (`Cmd+Shift+3/4/5`,
 `Cmd+C/V`, `Cmd+Tab`) — `Alt+Tab` above is the *window*-scoped switcher

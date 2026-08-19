@@ -19,6 +19,7 @@
 //                           displays only; external DDC is out of scope)
 //   nightshift              print night shift state (on/off)
 //   nightshift <on|off|toggle>
+//   lock                    lock the screen NOW (SACLockScreenImmediate)
 //   capslock off            clear the HID-system caps-lock latch (with the
 //                           key remapped to Super, a latched LED is
 //                           otherwise permanent)
@@ -169,6 +170,19 @@ case "nightshift":
     default: fail("usage: nightshift [on|off|toggle]")
     }
     print(blEnabled() ? "on" : "off")
+
+case "lock":
+    // `pmset displaysleepnow` was standing in for this and is not a lock
+    // at all: it darkens the panel, and whether that ever locks depends
+    // on the screenLock delay — 300s on the author's machine, so the
+    // screen came back unlocked. SACLockScreenImmediate is what the
+    // native Lock Screen menu item calls, and it ignores that delay.
+    guard let h = dlopen("/System/Library/PrivateFrameworks/login.framework/login", RTLD_LAZY),
+        let sym = dlsym(h, "SACLockScreenImmediate")
+    else { fail("lock: SACLockScreenImmediate unavailable") }
+    typealias LockFn = @convention(c) () -> Int32
+    let rc = unsafeBitCast(sym, to: LockFn.self)()
+    if rc != 0 { fail("lock: SACLockScreenImmediate returned \(rc)") }
 
 case "capslock":
     guard args.count > 2, args[2] == "off" else { fail("usage: capslock off") }
