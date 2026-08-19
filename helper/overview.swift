@@ -605,7 +605,9 @@ final class ContentView: NSView {
         }
     }
     override func keyDown(with event: NSEvent) {
-        tlog("keyDown code=\(event.keyCode) chars='\(event.charactersIgnoringModifiers ?? "")' shown=\(shownIds)")
+        // the KEYCODE is what debugging needs; the character it produced
+        // is input, and /tmp/omacosy-*.log is world-readable
+        tlog("keyDown code=\(event.keyCode) shown=\(shownIds)")
         if event.keyCode == 53 { hideOverlay(); return } // esc
         if let ch = event.charactersIgnoringModifiers,
             let ws = allIds.first(where: { $0.hasSuffix(ch) }) {
