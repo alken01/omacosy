@@ -66,6 +66,7 @@ BUILTIN_MON="$("$A" list-monitors --format '%{monitor-id}|%{monitor-name}' | gre
 OTHER_MON="$("$A" list-monitors --format '%{monitor-id}' | grep -vx "$BUILTIN_MON" | head -1 || true)"
 HOME_WS="$("$A" list-workspaces --focused)"
 
+if [ -d /Applications/Ghostty.app ]; then STAGE_APP=Ghostty; else STAGE_APP=TextEdit; fi
 TEXTEDIT_WAS_RUNNING=""
 pgrep -xq TextEdit && TEXTEDIT_WAS_RUNNING=1 || true
 STAGED=""
@@ -74,7 +75,15 @@ restore() {
   say "restoring"
   "$HOME/.local/bin/omacosy-overview" close >/dev/null 2>&1 || true
   [ -f "$SHEET" ] && [ -n "${SHEET_OPEN:-}" ] && touch "$SHEET" || true
-  if [ -n "$STAGED" ] && [ -z "$TEXTEDIT_WAS_RUNNING" ]; then
+  # ours are identifiable by the title we launched them with, so this
+  # cannot touch a terminal of yours. Killed rather than closed: a
+  # close asks Ghostty, and Ghostty may answer with a modal.
+  pkill -f 'ghostty --title=omacosy-shot' >/dev/null 2>&1 || true
+  for wid in $(shot_window_ids 2>/dev/null); do
+    "$A" close --window-id "$wid" >/dev/null 2>&1 || true
+  done
+  sleep 1
+  if [ -n "$STAGED" ] && [ "$STAGE_APP" = TextEdit ] && [ -z "$TEXTEDIT_WAS_RUNNING" ]; then
     osascript -e 'tell application "TextEdit" to quit' >/dev/null 2>&1 || true
     sleep 1
   fi
@@ -119,6 +128,12 @@ grab() { # name, label
 # warped to 4196,749, and the switch put it back at 1720,720). Switch
 # first, then warp. The warp emits no movement, so focus-follows-mouse
 # cannot react to it either.
+# our staged windows carry a title nothing else uses
+shot_window_ids() {
+  "$A" list-windows --all --format '%{window-id}|%{window-title}' 2>/dev/null |
+    grep '|omacosy-shot$' | cut -d'|' -f1
+}
+
 aim() {
   "$A" workspace "$SCRATCH" >/dev/null 2>&1 || true
   sleep 0.4
@@ -161,11 +176,47 @@ sleep 1
 # has to be taken BEFORE anything is staged or it is just the tiling one
 grab desktop "desktop (bar over the wallpaper)"
 
-say "staging this repo's own markdown in TextEdit"
+# A tiling window manager should be shown with terminals, and a themed
+# one at that: TextEdit's white windows fought the palette in every
+# shot. Ghostty is the repo's default TERMINAL and opens a real window
+# per invocation — which is the requirement here, and why $TERMINAL is
+# not simply used: a single-window terminal (Korren keeps everything in
+# one window) cannot stage a three-window layout at all.
+say "staging three $STAGE_APP windows"
 STAGED=1
-open -a TextEdit "$REPO/README.md";       sleep 2
-open -a TextEdit "$REPO/ROADMAP.md";      sleep 2
-open -a TextEdit "$REPO/CONTRIBUTING.md"; sleep 3
+if [ "$STAGE_APP" = Ghostty ]; then
+  # Ghostty's -e is exec, NOT a shell: `cd x && cmd` came back as
+  # "No such file or directory". Each window therefore runs a small
+  # script file, which also sidesteps `open --args` word-splitting.
+  # --confirm-close-surface=false matters at teardown: without it the
+  # close raises a "Close Window?" modal and the window survives.
+  term() {
+    printf '#!/bin/sh\ncd "%s" || exit 1\n%s\n' "$REPO" "$2" > "$WORK/stage$1.sh"
+    chmod +x "$WORK/stage$1.sh"
+    open -na Ghostty --args --title="omacosy-shot" \
+      --confirm-close-surface=false -e "$WORK/stage$1.sh"
+  }
+  term 1 'exec bat --style=numbers --paging=always README.md'; sleep 2.5
+  term 2 'exec git log --graph --oneline --decorate --color=always -40 | less -R'; sleep 2.5
+  term 3 'exec btop'; sleep 3
+else
+  open -a TextEdit "$REPO/README.md";       sleep 2
+  open -a TextEdit "$REPO/ROADMAP.md";      sleep 2
+  open -a TextEdit "$REPO/CONTRIBUTING.md"; sleep 3
+fi
+
+# `open -na` ACTIVATES the app, and activating pulls focus to whatever
+# window of it already exists — so new windows landed on the other
+# display. They are herded onto the staging workspace explicitly rather
+# than hoped into place. The title is also how teardown finds them: an
+# id diff raced Ghostty's window creation and leaked one every run.
+if [ "$STAGE_APP" = Ghostty ]; then
+  for wid in $(shot_window_ids); do
+    "$A" move-node-to-workspace --window-id "$wid" "$SCRATCH" >/dev/null 2>&1 || true
+  done
+  aim
+  sleep 3 # btop redraws at the tiled size, not the size it opened at
+fi
 grab tiling "tiling (three windows, dwindle)"
 
 say "opening the cheatsheet"
@@ -208,5 +259,6 @@ for f in desktop tiling overview cheatsheet; do
 done
 
 say "written to docs/screenshots/ — look at them before committing:"
-say "  the media pill shows whatever Spotify is playing, and the"
-say "  workspace chips show icons of apps on your other workspaces."
+say "  the media pill shows whatever Spotify is playing, btop lists your"
+say "  running processes, and the workspace chips show icons of apps on"
+say "  your other workspaces."
