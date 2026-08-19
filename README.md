@@ -58,6 +58,23 @@ macOS privacy (TCC) blocks launchd services from reading
 the installer fall back to copying configs (still works; edits then
 need an `install.sh` re-run to apply).
 
+## Updating
+
+```sh
+omacosy-update          # pull, then re-run the installer
+omacosy-update --check  # just say whether there is anything new
+```
+
+`install.sh` rebuilds only the binaries whose sources changed and
+restarts their agents, so an update is a pull plus a re-run and this
+wraps both. It refuses a clone with local edits, and refuses one whose
+branch has diverged, rather than deciding either for you.
+
+There is no background update check. The bar makes exactly one network
+call (the weather), and a daemon polling GitHub on a timer would
+quietly make that two while broadcasting when the machine is awake.
+Nothing here contacts the network unless you run it.
+
 Idempotent — re-run after pulling changes. Installs Homebrew if
 missing, runs `brew bundle`, compiles the helper binaries, generates
 the AeroSpace config from your app choices, symlinks configs (backing
