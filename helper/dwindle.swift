@@ -100,13 +100,15 @@ func settle() {
     // now (preserve_split=true equivalent) and birth is the one
     // moment orientation gets decided.
     switch f[2] {
+    // `eval` takes both commands in ONE round trip. The saving is
+    // small (a spawn is ~23ms and eval's is ~31ms, so ~14ms net) but
+    // the join and the relayout also stop being two separate moments
+    // the tiler can be observed between.
     case "h_tiles":
-        _ = aerospace(["join-with", "left"])
-        _ = aerospace(["layout", "v_tiles"])
+        _ = aerospace(["eval", "join-with left; layout v_tiles"])
         tlog("dwindle: joined \(f[0]) left→v (ws \(f[3]), \(wsCount) windows)")
     case "v_tiles":
-        _ = aerospace(["join-with", "up"])
-        _ = aerospace(["layout", "h_tiles"])
+        _ = aerospace(["eval", "join-with up; layout h_tiles"])
         tlog("dwindle: joined \(f[0]) up→h (ws \(f[3]), \(wsCount) windows)")
     default:
         break // accordions and exotics are the user's own arrangement
@@ -121,11 +123,19 @@ func settle() {
 // still serializing settles against each other.
 let settleQueue = DispatchQueue(label: "com.omacosy.dwindle.settle")
 var pending: DispatchWorkItem? = nil
+// 0.25s was three quarters of the visible artifact. Measured with a
+// SkyLight probe: the create event arrives 36ms before AeroSpace
+// touches a frame and its first layout finishes ~138ms after, so the
+// tree this reads is settled well inside 120ms — and the second layout
+// then lands close enough to the first to read as one rearrangement
+// rather than two. It still coalesces an app that opens several
+// windows at once, which is what the debounce is actually for.
+let settleDelay = 0.12
 func kick() {
     pending?.cancel()
     let work = DispatchWorkItem { settle() }
     pending = work
-    settleQueue.asyncAfter(deadline: .now() + 0.25, execute: work)
+    settleQueue.asyncAfter(deadline: .now() + settleDelay, execute: work)
 }
 
 // --- event wiring --------------------------------------------------------
