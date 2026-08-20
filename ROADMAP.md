@@ -12,6 +12,18 @@ Direction, not promises. Ordered roughly by pull.
   NEXT window opens, so windows *moved* into a workspace (throws, the
   undock collapse) still land as flat siblings. Hyprland re-tiles them
   binarily; we don't yet.
+- **Super + mouse-drag resize (and move).** Hyprland binds Super +
+  right-drag to resize the window toward the grabbed corner, and Super +
+  left-drag to move it; omarchy users expect both. The pieces exist:
+  mouse events carry modifier flags (so no keyboard tap is needed),
+  `aerospace resize` takes `--window-id`, and `omacosy-ffm` already
+  holds Accessibility and knows the window under the cursor. Needs an
+  active CGEvent tap on right-mouse events (a step up from ffm's
+  listen-only monitor, worth a Permissions note), and a decision
+  between `aerospace resize` per drag tick (~25ms per call, so ~30Hz,
+  visibly stepped) and direct AX `setSize` (smooth, but needs a
+  measurement that AeroSpace re-normalizes a fast resize stream the
+  way it does a native edge drag).
 - **Focus guard vs. typing.** An app that yanks focus while you are
   actively typing (input < 2s old) is indistinguishable from a
   user-driven switch and slips through. A denylist for known
