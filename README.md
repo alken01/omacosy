@@ -341,10 +341,13 @@ window manager can place a window that does not exist yet.
 
 Two implementation notes. `enable-normalization-flatten-containers` is
 off, because it dissolves the very container `split` creates (AeroSpace
-prints a warning saying so if you try). And the hint names its window
-with `--window-id` instead of trusting "the focused window", because a
-window that opens inside the hint's ~90ms gap takes focus with it. One
-hook covers both hover and keyboard focus: AeroSpace notices the focus
+prints a warning saying so if you try). And the hint waits for the
+window's frame to hold still before reading it, then names its window
+with `--window-id` instead of trusting "the focused window". Both guard
+against the same thing: a new window fires the hook too (it takes focus
+on open), at a moment when its frame is still the app's default shape
+and another window may grab focus before the hint lands. One hook
+covers both hover and keyboard focus: AeroSpace notices the focus
 `omacosy-ffm` moves, even though ffm moves it through SkyLight.
 
 Manual control (Super+J flips, resize, float) works unchanged.

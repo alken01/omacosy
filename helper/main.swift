@@ -247,16 +247,33 @@ case "split-hint":
     // window list rather than the Accessibility API, so this needs no
     // grant of its own.
     //
-    // `--window-id` rather than "the focused window": this runs ~90ms
-    // after the focus change, and a window that opens inside that gap
-    // takes focus with it. Naming the window keeps a late hint on the
-    // one it was computed for instead of retargeting the newcomer.
+    // `--window-id` rather than "the focused window": this runs a few
+    // hundred ms after the focus change, and a window that opens inside
+    // that gap takes focus with it. Naming the window keeps a late hint
+    // on the one it was computed for instead of retargeting the
+    // newcomer.
     guard let idStr = ProcessInfo.processInfo.environment["AEROSPACE_WINDOW_ID"],
-        let wid = UInt32(idStr),
-        let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, wid) as? [[String: Any]],
-        let bounds = list.first?[kCGWindowBounds as String] as? [String: CGFloat],
-        let w = bounds["Width"], let h = bounds["Height"]
-    else { exit(0) }
+        let wid = UInt32(idStr) else { exit(0) }
+    // A NEW window fires this hook too (it takes focus on open), and at
+    // that moment its frame is still the app's default shape — AeroSpace
+    // has not tiled it yet. Reading it then said "horizontal" for every
+    // fresh terminal and the layout degenerated into ever-thinner
+    // columns. So: wait until the frame holds still across two samples
+    // before trusting it.
+    func frame() -> (CGFloat, CGFloat)? {
+        guard let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, wid) as? [[String: Any]],
+            let b = list.first?[kCGWindowBounds as String] as? [String: CGFloat],
+            let w = b["Width"], let h = b["Height"] else { return nil }
+        return (w, h)
+    }
+    var sample = frame()
+    for _ in 0..<5 {
+        usleep(150_000)
+        let next = frame()
+        if let a = sample, let b = next, a == b { break }
+        sample = next
+    }
+    guard let (w, h) = sample else { exit(0) }
     let aerospaceBin = ["/opt/homebrew/bin/aerospace", "/usr/local/bin/aerospace"]
         .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "aerospace"
     let split = Process()
