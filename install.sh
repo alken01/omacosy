@@ -348,6 +348,9 @@ if [ ! -e "$HOME/.config/omarchy/current/theme" ]; then
 fi
 
 # --- 4. Point Korren at the omarchy theme -----------------------------------
+# Korren is the author's terminal and not something this installer can
+# get for you — so this only touches machines that HAVE it (app bundle
+# or an existing config). Everyone else skips this without a trace.
 KORREN_CFG="$HOME/Library/Application Support/korren/config.toml"
 if [ -f "$KORREN_CFG" ]; then
   # only seed a theme when NONE is set — theme-set legitimately writes
@@ -357,7 +360,7 @@ if [ -f "$KORREN_CFG" ]; then
     printf '[theme]\nname = "omarchy"\n' >> "$KORREN_CFG"
     log "Korren theme set to follow omarchy"
   fi
-else
+elif [ -d "/Applications/Korren.app" ]; then
   mkdir -p "$(dirname "$KORREN_CFG")"
   printf '[theme]\nname = "omarchy"\n' > "$KORREN_CFG"
   log "Created Korren config (theme follows omarchy)"
