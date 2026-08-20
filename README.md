@@ -151,6 +151,7 @@ Your personal shell config belongs in `~/.zshrc.local`; the repo's
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
 | Dwindle split direction | `on-focus-changed` hook running `omacosy-helper split-hint` (no daemon) | `config/aerospace/aerospace.template.toml`, `helper/main.swift` |
 | Workspace / window navigation | `omacosy-ws`, `omacosy-cycle`, `omacosy-float` | `bin/` |
+| Terminal look & spawn size | Ghostty (hidden titlebar; new windows spawn small so tiling never flashes full-screen) | `config/ghostty/config` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
 | Prompt | starship | `config/starship.toml` |
