@@ -215,6 +215,15 @@ if [ "$STAGE_APP" = Ghostty ]; then
     "$A" move-node-to-workspace --window-id "$wid" "$SCRATCH" >/dev/null 2>&1 || true
   done
   aim
+  # MOVED windows land as flat siblings — the split hint only shapes
+  # windows at creation (ROADMAP: "re-dwindle for moved windows"), and
+  # three flat columns also squeeze btop under its 80-cell minimum. So
+  # the spiral is built explicitly: join the newest window (ids grow
+  # with creation order) into its left neighbour's slot.
+  "$A" flatten-workspace-tree >/dev/null 2>&1 || true
+  sleep 0.5
+  THIRD="$(shot_window_ids | sort -n | tail -1)"
+  [ -n "$THIRD" ] && "$A" join-with --window-id "$THIRD" left >/dev/null 2>&1 || true
   sleep 3 # btop redraws at the tiled size, not the size it opened at
 fi
 grab tiling "tiling (three windows, spiral)"
