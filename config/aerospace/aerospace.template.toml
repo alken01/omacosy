@@ -68,6 +68,13 @@ run = 'layout floating'
 # tiler laid out twice and you saw both; running it HERE puts the join
 # inside AeroSpace's own first frame pass, so there is one layout.
 #
+# `&&`, not two commands: the FIRST window in a workspace has no
+# sibling, so join-with fails with exit 2 — and a bare `layout` after it
+# would still run and rewrite the ROOT container's orientation. That
+# made the two-window layout depend on what the first window had done:
+# sometimes side by side, sometimes stacked. Short-circuiting keeps the
+# layout change tied to a join that actually happened.
+#
 # The alternation needs no window count because the root is vertical
 # (below): window two joins into an h_tiles pair (side by side), window
 # three into a v_tiles nest, and so on down.
@@ -84,11 +91,11 @@ run = ['true']
 
 [[on-window-detected]]
 if = 'test %{window-parent-container-layout} = v_tiles'
-run = ['join-with up', 'layout h_tiles']
+run = ['join-with up && layout h_tiles']
 
 [[on-window-detected]]
 if = 'test %{window-parent-container-layout} = h_tiles'
-run = ['join-with left', 'layout v_tiles']
+run = ['join-with left && layout v_tiles']
 
 
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
