@@ -11,28 +11,35 @@ bootstrapped from this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
-The whole desktop environment idles at about **166MB** of physical
+The whole desktop environment idles at about **157MB** of physical
 footprint — what Activity Monitor calls Memory — across WM, bar, three
 background daemons, the swipe daemon and Karabiner. Resident set size
-reads ~359MB, but RSS counts each process's share of the same shared
+reads ~322MB, but RSS counts each process's share of the same shared
 system frameworks, so footprint is the honest figure. Measured on this
 machine **docked to a second display**, largest first:
 
 | | footprint | RSS |
 |---|---|---|
-| AeroSpace | 46MB | 94MB |
-| `omacosy-overview` | 36MB | 58MB |
-| `omacosy-bar` | 28MB | 57MB |
-| Karabiner (4 processes) | 24MB | 69MB |
-| `omacosy-borders` | 15MB | 31MB |
-| `omacosy-ffm` | 9MB | 25MB |
-| aerospace-swipe | 8MB | 24MB |
+| `omacosy-overview` | 36MB | 46MB |
+| `omacosy-bar` | 32MB | 55MB |
+| AeroSpace | 24MB | 85MB |
+| Karabiner (4 processes) | 24MB | 61MB |
+| `omacosy-borders` | 19MB | 29MB |
+| aerospace-swipe | 13MB | 22MB |
+| `omacosy-ffm` | 10MB | 24MB |
 
 A second display is not free: the bar and the border overlay each draw
 per-screen, and AeroSpace carries a second workspace set. On one
-display the same set measured ~155MB. The dwindle daemon used to be
-on this list at 5MB; the spiral is three config rules now, so it is
-not a process at all. Packaging the bar as an `.app`
+display the same set measured ~155MB. The dwindle daemon used to be on
+this list; the spiral is three config rules now, so it is not a process
+at all.
+
+These figures move with uptime, so treat them as a band rather than a
+constant. `omacosy-overview` is the swing: it caches a half-resolution
+capture per window shown, so it starts near 9MB and settles around
+37MB — measured over repeated opens, it plateaus there rather than
+climbing, because the cache is refiltered to the visible set each time.
+AeroSpace drifts the other way, reading higher the longer it runs. Packaging the bar as an `.app`
 (which is what buys the wi-fi network name) cost about 1MB — the bundle
 is a directory and an Info.plist, not a second copy of anything.
 
