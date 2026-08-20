@@ -13,21 +13,40 @@ start-at-login = true
 after-login-command = []
 after-startup-command = []
 
-# flatten dissolves single-child wrappers (Hyprland's own close-time
-# cleanup); opposite-orientation stays OFF — it is the inverse of
-# Hyprland's preserve_split=true and made Super+J's togglesplit
-# cascade through every nested container instead of flipping the one
-# pair. omacosy-dwindle sets each nest's orientation once, at birth.
-enable-normalization-flatten-containers = true
+# flatten is OFF because it dissolves the very container `split` makes,
+# and `split` is how the dwindle direction gets set (see below).
+# AeroSpace says so itself if you try: "'split' has no effect when
+# 'enable-normalization-flatten-containers' normalization enabled".
+# Empty containers are still reaped without it — closing a window hands
+# its space back to its sibling, which is the part that mattered.
+# opposite-orientation stays OFF — it is the inverse of Hyprland's
+# preserve_split=true and made Super+J's togglesplit cascade through
+# every nested container instead of flipping the one pair.
+enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
-# vertical, so the dwindle rules below alternate correctly from the
-# second window without needing to count windows
-default-root-container-orientation = 'vertical'
+# 'auto' = split along the monitor's longer edge, which is the same
+# rule the dwindle hint below applies to every window after it
+default-root-container-orientation = 'auto'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+# Hyprland's dwindle splits the focused window along ITS longer edge,
+# so the next window lands beside a wide one and below a tall one.
+# AeroSpace has no such layout and no window geometry in its config
+# language (the format variables are ids, titles and container layouts
+# — no width or height), so the direction is decided in code and set
+# with `split` BEFORE the next window exists. AeroSpace then places
+# that window correctly in its first pass; the old daemon corrected the
+# tree afterwards, which is why the screen used to lay out twice.
+#
+# One hook covers both ways focus moves: AeroSpace fires it for its own
+# keyboard commands AND for the focus omacosy-ffm moves under the mouse
+# (it does notice those, despite moving focus via SLPS itself).
+# AEROSPACE_WINDOW_ID names the newly focused window.
+on-focus-changed = ['exec-and-forget $HOME/.local/bin/omacosy-helper split-hint']
 
 # Tell the bar which workspace is focused — a bash builtin redirect,
 # no extra process, and a regular file so a dead reader cannot wedge it
@@ -60,43 +79,6 @@ run = 'layout floating'
 [[on-window-detected]]
 if.window-title-regex-substring = 'omacosy-activity'
 run = 'layout floating'
-# Hyprland's dwindle layout, in two rules and no daemon.
-#
-# AeroSpace inserts a new window as a SIBLING, which makes a third
-# window three equal columns. Joining it into the previous window's
-# slot instead gives the spiral. Doing that from a daemon meant the
-# tiler laid out twice and you saw both; running it HERE puts the join
-# inside AeroSpace's own first frame pass, so there is one layout.
-#
-# `&&`, not two commands: the FIRST window in a workspace has no
-# sibling, so join-with fails with exit 2 — and a bare `layout` after it
-# would still run and rewrite the ROOT container's orientation. That
-# made the two-window layout depend on what the first window had done:
-# sometimes side by side, sometimes stacked. Short-circuiting keeps the
-# layout change tied to a join that actually happened.
-#
-# The alternation needs no window count because the root is vertical
-# (below): window two joins into an h_tiles pair (side by side), window
-# three into a v_tiles nest, and so on down.
-#
-# The startup guard has to come first among these. AeroSpace stops at
-# the first matching callback unless check-further-callbacks is set, so
-# a rule that matches only during startup and does nothing prevents the
-# joins from firing while AeroSpace adopts every window it finds at
-# login — which would otherwise nest your layouts deeper on every
-# restart. The app rules above it still run, because they match first.
-[[on-window-detected]]
-if.during-aerospace-startup = true
-run = ['true']
-
-[[on-window-detected]]
-if = 'test %{window-parent-container-layout} = v_tiles'
-run = ['join-with up && layout h_tiles']
-
-[[on-window-detected]]
-if = 'test %{window-parent-container-layout} = h_tiles'
-run = ['join-with left && layout v_tiles']
-
 
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
 # omarchy: Super for window management, Super+Shift for moving and apps.

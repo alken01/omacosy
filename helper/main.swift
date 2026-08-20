@@ -233,6 +233,39 @@ case "input-age":
         .min() ?? .infinity
     print(String(format: "%.2f", age))
 
+case "split-hint":
+    // Hyprland's dwindle splits the focused window along its longer
+    // edge; AeroSpace has no such layout and no window geometry in its
+    // config language, so the direction is chosen here and applied with
+    // `split` while the next window still does not exist. AeroSpace
+    // then places that window correctly on its first pass — correcting
+    // the tree afterwards is what made the screen lay out twice.
+    //
+    // Driven by aerospace.toml's on-focus-changed hook, which names the
+    // window in AEROSPACE_WINDOW_ID — hover focus included: AeroSpace
+    // does track the focus omacosy-ffm moves. The frame comes from the
+    // window list rather than the Accessibility API, so this needs no
+    // grant of its own.
+    //
+    // `--window-id` rather than "the focused window": this runs ~90ms
+    // after the focus change, and a window that opens inside that gap
+    // takes focus with it. Naming the window keeps a late hint on the
+    // one it was computed for instead of retargeting the newcomer.
+    guard let idStr = ProcessInfo.processInfo.environment["AEROSPACE_WINDOW_ID"],
+        let wid = UInt32(idStr),
+        let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, wid) as? [[String: Any]],
+        let bounds = list.first?[kCGWindowBounds as String] as? [String: CGFloat],
+        let w = bounds["Width"], let h = bounds["Height"]
+    else { exit(0) }
+    let aerospaceBin = ["/opt/homebrew/bin/aerospace", "/usr/local/bin/aerospace"]
+        .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "aerospace"
+    let split = Process()
+    split.executableURL = URL(fileURLWithPath: aerospaceBin)
+    split.arguments = ["split", "--window-id", idStr, w >= h ? "horizontal" : "vertical"]
+    split.standardError = FileHandle.nullDevice
+    try? split.run()
+    split.waitUntilExit()
+
 case "audio":
     let sub = args.count > 2 ? args[2] : "list"
     if sub == "list" {

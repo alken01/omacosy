@@ -8,10 +8,10 @@ Direction, not promises. Ordered roughly by pull.
   the built-in panel via DisplayServices; external monitors need a
   DDC/I²C stack (what MonitorControl does). Deliberately out of
   scope so far.
-- **Re-dwindle for moved windows.** The dwindle rules fire on window
-  DETECTION, so windows *moved* into a workspace (throws, the undock
-  collapse) land as flat siblings. Hyprland re-tiles them binarily; we
-  don't yet, and a detection callback cannot see a move.
+- **Re-dwindle for moved windows.** The split hint decides where the
+  NEXT window opens, so windows *moved* into a workspace (throws, the
+  undock collapse) still land as flat siblings. Hyprland re-tiles them
+  binarily; we don't yet.
 - **Focus guard vs. typing.** An app that yanks focus while you are
   actively typing (input < 2s old) is indistinguishable from a
   user-driven switch and slips through. A denylist for known
@@ -191,7 +191,9 @@ So: borders is the clear candidate — nearly pure runtime tax, the same
 event stream, the same hotplug logic, no extra grant. Overview is
 marginal, needing Screen Recording and holding capture buffers either
 way. ffm stays out precisely to keep its Accessibility grant isolated,
-and dwindle is gone entirely — it is config now, not a process. Borders stays out because at 9.2MB with no AppKit it is already the
+and the dwindle daemon is gone entirely — a focus hook runs
+`omacosy-helper` for a few milliseconds instead of a resident process.
+Borders stays out because at 9.2MB with no AppKit it is already the
 cheapest thing here.
 
 Never a lock screen (`loginwindow` is protected) or a Notification

@@ -31,8 +31,8 @@ machine **docked to a second display**, largest first:
 A second display is not free: the bar and the border overlay each draw
 per-screen, and AeroSpace carries a second workspace set. On one
 display the same set measured ~155MB. The dwindle daemon used to be on
-this list; the spiral is three config rules now, so it is not a process
-at all.
+this list; the split direction is decided by a short `omacosy-helper`
+run on focus change now, so nothing resident does it.
 
 These figures move with uptime, so treat them as a band rather than a
 constant. `omacosy-overview` is the swing: it caches a half-resolution
@@ -342,31 +342,36 @@ from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 ![Three terminals in a dwindle layout — README, git log and btop — accent border ring on the focused one](docs/screenshots/tiling.jpg)
 
 AeroSpace natively inserts new windows as equal siblings (three
-windows = three columns). Three `on-window-detected` rules graft
-Hyprland's dwindle on top: each new tiled window joins the previous
-one's slot, alternating direction — the omarchy spiral, automatic.
+windows = three columns). Hyprland's dwindle instead splits the focused
+window along **its own longer edge**, so a new window lands beside a
+wide one and below a tall one. That is the omarchy feel, and on a
+3440-wide display it is also the difference between a usable third
+window and three narrow strips.
 
-This used to be a daemon, and moving it into the config is what made it
-look right. A daemon can only act after AeroSpace has already placed
-the window, so the tiler laid out twice and you saw both: three columns
-for ~250ms, then the spiral. A callback runs inside AeroSpace's FIRST
-frame pass, so there is one layout and nothing to correct.
+AeroSpace cannot express it: its config language has no window
+geometry — the format variables are ids, titles and container layouts,
+with no width or height anywhere. So the direction is decided in code.
+`on-focus-changed` runs `omacosy-helper split-hint`, which looks up the
+newly focused window's frame and issues `aerospace split horizontal` or
+`vertical` on it.
 
-Three things make it work, and two of them are undocumented. `run`
-takes AeroSpace commands bound to the detected window, so `join-with`
-targets it during adoption. The matcher can be any command whose exit
-code decides, so `test %{window-parent-container-layout} = h_tiles`
-picks the direction. And the root container is **vertical**, which is
-what removes the need to count windows: window two joins into a
-side-by-side pair, window three into a nested split, and it spirals
-from there.
+The point is the timing: the hint lands *before the next window
+exists*, so AeroSpace places that window correctly in its first pass.
+This used to be a daemon that re-nested windows after the fact, and you
+could see it — the tiler laid out twice, ~250ms apart. Deciding
+beforehand leaves one layout and nothing to correct. What is left is
+the new window's own first frame, which appears ~150ms before AeroSpace
+tiles it; no window manager can place a window that does not exist yet.
 
-The first rule is a startup guard. AeroSpace stops at the first
-matching callback, so a rule matching only `during-aerospace-startup`
-that does nothing keeps the joins from firing while AeroSpace adopts
-every window it finds at login — without it, layouts nest deeper on
-every restart. Manual control (Super+J flips, resize, float) works
-unchanged.
+Two details make it work. `enable-normalization-flatten-containers` is
+**off**, because it dissolves the very container `split` creates —
+AeroSpace tells you so if you try. And the hint names its window with
+`--window-id` rather than trusting "the focused window", because a
+window that opens inside that ~90ms gap takes focus with it. One hook
+covers both hover and keyboard focus: AeroSpace notices the focus
+`omacosy-ffm` moves, even though ffm moves it through SkyLight.
+
+Manual control (Super+J flips, resize, float) works unchanged.
 
 Floats get a rescue path, because macOS will not keep them on top:
 z-order is per *app*, not per window, so a float sinks behind whichever
