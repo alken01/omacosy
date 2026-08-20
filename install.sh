@@ -185,11 +185,6 @@ if [ ! -x "$HOME/.local/bin/omacosy-overview" ] || [ "$REPO_DIR/helper/overview.
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-overview" "$REPO_DIR/helper/overview.swift"
 fi
 
-# dwindle layout daemon (Hyprland-style spiral splits on AeroSpace)
-if [ ! -x "$HOME/.local/bin/omacosy-dwindle" ] || [ "$REPO_DIR/helper/dwindle.swift" -nt "$HOME/.local/bin/omacosy-dwindle" ]; then
-  log "Building omacosy-dwindle"
-  swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-dwindle" "$REPO_DIR/helper/dwindle.swift"
-fi
 
 # the status bar itself: one process for the surfaces, reading its own
 # publishers (SkyLight, CoreAudio, IOPS, DisplayServices, SCDynamicStore,
@@ -221,6 +216,14 @@ cp "$REPO_DIR/helper/bar-info.plist" "$BAR_APP/Contents/Info.plist"
 mark "built-bar-app"
 rm -f "$HOME/.local/bin/omacosy-bar"   # the pre-bundle binary, if any
 
+# omacosy-dwindle is gone: the spiral is three on-window-detected rules
+# now. A machine upgrading from an older install still has the daemon
+# and its agent, and leaving it running would join every new window a
+# second time.
+launchctl bootout "gui/$(id -u)/com.omacosy.dwindle" 2>/dev/null || true
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/omacosy-dwindle"
+
 # focus-follows-mouse daemon (own binary so helper rebuilds never
 # invalidate its Accessibility grant); runs as a launchd agent
 if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
@@ -240,7 +243,6 @@ if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Develop
   codesign -f -s "Apple Development" --identifier com.omacosy.helper "$HOME/.local/bin/omacosy-helper" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.dwindle "$HOME/.local/bin/omacosy-dwindle" 2>/dev/null || true
   # the BUNDLE is signed now; the identifier is what grants key on
   codesign -f -s "Apple Development" --identifier com.omacosy.bar "$BAR_APP" 2>/dev/null || true
   codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
@@ -298,21 +300,6 @@ PLIST
 launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
 launchctl load "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist"
 
-cat > "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>com.omacosy.dwindle</string>
-  <key>ProgramArguments</key><array><string>$HOME/.local/bin/omacosy-dwindle</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardErrorPath</key><string>/tmp/omacosy-dwindle.err</string>
-</dict>
-</plist>
-PLIST
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist"
 
 cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

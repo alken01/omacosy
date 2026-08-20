@@ -23,7 +23,9 @@ enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
-default-root-container-orientation = 'auto'
+# vertical, so the dwindle rules below alternate correctly from the
+# second window without needing to count windows
+default-root-container-orientation = 'vertical'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
@@ -58,21 +60,35 @@ run = 'layout floating'
 [[on-window-detected]]
 if.window-title-regex-substring = 'omacosy-activity'
 run = 'layout floating'
-# dwindle's trigger. AeroSpace tells us the moment it adopts a window,
-# ~610ms after launch, while the window is not painted until ~940ms —
-# early enough for the spiral join to land before anything is on
-# screen, so there is ONE layout change to see instead of two. The old
-# trigger was a SkyLight create event plus a debounce guessing when
-# AeroSpace had finished; this is that fact from the component that
-# knows it.
+# Hyprland's dwindle layout, in two rules and no daemon.
 #
-# LAST of these blocks deliberately: AeroSpace stops at the first
-# matching callback unless check-further-callbacks is set, so the
-# floating rules above still win and this fires only for windows that
-# will actually be tiled.
+# AeroSpace inserts a new window as a SIBLING, which makes a third
+# window three equal columns. Joining it into the previous window's
+# slot instead gives the spiral. Doing that from a daemon meant the
+# tiler laid out twice and you saw both; running it HERE puts the join
+# inside AeroSpace's own first frame pass, so there is one layout.
+#
+# The alternation needs no window count because the root is vertical
+# (below): window two joins into an h_tiles pair (side by side), window
+# three into a v_tiles nest, and so on down.
+#
+# The startup guard has to come first among these. AeroSpace stops at
+# the first matching callback unless check-further-callbacks is set, so
+# a rule that matches only during startup and does nothing prevents the
+# joins from firing while AeroSpace adopts every window it finds at
+# login — which would otherwise nest your layouts deeper on every
+# restart. The app rules above it still run, because they match first.
 [[on-window-detected]]
-if = 'true'
-run = ['exec-and-forget /usr/bin/touch /tmp/omacosy-dwindle-tick']
+if.during-aerospace-startup = true
+run = ['true']
+
+[[on-window-detected]]
+if = 'test %{window-parent-container-layout} = v_tiles'
+run = ['join-with up', 'layout h_tiles']
+
+[[on-window-detected]]
+if = 'test %{window-parent-container-layout} = h_tiles'
+run = ['join-with left', 'layout v_tiles']
 
 
 # Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like

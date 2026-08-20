@@ -11,10 +11,10 @@ bootstrapped from this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
-The whole desktop environment idles at about **171MB** of physical
-footprint — what Activity Monitor calls Memory — across WM, bar, four
+The whole desktop environment idles at about **166MB** of physical
+footprint — what Activity Monitor calls Memory — across WM, bar, three
 background daemons, the swipe daemon and Karabiner. Resident set size
-reads ~367MB, but RSS counts each process's share of the same shared
+reads ~359MB, but RSS counts each process's share of the same shared
 system frameworks, so footprint is the honest figure. Measured on this
 machine **docked to a second display**, largest first:
 
@@ -27,15 +27,16 @@ machine **docked to a second display**, largest first:
 | `omacosy-borders` | 15MB | 31MB |
 | `omacosy-ffm` | 9MB | 25MB |
 | aerospace-swipe | 8MB | 24MB |
-| `omacosy-dwindle` | 5MB | 8MB |
 
 A second display is not free: the bar and the border overlay each draw
 per-screen, and AeroSpace carries a second workspace set. On one
-display the same set measured ~155MB. Packaging the bar as an `.app`
+display the same set measured ~155MB. The dwindle daemon used to be
+on this list at 5MB; the spiral is three config rules now, so it is
+not a process at all. Packaging the bar as an `.app`
 (which is what buys the wi-fi network name) cost about 1MB — the bundle
 is a directory and an Info.plist, not a second copy of anything.
 
-It is mostly self-built: six small signed Swift binaries replace what
+It is mostly self-built: five small signed Swift binaries replace what
 would otherwise be a pile of dependencies (several of which are broken
 on macOS 26 — see below).
 
@@ -171,7 +172,7 @@ Your personal shell config belongs in `~/.zshrc.local` — the repo's
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
-| Dwindle layout | `omacosy-dwindle` (self-compiled launchd agent) | `helper/dwindle.swift` |
+| Dwindle layout | three `on-window-detected` rules (no daemon) | `config/aerospace/aerospace.template.toml` |
 | Workspace / window navigation | `omacosy-ws`, `omacosy-cycle`, `omacosy-float` | `bin/` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
 | System glue | `omacosy-helper` (self-compiled) | `helper/main.swift` |
@@ -190,11 +191,9 @@ driven by the window server's own event stream (SkyLight notifications
 for focus, move and resize — no polling, the ring glides with drags);
 `omacosy-helper` covers wallpaper (System Events scripting half-broke
 in macOS 14+), CoreAudio output switching, IOBluetooth control, cursor
-position, and per-display notch detection. `omacosy-overview` and
-`omacosy-dwindle` exist because neither a workspace overview nor a
-dwindle layout can be had any other way — Mission Control can't see
-virtual workspaces, and bsp is AeroSpace's most-requested missing
-layout. `omacosy-bar` is the status bar itself: one process holding the window
+position, and per-display notch detection. `omacosy-overview` exists because Mission Control cannot see
+virtual workspaces, so a workspace overview cannot be had any other
+way. `omacosy-bar` is the status bar itself: one process holding the window
 model in memory and reading its own publishers — SkyLight for window
 churn, IOBluetooth for connects, SCDynamicStore for the network, IOPS
 for battery, CoreAudio for volume, DisplayServices for brightness,
@@ -336,12 +335,31 @@ from omarchy's MIT-licensed theme packs). Copy a directory to add one.
 ![Three terminals in a dwindle layout — README, git log and btop — accent border ring on the focused one](docs/screenshots/tiling.jpg)
 
 AeroSpace natively inserts new windows as equal siblings (three
-windows = three columns). `omacosy-dwindle` grafts Hyprland's dwindle
-on top: each new tiled window splits the focused window's own slot,
-alternating direction — the omarchy spiral, automatic. It touches a
-window exactly once (at birth), stands down for floats and while the
-overview is open, and `touch ~/.config/omacosy/no-dwindle` disables it
-live. Manual control (Super+J flips, resize, float) works unchanged.
+windows = three columns). Three `on-window-detected` rules graft
+Hyprland's dwindle on top: each new tiled window joins the previous
+one's slot, alternating direction — the omarchy spiral, automatic.
+
+This used to be a daemon, and moving it into the config is what made it
+look right. A daemon can only act after AeroSpace has already placed
+the window, so the tiler laid out twice and you saw both: three columns
+for ~250ms, then the spiral. A callback runs inside AeroSpace's FIRST
+frame pass, so there is one layout and nothing to correct.
+
+Three things make it work, and two of them are undocumented. `run`
+takes AeroSpace commands bound to the detected window, so `join-with`
+targets it during adoption. The matcher can be any command whose exit
+code decides, so `test %{window-parent-container-layout} = h_tiles`
+picks the direction. And the root container is **vertical**, which is
+what removes the need to count windows: window two joins into a
+side-by-side pair, window three into a nested split, and it spirals
+from there.
+
+The first rule is a startup guard. AeroSpace stops at the first
+matching callback, so a rule matching only `during-aerospace-startup`
+that does nothing keeps the joins from firing while AeroSpace adopts
+every window it finds at login — without it, layouts nest deeper on
+every restart. Manual control (Super+J flips, resize, float) works
+unchanged.
 
 Floats get a rescue path, because macOS will not keep them on top:
 z-order is per *app*, not per window, so a float sinks behind whichever

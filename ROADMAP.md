@@ -8,10 +8,10 @@ Direction, not promises. Ordered roughly by pull.
   the built-in panel via DisplayServices; external monitors need a
   DDC/I²C stack (what MonitorControl does). Deliberately out of
   scope so far.
-- **Re-dwindle for moved windows.** The dwindle daemon tiles windows
-  at creation; windows *moved* into a workspace (throws, the
-  undock collapse) land as flat siblings. Hyprland re-tiles them
-  binarily; we don't yet.
+- **Re-dwindle for moved windows.** The dwindle rules fire on window
+  DETECTION, so windows *moved* into a workspace (throws, the undock
+  collapse) land as flat siblings. Hyprland re-tiles them binarily; we
+  don't yet, and a detection callback cannot see a move.
 - **Focus guard vs. typing.** An app that yanks focus while you are
   actively typing (input < 2s old) is indistinguishable from a
   user-driven switch and slips through. A denylist for known
@@ -167,7 +167,7 @@ existing (~20MB) and every plugin's fork storm no longer happening. Call
 memory a wash; the win was always latency, and it should be described
 that way.
 
-Still separate processes: borders, the overview, ffm and dwindle. An
+Still separate processes: borders, the overview and ffm. An
 earlier draft of this file called folding them in "the obvious next
 step", which the measurements do not support as stated.
 
@@ -191,7 +191,7 @@ So: borders is the clear candidate — nearly pure runtime tax, the same
 event stream, the same hotplug logic, no extra grant. Overview is
 marginal, needing Screen Recording and holding capture buffers either
 way. ffm stays out precisely to keep its Accessibility grant isolated,
-and dwindle stays out because at 9.2MB with no AppKit it is already the
+and dwindle is gone entirely — it is config now, not a process. Borders stays out because at 9.2MB with no AppKit it is already the
 cheapest thing here.
 
 Never a lock screen (`loginwindow` is protected) or a Notification

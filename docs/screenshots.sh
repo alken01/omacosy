@@ -217,7 +217,7 @@ if [ "$STAGE_APP" = Ghostty ]; then
   aim
   sleep 3 # btop redraws at the tiled size, not the size it opened at
 fi
-grab tiling "tiling (three windows, dwindle)"
+grab tiling "tiling (three windows, spiral)"
 
 say "opening the cheatsheet"
 aim
