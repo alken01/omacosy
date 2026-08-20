@@ -145,6 +145,9 @@ log "Linking configs"
 link "$REPO_DIR/zsh/zshrc"           "$HOME/.zshrc"
 link "$REPO_DIR/config/starship.toml" "$HOME/.config/starship.toml"
 link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
+# ghostty reads this AND its Application Support config, so personal
+# settings there survive
+link "$REPO_DIR/config/ghostty"      "$HOME/.config/ghostty"
 
 # Karabiner is COPIED, not symlinked: its background services can't read
 # configs living under ~/Documents (TCC folder protection) without Full
@@ -328,6 +331,7 @@ link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
 link "$REPO_DIR/bin/omacosy-ws-collapse" "$HOME/.local/bin/omacosy-ws-collapse"
 link "$REPO_DIR/bin/omacosy-update" "$HOME/.local/bin/omacosy-update"
+link "$REPO_DIR/bin/omacosy-spawn" "$HOME/.local/bin/omacosy-spawn"
 link "$REPO_DIR/bin/omacosy-float" "$HOME/.local/bin/omacosy-float"
 link "$REPO_DIR/bin/omacosy-cycle" "$HOME/.local/bin/omacosy-cycle"
 

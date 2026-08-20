@@ -1,0 +1,37 @@
+#!/bin/bash
+# omacosy-spawn <App> — open a new window of App, serialized so the
+# dwindle split hint keeps up.
+#
+# The split hint runs AFTER a window exists (on-focus-changed), so two
+# windows created at the same instant both land before any hint can
+# shape them — spamming Super+Enter used to produce a flat pile. No
+# post-hoc hint can win that race; the fix is on this side: take a
+# lock, open ONE window, and wait until omacosy-helper split-hint has
+# stamped it into the state file (its first field is the newest hinted
+# window id, and ids only grow) before letting the next spawn go.
+# Spam then becomes a rapid, clean sequence instead of a simultaneous
+# mess. Worst case the wait gives up after 2s so a broken hint chain
+# can never wedge the terminal key.
+APP="$1"
+[ -n "$APP" ] || exit 1
+STATE="/tmp/omacosy-split-state-$(id -u)"
+
+# macOS ships no flock; mkdir is the portable atomic lock. A holder
+# that died is stolen after ~5s so the terminal key can never go dead.
+LOCK="/tmp/omacosy-spawn-$(id -u).lock.d"
+for i in $(seq 120); do
+  mkdir "$LOCK" 2>/dev/null && break
+  [ "$i" -ge 100 ] && { rm -rf "$LOCK"; }
+  sleep 0.05
+done
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+
+prev=0
+[ -f "$STATE" ] && prev=$(cut -d' ' -f1 "$STATE")
+open -na "$APP"
+for _ in $(seq 40); do
+  cur=0
+  [ -f "$STATE" ] && cur=$(cut -d' ' -f1 "$STATE")
+  [ "${cur%.*}" -gt "${prev%.*}" ] 2>/dev/null && exit 0
+  sleep 0.05
+done
