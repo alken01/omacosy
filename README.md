@@ -206,9 +206,8 @@ churn, IOBluetooth for connects, SCDynamicStore for the network, IOPS
 for battery, CoreAudio for volume, DisplayServices for brightness,
 Spotify's own broadcast for the track — so it polls for nothing macOS
 announces. Its only timers are the weather fetch and the clock. A
-workspace switch repaints in about 2 ms because it asks no one
-anything; the shell bar it replaced took 165 ms to answer the same
-event.
+workspace switch repaints in 2.5 ms because it asks no one anything;
+the shell bar it replaced took 164 ms to answer the same event.
 
 ## The bar
 
