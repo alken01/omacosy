@@ -394,20 +394,41 @@ if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/
 fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
-log "Building aerospace-swipe (grant Accessibility when prompted)"
-# pre-unload: the makefile ends with launchctl load, which fails on
-# an already-loaded agent and made every re-run print a false failure
-launchctl unload "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
-(cd "$HOME/.local/share/aerospace-swipe" && make install) || \
-  echo "aerospace-swipe install failed — run manually: cd ~/.local/share/aerospace-swipe && make install"
-# re-sign with the STABLE identity, and only AFTER make install: the
-# makefile signs ad-hoc, which rotates per rebuild and invalidates
-# the Accessibility grant. Keep the entitlements the makefile applied.
-if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Development"; then
-  codesign -f -s "Apple Development" --identifier com.acsandmann.swipe \
-    --entitlements "$HOME/.local/share/aerospace-swipe/accessibility.entitlements" \
-    "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
-  launchctl kickstart -k "gui/$(id -u)/com.acsandmann.swipe" 2>/dev/null || true
+# Rebuilding this daemon COSTS ITS ACCESSIBILITY GRANT: measured on
+# macOS 26.3, TCC pins the grant to the exact build (any re-sign is a
+# new subject — a stable Apple Development identity does not carry it),
+# so every rebuild means dead swipes until the user re-grants. The only
+# safe rebuild is the one that does not happen: skip the whole block
+# unless the binary is missing or a source/patch actually changed.
+SWIPE_BIN="$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app/Contents/MacOS/AerospaceSwipe"
+SWIPE_STALE=""
+if [ ! -x "$SWIPE_BIN" ]; then SWIPE_STALE=1
+elif find "$HOME/.local/share/aerospace-swipe/src" \
+       "$HOME/.local/share/aerospace-swipe/makefile" \
+       -newer "$SWIPE_BIN" 2>/dev/null | grep -q .; then SWIPE_STALE=1
+fi
+if [ -n "$SWIPE_STALE" ]; then
+  log "Building aerospace-swipe (grant Accessibility when prompted)"
+  launchctl unload "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
+  # build and stage WITHOUT launching (`make install` ends in launchctl
+  # load): sign with the stable identity before anything runs, so the
+  # only binary launchd ever starts is the one the user grants.
+  (cd "$HOME/.local/share/aerospace-swipe" && make all bundle install_plist) || \
+    echo "aerospace-swipe build failed — run manually: cd ~/.local/share/aerospace-swipe && make install"
+  if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Development"; then
+    codesign -f -s "Apple Development" --identifier com.acsandmann.swipe \
+      --entitlements "$HOME/.local/share/aerospace-swipe/accessibility.entitlements" \
+      "$HOME/.local/share/aerospace-swipe/AerospaceSwipe.app" 2>/dev/null || true
+  fi
+fi
+launchctl load "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
+# a rebuild strands the daemon in its permission-wait loop with no
+# visible symptom but dead swipes — check and say so out loud
+sleep 2
+if tail -5 /tmp/swipe.err 2>/dev/null | grep -q "Waiting for accessibility"; then
+  log "WARNING: aerospace-swipe is waiting for its Accessibility grant"
+  log "  (a rebuild makes macOS treat it as a new app — this is a macOS rule, not a bug)."
+  log "  Fix: System Settings -> Privacy & Security -> Accessibility -> toggle AerospaceSwipe"
 fi
 
 # --- 6. macOS look ----------------------------------------------------------
