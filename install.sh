@@ -343,6 +343,15 @@ mkdir -p "$HOME/.config/omarchy/current"
 link "$HOME/.config/omarchy" "$HOME/Library/Application Support/omarchy"
 
 if [ ! -e "$HOME/.config/omarchy/current/theme" ]; then
+  # record the pre-omacosy wallpaper per screen (once) so uninstall can
+  # put it back — theme-set is about to overwrite every display
+  if ! grep -q '^wallpaper	' "$MANIFEST" 2>/dev/null; then
+    i=0
+    "$HOME/.local/bin/omacosy-helper" wallpaper get 2>/dev/null | while IFS= read -r wp; do
+      [ -n "$wp" ] && printf 'wallpaper\t%s\t%s\n' "$i" "$wp" >> "$MANIFEST"
+      i=$((i + 1))
+    done
+  fi
   log "Applying default theme (tokyo-night)"
   "$REPO_DIR/bin/theme-set" tokyo-night
 fi
