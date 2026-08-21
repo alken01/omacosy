@@ -385,6 +385,13 @@ fi
 if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-socket-recovery.patch" 2>/dev/null; then
   git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-socket-recovery.patch"
 fi
+# sleep/wake is the one hotplug IOKit does not announce: the built-in
+# trackpad keeps its IOService across sleep, so no HID-attach fires,
+# but the multitouch callback session can die anyway — swipes were
+# silently dead after wake until a real hotplug. Re-register on wake.
+if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-wake-reregister.patch" 2>/dev/null; then
+  git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-wake-reregister.patch"
+fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
 log "Building aerospace-swipe (grant Accessibility when prompted)"
