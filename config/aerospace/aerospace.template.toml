@@ -195,6 +195,7 @@ cmd-ctrl-alt-shift-l = 'exec-and-forget $HOME/.local/bin/omacosy-helper lock'
 # Theme cycle
 # T for theme; float lives on plain Super+T
 cmd-ctrl-alt-shift-t = 'exec-and-forget $HOME/.local/bin/theme-next'
+cmd-ctrl-alt-shift-b = 'exec-and-forget $HOME/.local/bin/theme-bg-next'
 
 # Modes
 cmd-ctrl-alt-r = 'mode resize'

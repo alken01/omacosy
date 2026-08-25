@@ -326,6 +326,7 @@ launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null 
 launchctl load "$HOME/Library/LaunchAgents/com.omacosy.bar.plist"
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
+link "$REPO_DIR/bin/theme-bg-next" "$HOME/.local/bin/theme-bg-next"
 link "$REPO_DIR/bin/omacosy-toggle" "$HOME/.local/bin/omacosy-toggle"
 link "$REPO_DIR/bin/omacosy-ws" "$HOME/.local/bin/omacosy-ws"
 link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
