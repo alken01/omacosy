@@ -449,6 +449,11 @@ fi
 
 log "Starting AeroSpace"
 open -a AeroSpace
+# an ALREADY-running AeroSpace does not re-read its config on `open` —
+# without this, updates that change keybindings or rules look applied
+# but are not until the next restart
+sleep 1
+"$(command -v aerospace || echo /opt/homebrew/bin/aerospace)" reload-config 2>/dev/null || true
 
 # The remapping runs in launchd-managed services; the app itself is only
 # the settings window, and it costs ~92MB resident to leave open. Launch
