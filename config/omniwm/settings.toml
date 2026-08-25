@@ -362,3 +362,32 @@ assignToWorkspace = "16"
 [[appRules]]
 bundleId = "com.spotify.client"
 assignToWorkspace = "17"
+
+# --- slice 3: the four bindings OmniWM can natively cover ------------------
+# ids verified against ActionCatalog.swift 2026-08-26
+
+# omarchy Super+S: surface floats (omacosy-float stands down under OmniWM)
+[[hotkeys]]
+binding = "Control+Option+Command+S"
+id = "raiseAllFloatingWindows"
+
+# omarchy Ctrl+Alt+Tab: cycle focus between displays
+[[hotkeys]]
+binding = "Control+Option+Tab"
+id = "focusMonitorNext"
+
+[[hotkeys]]
+binding = "Control+Option+Shift+Tab"
+id = "focusMonitorPrevious"
+
+# omarchy Alt+Tab (approximate: last-focused window rather than a
+# workspace-window walk — omacosy-cycle stands down under OmniWM)
+[[hotkeys]]
+binding = "Option+Tab"
+id = "focusPrevious"
+
+# OmniWM's overview (ours is aerospace-coupled; swipe-up is parked with
+# aerospace-swipe, so the overview gets a chord here: Super+O)
+[[hotkeys]]
+binding = "Control+Option+Command+O"
+id = "toggleOverview"

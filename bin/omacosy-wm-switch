@@ -66,6 +66,10 @@ omniwm)
   read -r -p "  Press Enter AFTER both grants are done (Ctrl-C aborts, nothing changed): "
   log "Handing over: stopping AeroSpace, ffm and swipe"
   stop_aerospace_world
+  # the exec chords (terminal, launcher, theme, lock, ...) lived in
+  # aerospace.toml — OmniWM's hotkeys cannot exec, so they move into
+  # Karabiner rules for the duration
+  "$HOME/.local/bin/omacosy-karabiner-omniwm" install 2>/dev/null || true
   echo
   echo "  VERIFY NOW: switch workspaces with Super+1 and Super+2."
   echo "  Type 'yes' within 90 seconds if it works."
@@ -78,6 +82,7 @@ omniwm)
     log "Way back any time: omacosy-wm-switch aerospace"
   else
     log "No confirmation — REVERTING to AeroSpace"
+    "$HOME/.local/bin/omacosy-karabiner-omniwm" remove 2>/dev/null || true
     osascript -e 'quit app "OmniWM"' 2>/dev/null || true
     pkill -f OmniWM.app 2>/dev/null || true
     start_aerospace_world
@@ -88,6 +93,7 @@ omniwm)
   ;;
 aerospace)
   log "Stopping OmniWM, starting the AeroSpace world"
+  "$HOME/.local/bin/omacosy-karabiner-omniwm" remove 2>/dev/null || true
   osascript -e 'quit app "OmniWM"' 2>/dev/null || true
   pkill -f OmniWM.app 2>/dev/null || true
   start_aerospace_world
