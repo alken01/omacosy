@@ -336,6 +336,7 @@ link "$REPO_DIR/bin/omacosy-focus-guard" "$HOME/.local/bin/omacosy-focus-guard"
 link "$REPO_DIR/bin/omacosy-ws-collapse" "$HOME/.local/bin/omacosy-ws-collapse"
 link "$REPO_DIR/bin/omacosy-update" "$HOME/.local/bin/omacosy-update"
 link "$REPO_DIR/bin/omacosy-spawn" "$HOME/.local/bin/omacosy-spawn"
+link "$REPO_DIR/bin/omacosy-wm-switch" "$HOME/.local/bin/omacosy-wm-switch"
 link "$REPO_DIR/bin/omacosy-float" "$HOME/.local/bin/omacosy-float"
 link "$REPO_DIR/bin/omacosy-cycle" "$HOME/.local/bin/omacosy-cycle"
 
@@ -450,13 +451,17 @@ fi
 # --- 7. Services ------------------------------------------------------------
 
 
-# OmniWM trial (this branch): OmniWM is the window manager. AeroSpace
-# stays installed but is NOT started — main is one checkout + install
-# away, and omacosy-toggle still parks everything.
-log "Starting OmniWM (grant Accessibility and Input Monitoring when prompted)"
-osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
-open -a OmniWM 2>/dev/null || open -a "$(brew --prefix 2>/dev/null)/opt/omniwm/OmniWM.app" 2>/dev/null || \
-  log "WARNING: OmniWM.app not found — check 'brew install BarutSRB/tap/omniwm' output"
+# OmniWM trial (this branch): installing NEVER switches the window
+# manager — a half-configured switch once stranded the user on one
+# workspace with no way back. AeroSpace starts as always; moving to
+# OmniWM is an explicit, dead-man-guarded step:
+#
+#   omacosy-wm-switch omniwm      # snapshot, grant-first, auto-revert
+#   omacosy-wm-switch aerospace   # the way back
+log "Starting AeroSpace (switch to OmniWM with: omacosy-wm-switch omniwm)"
+open -a AeroSpace
+sleep 1
+"$(command -v aerospace || echo /opt/homebrew/bin/aerospace)" reload-config 2>/dev/null || true
 
 # The remapping runs in launchd-managed services; the app itself is only
 # the settings window, and it costs ~92MB resident to leave open. Launch
