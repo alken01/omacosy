@@ -12,9 +12,41 @@ grant-first, snapshot-backed and auto-reverting.
 - [x] Core hotkeys: workspaces 1-9, move+follow, back-and-forth,
       focus arrows (binding format verified against OmniWM's parser)
 
-## To port
+## Done (agents, 2026-08-25)
 
-1. **Full keybinding parity.** Map the rest of the omarchy scheme into
+- [x] Full keybinding parity — 35 bindings, every id verified against
+      ActionCatalog.swift; gaps documented in settings.toml comments
+      (OmniWM has NO close-window command; no "other monitor" throw,
+      only directional). [[workspaces]] block added: 1-9 main, 14-17
+      secondary (their built-in default is only 7 workspaces!), plus
+      appRules pinning Signal/WhatsApp/Discord/Spotify to 14-17.
+- [x] Bar workspace feed — WM detected per use; omniwmctl query
+      workspaces/windows/displays + a persistent `watch
+      active-workspace --exec /bin/cat` stream for instant focus;
+      click-to-jump via `workspace focus-name`. Aerospace path
+      untouched.
+- [x] Cheatsheet — parses [[hotkeys]] from settings.toml under OmniWM,
+      comment blocks become group headings, Control+Option+Command
+      renders as Super.
+- [x] WM-aware plumbing — omacosy-ws routes through omniwmctl
+      (per-monitor natively, no twin math); collapse/cycle/float/
+      focus-guard/spawn stand down cleanly; toggle records and
+      restarts the right WM; uninstall tears OmniWM down.
+
+## To verify on the next guarded switch
+
+1. **Settings load.** OmniWM's TOML decoder is strict and silently
+   replaces an unparseable file with defaults — the likeliest cause of
+   trial #1's stranding. Watch whether the hotkeys survive first load.
+2. **IPC socket** must be enabled once from OmniWM's status-bar menu
+   before omniwmctl works (socket:
+   ~/Library/Caches/com.barut.OmniWM/ipc.sock).
+3. Bar under OmniWM (payload shapes taken from source, never probed
+   live), borders, spawn behaviour, monitor routing vs 11-19.
+
+## Remaining
+
+1. **Verification pass.** Map the rest of the omarchy scheme into
    `[[hotkeys]]`: resize, fullscreen, float toggle, split toggle,
    window throws between monitors, workspace throw. Needs the complete
    hotkey id list from `Sources/OmniWM/Core/Input/DefaultHotkeyBindings.swift`.

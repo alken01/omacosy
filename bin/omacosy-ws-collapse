@@ -14,6 +14,11 @@
 #   workspaces to the secondary monitor); the map is consumed.
 export PATH="/opt/homebrew/bin:$PATH"
 
+# OmniWM routes workspaces per monitor itself on un/replug, and every
+# probe below is aerospace CLI — stand down.
+wm_is_omniwm() { pgrep -qf "OmniWM.app/Contents/MacOS/OmniWM"; }
+wm_is_omniwm && exit 0
+
 STATE_DIR="$HOME/.local/state/omacosy"
 MAP="$STATE_DIR/collapse-map"
 mkdir -p "$STATE_DIR"

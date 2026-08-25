@@ -180,3 +180,185 @@ id = "focus.up"
 [[hotkeys]]
 binding = "Control+Option+Command+Down Arrow"
 id = "focus.down"
+
+# Super+tab / Super+shift+tab — next/previous workspace, per display
+# (switchWorkspaceRelative walks this monitor's set, like omacosy-ws).
+
+[[hotkeys]]
+binding = "Control+Option+Command+Tab"
+id = "switchWorkspace.next"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+Tab"
+id = "switchWorkspace.previous"
+
+# Super+shift+arrows — move the window; crosses to the other monitor at the
+# screen edge (focus.moveCrossesMonitorAtEdge above), which covers most of
+# omarchy's directional throwing too.
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+Left Arrow"
+id = "move.left"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+Right Arrow"
+id = "move.right"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+Up Arrow"
+id = "move.up"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+Down Arrow"
+id = "move.down"
+
+# Super+t toggle floating, Super+j toggle split direction (dwindle),
+# Super+f fullscreen-in-workspace, Super+n native macOS fullscreen.
+
+[[hotkeys]]
+binding = "Control+Option+Command+T"
+id = "toggleFocusedWindowFloating"
+
+[[hotkeys]]
+binding = "Control+Option+Command+J"
+id = "toggleSplit"
+
+[[hotkeys]]
+binding = "Control+Option+Command+F"
+id = "toggleFullscreen"
+
+[[hotkeys]]
+binding = "Control+Option+Command+N"
+id = "toggleNativeFullscreen"
+
+# Super+- / Super+= — resize steps (dwindle's resizeFocusedWindow).
+
+[[hotkeys]]
+binding = "Control+Option+Command+Minus"
+id = "resizeFocusedWindow.shrink"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Equal"
+id = "resizeFocusedWindow.grow"
+
+# omarchy chords with no OmniWM hotkey id (checked against
+# Sources/OmniWM/Core/Input/{ActionCatalog,HotkeyCommand}.swift, 2026-08-25):
+# - Super+w close window: HotkeyCommand has no close/quit-window case at all.
+# - Super+shift+o throw the window to the other display in one keypress: only
+#   directional moveWindowToMonitor.{left,right,up,down} exist, no
+#   "other/next monitor" variant (edge-crossing move.* above is the stand-in).
+# - Super+shift+space throw the WHOLE workspace to the other display: same
+#   story — only directional moveWorkspaceToMonitor.* / swapWorkspaceWithMonitor.*.
+
+# --- workspaces: 1-9 on the main display, 14-17 on the secondary ------------
+# OmniWM workspace ids are positive-integer strings with no upper bound
+# (WorkspaceIDPolicy.normalizeRawID in Sources/OmniWMIPC/WorkspaceAddressing.swift),
+# so two-digit ids like "14" are valid. BUT app rules only land on workspaces
+# that are configured here: PlacementResolver.resolveWorkspacePlacement looks
+# the rule's workspace up with createIfMissing:false and skips the rule as
+# workspaceNotMaterialized otherwise, and WorkspaceManager.createWorkspace
+# refuses any name outside the configured set. The built-in default configures
+# only "1"-"7" (BuiltInSettingsDefaults.workspaceConfigurations) — and
+# supplying [[workspaces]] REPLACES that default (SettingsStore.
+# normalizedWorkspaceConfigurations), so 1-9 are restated for the hotkeys
+# above and 14-17 added for the app pins, on the omacosy secondary-set
+# convention. layoutType "default" follows general.defaultLayoutType.
+
+[[workspaces]]
+id = "006FFC60-64D0-466B-80B2-7A57332DCA5C"
+name = "1"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "6198A7C7-C06F-4F13-850E-6E0010A5621A"
+name = "2"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "B4FE4043-697F-451E-9D48-9D9A37AE638D"
+name = "3"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "18ED2DE7-D1CC-4836-B1BB-DDA49323B376"
+name = "4"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "3606B0AD-A1BB-4310-B54A-F8E21F1A0611"
+name = "5"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "EF1B936E-B031-4202-AA71-DAEA9FC7D3FA"
+name = "6"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "5ECFAED7-6DCE-4078-A5D2-B577BA7AAF50"
+name = "7"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "82A5188E-26C5-4BC3-8D75-305B022FB3B7"
+name = "8"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "1AE98F21-6826-421B-B567-6ABABE1066BA"
+name = "9"
+monitorAssignment = { type = "main" }
+layoutType = "default"
+
+[[workspaces]]
+id = "5810E59D-5A68-43AC-9050-AD14721738E8"
+name = "14"
+monitorAssignment = { type = "secondary" }
+layoutType = "default"
+
+[[workspaces]]
+id = "2ED6CC8F-48FA-4528-8B28-AC5CFD1F3325"
+name = "15"
+monitorAssignment = { type = "secondary" }
+layoutType = "default"
+
+[[workspaces]]
+id = "7D8676BF-59CA-4639-9012-F4C3A975A790"
+name = "16"
+monitorAssignment = { type = "secondary" }
+layoutType = "default"
+
+[[workspaces]]
+id = "F4F1600F-3B32-4D33-8FC7-0015F92D651F"
+name = "17"
+monitorAssignment = { type = "secondary" }
+layoutType = "default"
+
+# --- appRules: messengers/media pinned to the secondary-set workspaces ------
+# assignToWorkspace takes a raw workspace id string; only bundleId is a
+# required field (AppRule's custom decoder, Sources/OmniWM/Core/Config/
+# AppRule.swift — rule ids regenerate on load when omitted).
+
+[[appRules]]
+bundleId = "org.whispersystems.signal-desktop"
+assignToWorkspace = "14"
+
+[[appRules]]
+bundleId = "net.whatsapp.WhatsApp"
+assignToWorkspace = "15"
+
+[[appRules]]
+bundleId = "com.hnc.Discord"
+assignToWorkspace = "16"
+
+[[appRules]]
+bundleId = "com.spotify.client"
+assignToWorkspace = "17"

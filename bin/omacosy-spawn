@@ -14,6 +14,12 @@
 # can never wedge the terminal key.
 APP="$1"
 [ -n "$APP" ] || exit 1
+
+# Under OmniWM the dwindle split hint doesn't run, so there is no race
+# to serialize — just open the window.
+wm_is_omniwm() { pgrep -qf "OmniWM.app/Contents/MacOS/OmniWM"; }
+wm_is_omniwm && { open -na "$APP"; exit 0; }
+
 STATE="/tmp/omacosy-split-state-$(id -u)"
 
 # macOS ships no flock; mkdir is the portable atomic lock. A holder
