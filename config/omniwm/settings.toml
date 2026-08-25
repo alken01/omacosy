@@ -1,0 +1,182 @@
+# OmniWM settings for the omacosy experiment (branch: omniwm).
+# Symlinked to ~/.config/omniwm/settings.toml; OmniWM live-reloads it.
+# Schema follows OmniWM's own persisted model — edit in the GUI and the
+# file round-trips, or edit here and it applies on save.
+#
+# First pass, mapped from the AeroSpace world:
+# - dwindle layout with our measured splitWidthMultiplier (1.4 restores
+#   the 16:9 left/down/left cadence on a 3440-wide display)
+# - focus follows mouse is OmniWM-native (retires omacosy-ffm here)
+# - 4-finger workspace swipes are OmniWM-native (retires aerospace-swipe)
+# - OmniWM's workspace bar and borders stay OFF: omacosy-bar and
+#   omacosy-borders remain the themed chrome
+# - update checks off, matching the repo's nothing-phones-home posture
+# - hotkeys: Super = Caps Lock = Control+Option+Command (Karabiner),
+#   same letters as the omarchy scheme where ids exist
+
+[general]
+defaultLayoutType = "dwindle"
+animationsEnabled = true
+hotkeysEnabled = true
+ipcEnabled = true
+preventSleepEnabled = false
+systemHyperTrigger = "None"
+updateChecksEnabled = false
+
+[dwindle]
+defaultSplitRatio = 1.0
+smartSplit = false
+splitWidthMultiplier = 1.4
+singleWindowFit = "fill"
+useGlobalGaps = true
+
+[focus]
+followsMouse = true
+followsWindowToMonitor = true
+crossesMonitorAtEdge = true
+moveCrossesMonitorAtEdge = true
+moveMouseToFocusedWindow = false
+lockModifier = "off"
+
+[gaps]
+size = 8.0
+
+[gaps.outer]
+top = 0.0
+bottom = 0.0
+left = 0.0
+right = 0.0
+
+[gestures]
+workspaceSwipeEnabled = true
+workspaceSwipeFingerCount = 4
+workspaceSwipeAxis = "horizontal"
+scrollEnabled = false
+fingerCount = 3
+mouseResizeModifierKey = "option"
+
+[mouseWarp]
+enabled = true
+constrainToArrangement = false
+margin = 1
+
+[borders]
+enabled = false
+
+[workspaceBar]
+enabled = false
+
+[statusBar]
+showAppNames = false
+showWorkspaceName = false
+useWorkspaceId = true
+
+[clipboard]
+historyEnabled = false
+
+[quakeTerminal]
+enabled = false
+
+[hiddenBar]
+enabled = false
+
+[appearance]
+mode = "automatic"
+
+[routing]
+mode = "macOS"
+
+# --- hotkeys: omarchy's map, Super = Control+Option+Command -----------------
+# switchWorkspace is 0-indexed: id .0 answers the "1" key.
+
+[[hotkeys]]
+binding = "Control+Option+Command+1"
+id = "switchWorkspace.0"
+
+[[hotkeys]]
+binding = "Control+Option+Command+2"
+id = "switchWorkspace.1"
+
+[[hotkeys]]
+binding = "Control+Option+Command+3"
+id = "switchWorkspace.2"
+
+[[hotkeys]]
+binding = "Control+Option+Command+4"
+id = "switchWorkspace.3"
+
+[[hotkeys]]
+binding = "Control+Option+Command+5"
+id = "switchWorkspace.4"
+
+[[hotkeys]]
+binding = "Control+Option+Command+6"
+id = "switchWorkspace.5"
+
+[[hotkeys]]
+binding = "Control+Option+Command+7"
+id = "switchWorkspace.6"
+
+[[hotkeys]]
+binding = "Control+Option+Command+8"
+id = "switchWorkspace.7"
+
+[[hotkeys]]
+binding = "Control+Option+Command+9"
+id = "switchWorkspace.8"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+1"
+id = "moveToWorkspace.0"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+2"
+id = "moveToWorkspace.1"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+3"
+id = "moveToWorkspace.2"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+4"
+id = "moveToWorkspace.3"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+5"
+id = "moveToWorkspace.4"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+6"
+id = "moveToWorkspace.5"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+7"
+id = "moveToWorkspace.6"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+8"
+id = "moveToWorkspace.7"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Shift+9"
+id = "moveToWorkspace.8"
+
+[[hotkeys]]
+binding = "Control+Option+Command+B"
+id = "workspaceBackAndForth"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Left Arrow"
+id = "focus.left"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Right Arrow"
+id = "focus.right"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Up Arrow"
+id = "focus.up"
+
+[[hotkeys]]
+binding = "Control+Option+Command+Down Arrow"
+id = "focus.down"

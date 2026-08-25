@@ -148,6 +148,8 @@ link "$REPO_DIR/config/aerospace"    "$HOME/.config/aerospace"
 # ghostty reads this AND its Application Support config, so personal
 # settings there survive
 link "$REPO_DIR/config/ghostty"      "$HOME/.config/ghostty"
+# OmniWM trial (this branch): settings are canonical TOML, live-reloaded
+link "$REPO_DIR/config/omniwm"       "$HOME/.config/omniwm"
 
 # Karabiner is COPIED, not symlinked: its background services can't read
 # configs living under ~/Documents (TCC folder protection) without Full
@@ -447,13 +449,13 @@ fi
 # --- 7. Services ------------------------------------------------------------
 
 
-log "Starting AeroSpace"
-open -a AeroSpace
-# an ALREADY-running AeroSpace does not re-read its config on `open` —
-# without this, updates that change keybindings or rules look applied
-# but are not until the next restart
-sleep 1
-"$(command -v aerospace || echo /opt/homebrew/bin/aerospace)" reload-config 2>/dev/null || true
+# OmniWM trial (this branch): OmniWM is the window manager. AeroSpace
+# stays installed but is NOT started — main is one checkout + install
+# away, and omacosy-toggle still parks everything.
+log "Starting OmniWM (grant Accessibility and Input Monitoring when prompted)"
+osascript -e 'quit app "AeroSpace"' 2>/dev/null || true
+open -a OmniWM 2>/dev/null || open -a "$(brew --prefix 2>/dev/null)/opt/omniwm/OmniWM.app" 2>/dev/null || \
+  log "WARNING: OmniWM.app not found — check 'brew install BarutSRB/tap/omniwm' output"
 
 # The remapping runs in launchd-managed services; the app itself is only
 # the settings window, and it costs ~92MB resident to leave open. Launch
