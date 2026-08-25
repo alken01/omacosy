@@ -65,7 +65,12 @@ func rememberFront() {
     previousFront = nil
 }
 
-let pidPath = "/tmp/omacosy-overview-\(getuid()).pid"
+// NOT under /tmp: macOS purges /tmp files untouched for ~3 days, and a
+// purged pidfile made the daemon unfindable — the next swipe spawned a
+// second daemon and the first became an orphan running its capture
+// pipeline forever (found at load average 190 after six days).
+let stateDir = NSString(string: "~/.local/state/omacosy").expandingTildeInPath
+let pidPath = "\(stateDir)/overview.pid"
 // raised while the overlay is on screen — omacosy-ffm stands down so
 // hover-focus can't steal key from under the user's click
 let activeFlag = "/tmp/omacosy-overlay-active-\(getuid())"
@@ -92,6 +97,28 @@ if !isDaemon {
     exit(0)
 }
 
+// Singleton, enforced by process table rather than trusted to the
+// pidfile: whatever raced or aged the pidfile away, a second daemon
+// must not survive alongside the first. The NEW daemon wins (it is the
+// one the user's swipe just asked for); every older sibling is killed.
+if let out = try? { () -> String in
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    p.arguments = ["-f", "omacosy-overview --daemon"]
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    try p.run()
+    let d = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return String(data: d, encoding: .utf8) ?? ""
+}() {
+    for line in out.split(separator: "\n") {
+        if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)), pid != getpid() {
+            kill(pid, SIGTERM)
+        }
+    }
+}
+try? FileManager.default.createDirectory(atPath: stateDir, withIntermediateDirectories: true)
 try? "\(getpid())".write(toFile: pidPath, atomically: true, encoding: .utf8)
 // a previous instance that died visible leaves the truce flag up,
 // which silently disables ffm and dwindle — this daemon owns the

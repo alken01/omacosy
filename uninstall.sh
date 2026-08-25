@@ -32,7 +32,9 @@ rm -rf "$HOME/.local/share/omacosy/omacosy-bar.app"
 # link planted at this path could point at a file holding someone
 # else's pid and we would signal that instead. The contents are also
 # only trusted as far as "digits".
-PIDFILE="/tmp/omacosy-overview-$(id -u).pid"
+# pidfile moved out of /tmp (purge-safe); check both for older installs
+PIDFILE="$HOME/.local/state/omacosy/overview.pid"
+[ -f "$PIDFILE" ] || PIDFILE="/tmp/omacosy-overview-$(id -u).pid"
 if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   OVERVIEW_PID="$(cat "$PIDFILE" 2>/dev/null || true)"
   case "$OVERVIEW_PID" in
