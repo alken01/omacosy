@@ -5,7 +5,7 @@ tap "BarutSRB/tap"           # omniwm
 
 # Window management + bar + borders
 cask "aerospace"
-brew "omniwm"
+cask "omniwm"
 cask "karabiner-elements"  # Caps Lock -> Super
 cask "ghostty"             # default terminal + floating TUI host (btop)
 cask "raycast"             # Super+Space launcher (the binding assumes it)
