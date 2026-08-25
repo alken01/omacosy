@@ -338,6 +338,7 @@ link "$REPO_DIR/bin/omacosy-update" "$HOME/.local/bin/omacosy-update"
 link "$REPO_DIR/bin/omacosy-spawn" "$HOME/.local/bin/omacosy-spawn"
 link "$REPO_DIR/bin/omacosy-wm-switch" "$HOME/.local/bin/omacosy-wm-switch"
 link "$REPO_DIR/bin/omacosy-karabiner-omniwm" "$HOME/.local/bin/omacosy-karabiner-omniwm"
+link "$REPO_DIR/bin/omacosy-layout" "$HOME/.local/bin/omacosy-layout"
 link "$REPO_DIR/bin/omacosy-float" "$HOME/.local/bin/omacosy-float"
 link "$REPO_DIR/bin/omacosy-cycle" "$HOME/.local/bin/omacosy-cycle"
 
