@@ -261,9 +261,18 @@ case "omniwm-overview-close":
             && ((w[kCGWindowBounds as String] as? [String: CGFloat])?["Height"] ?? 0) > 400
     }
     guard overviewUp else { exit(0) }
-    let src = CGEventSource(stateID: .hidSystemState)
-    CGEvent(keyboardEventSource: src, virtualKey: 53, keyDown: true)?.post(tap: .cghidEventTap)
-    CGEvent(keyboardEventSource: src, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
+    // don't post Escape — synthetic key events depend on the caller's
+    // Accessibility responsibility and OmniWM ignored them in testing.
+    // The overview dismisses ITSELF when another app takes focus (its
+    // own documented behavior), and activating an app needs no
+    // permission: hand focus to the topmost normal window's app.
+    for w in wins {
+        guard (w[kCGWindowLayer as String] as? Int) == 0,
+            let pid = w[kCGWindowOwnerPID as String] as? pid_t,
+            let app = NSRunningApplication(processIdentifier: pid) else { continue }
+        app.activate()
+        break
+    }
 
 case "split-hint":
     // Hyprland's dwindle splits the focused window along its longer
