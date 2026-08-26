@@ -42,7 +42,11 @@ lockModifier = "off"
 size = 8.0
 
 [gaps.outer]
-top = 0.0
+# room for omacosy-bar: 10 on the notched built-in (usable space starts
+# below the notch strip), 42 on flat externals via monitorGapOverrides —
+# without this, windows tile over the bar and it auto-hides (its
+# fullscreen-window behaviour)
+top = 10.0
 bottom = 0.0
 left = 0.0
 right = 0.0
@@ -63,8 +67,20 @@ margin = 1
 [borders]
 enabled = false
 
+# PHANTOM BAR — OmniWM's dwindle ignores [gaps.outer] (Niri-only, see
+# docs/omniwm-port.md), so the strip omacosy-bar lives in cannot be
+# reserved with gaps. Their workspace bar's reserveLayoutSpace is a
+# SEPARATE mechanism that does work under dwindle: run it invisible
+# (opacity 0, no labels) purely to hold the strip. height 10 below the
+# notch puts windows at y=42, pixel-identical to the aerospace layout.
 [workspaceBar]
-enabled = false
+enabled = true
+reserveLayoutSpace = true
+height = 10.0
+backgroundOpacity = 0.0
+showLabels = false
+showAppNames = false
+position = "overlappingMenuBar" 
 
 [statusBar]
 showAppNames = false
