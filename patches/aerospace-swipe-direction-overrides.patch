@@ -1,0 +1,24 @@
+diff --git a/src/config.h b/src/config.h
+index 60ceb24..fb12f92 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -171,6 +171,19 @@ static Config load_config()
+ 	config.swipe_left = config.natural_swipe ? "next" : "prev";
+ 	config.swipe_right = config.natural_swipe ? "prev" : "next";
+ 
++	// Optional overrides. Anything that is not next/prev makes the
++	// horizontal swipe a no-op (switch_workspace refuses unknown
++	// directions before any aerospace call) — omacosy's OmniWM mode
++	// sets "none" so the daemon serves only the vertical gestures
++	// while OmniWM owns the horizontal ones.
++	item = yyjson_obj_get(root, "swipe_left");
++	if (item && yyjson_is_str(item))
++		config.swipe_left = strdup(yyjson_get_str(item));
++
++	item = yyjson_obj_get(root, "swipe_right");
++	if (item && yyjson_is_str(item))
++		config.swipe_right = strdup(yyjson_get_str(item));
++
+ 	// Owned copies: the yyjson doc is freed below, so string values
+ 	// must be duplicated (left/right above are static literals).
+ 	item = yyjson_obj_get(root, "swipe_up");

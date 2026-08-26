@@ -40,6 +40,9 @@ start_aerospace_world() {
   open -a AeroSpace
   sleep 1
   "$A" reload-config 2>/dev/null || true
+  # restore the full swipe config (workspace steps + overview)
+  REPO="$(cd "$(dirname "$(readlink "$HOME/.local/bin/omacosy-wm-switch" || echo "$0")")/.." && pwd)"
+  cp "$REPO/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json" 2>/dev/null || true
   launchctl load "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
   launchctl load "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
 }
@@ -80,6 +83,16 @@ omniwm)
   # aerospace.toml — OmniWM's hotkeys cannot exec, so they move into
   # Karabiner rules for the duration
   "$HOME/.local/bin/omacosy-karabiner-omniwm" install 2>/dev/null || true
+  # aerospace-swipe comes BACK, demoted to the vertical gesture only:
+  # OmniWM's own swipes are horizontal-only (one axis), and swipe-up
+  # for the overview is muscle memory. Its horizontal actions are set
+  # to "" (non-next/prev strings no-op before any aerospace call), so
+  # it cannot fight OmniWM's workspace swipes. swipe_down stays "" too:
+  # OmniWM rejects ALL IPC while its overview is open, so a close
+  # gesture cannot work — Esc, click or selecting closes it.
+  REPO="$(cd "$(dirname "$(readlink "$HOME/.local/bin/omacosy-wm-switch" || echo "$0")")/.." && pwd)"
+  cp "$REPO/config/aerospace-swipe/config.omniwm.json" "$HOME/.config/aerospace-swipe/config.json" 2>/dev/null || true
+  launchctl load "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
   echo
   echo "  VERIFY NOW: switch workspaces with Super+1 and Super+2."
   echo "  Type 'yes' within 90 seconds if it works."

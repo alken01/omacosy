@@ -1,0 +1,12 @@
+{
+  "haptic": false,
+  "natural_swipe": true,
+  "wrap_around": true,
+  "skip_empty": false,
+  "fingers": 4,
+  "cursor_monitor": true,
+  "swipe_left": "none",
+  "swipe_right": "none",
+  "swipe_up": "/opt/homebrew/bin/omniwmctl command toggle-overview",
+  "swipe_down": ""
+}

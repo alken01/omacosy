@@ -408,6 +408,11 @@ fi
 if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-wake-reregister.patch" 2>/dev/null; then
   git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-wake-reregister.patch"
 fi
+# omniwm mode sets swipe_left/right to "none" so only vertical fires —
+# upstream derives them from natural_swipe with no config override
+if git -C "$HOME/.local/share/aerospace-swipe" apply --check "$REPO_DIR/patches/aerospace-swipe-direction-overrides.patch" 2>/dev/null; then
+  git -C "$HOME/.local/share/aerospace-swipe" apply "$REPO_DIR/patches/aerospace-swipe-direction-overrides.patch"
+fi
 mkdir -p "$HOME/.config/aerospace-swipe"
 cp "$REPO_DIR/config/aerospace-swipe/config.json" "$HOME/.config/aerospace-swipe/config.json"
 # Rebuilding this daemon COSTS ITS ACCESSIBILITY GRANT: measured on
