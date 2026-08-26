@@ -726,7 +726,7 @@ func rebuildCards() {
 }
 
 let defaultHint =
-    "click / 1-9 to switch · type to search · drag a card to reorder · esc or swipe down to close"
+    "click / 1-9 to switch · drag a card to reorder · esc or swipe down to close"
 
 final class ContentView: NSView {
     // cards are the occupied workspaces in grid order, slots the grid
@@ -742,6 +742,8 @@ final class ContentView: NSView {
     var cardWins: [String: [Win]] = [:]
     var slotViews: [String: [(Win, NSView)]] = [:]
     var hintLabel: NSTextField? = nil
+    var searchPill: NSView? = nil
+    var searchLabel: NSTextField? = nil
     var chipRects: [(NSRect, String)] = [] // empty workspaces: drop targets
     // hover feedback: (rect, ws, view, isChip); focusedWs keeps its ring
     var hoverItems: [(NSRect, String, NSView, Bool)] = []
@@ -887,6 +889,9 @@ final class ContentView: NSView {
                 for (_, v) in slotViews[ws] ?? [] { v.alphaValue = 1 }
             }
             hintLabel?.stringValue = defaultHint
+            searchLabel?.stringValue = "type to search windows…"
+            searchLabel?.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+            searchPill?.layer?.borderColor = NSColor(calibratedWhite: 0.3, alpha: 1).cgColor
             return
         }
         var total = 0
@@ -896,8 +901,10 @@ final class ContentView: NSView {
             cardViews[ws]?.alphaValue = hits == 0 ? 0.3 : 1
             for (w, v) in slotViews[ws] ?? [] { v.alphaValue = matches(w) ? 1 : 0.25 }
         }
-        hintLabel?.stringValue = "search: \(filter)▏ — \(total) "
-            + "match\(total == 1 ? "" : "es") · enter focuses first · esc clears"
+        hintLabel?.stringValue = "enter focuses the first match · esc clears"
+        searchLabel?.stringValue = "\(filter)▏  ·  \(total) match\(total == 1 ? "" : "es")"
+        searchLabel?.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
+        searchPill?.layer?.borderColor = accent.cgColor
     }
     override func keyDown(with event: NSEvent) {
         // the KEYCODE is what debugging needs; the character it produced
@@ -1120,6 +1127,26 @@ func buildOverlay(_ snap: (order: [String], wins: [String: [Win]], focused: Stri
             cx += chipW + chipGap
         }
     }
+
+    // the search box, visible from the first frame — an invisible
+    // feature is a missing one. Top-centre, out of the cards' way; the
+    // pill border picks up the accent while a query is live.
+    let pillW: CGFloat = 380, pillH: CGFloat = 34
+    let pill = NSView(frame: NSRect(x: (screen.frame.width - pillW) / 2,
+        y: screen.frame.height - 42 - 18 - pillH, width: pillW, height: pillH))
+    pill.wantsLayer = true
+    pill.layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 0.92).cgColor
+    pill.layer?.cornerRadius = pillH / 2
+    pill.layer?.borderWidth = 1.5
+    pill.layer?.borderColor = NSColor(calibratedWhite: 0.3, alpha: 1).cgColor
+    let q = label("type to search windows…",
+        size: 13, weight: .medium, color: NSColor(calibratedWhite: 0.45, alpha: 1))
+    q.alignment = .center
+    q.frame = NSRect(x: 12, y: (pillH - 18) / 2, width: pillW - 24, height: 18)
+    pill.addSubview(q)
+    content.cards.addSubview(pill)
+    content.searchPill = pill
+    content.searchLabel = q
 
     let hint = label(defaultHint,
         size: 12, weight: .regular, color: NSColor(calibratedWhite: 0.5, alpha: 1))
