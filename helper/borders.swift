@@ -211,7 +211,20 @@ func safeTop(for d: CGRect) -> CGFloat {
     return 0
 }
 
+// Under OmniWM this test cannot work: its 0.6.3 dwindle applies no
+// outer gaps (upstream bug, docs/omniwm-port.md), so every tile starts
+// at the safe-area edge at full height and reads as fullscreen — the
+// ring vanished and the shroud black-banded the bar's strip. Until the
+// gap bug is fixed, OmniWM mode keeps ring and strip, accepting ring
+// overlap on a true fullscreen window.
+func omniwmActive() -> Bool {
+    NSWorkspace.shared.runningApplications.contains {
+        $0.bundleIdentifier == "com.barut.OmniWM"
+    }
+}
+
 func isFullscreen(_ r: CGRect) -> Bool {
+    if omniwmActive() { return false }
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
     var n: UInt32 = 0
     guard CGGetActiveDisplayList(8, &ids, &n) == .success else { return false }
