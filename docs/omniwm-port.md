@@ -61,10 +61,16 @@ grant-first, snapshot-backed and auto-reverting.
   the settings file had been right all along.
 - **Swipe feel**: one-switch-per-swipe by design, less smooth than
   aerospace-swipe's feel. Trial con.
-- **No vertical swipe**: workspaceSwipeAxis is a single axis, so
-  swipe-up-for-overview is structurally gone; Super+O substitutes.
-  Possible hybrid later: aerospace-swipe kept only for the vertical
-  gesture, firing OmniWM's overview via IPC.
+- **Vertical swipes RESTORED (2026-08-26)**: aerospace-swipe runs
+  demoted to vertical-only (direction-overrides patch, swipe_left/right
+  "none"), swipe-up fires `omniwmctl command toggle-overview`,
+  swipe-down closes via `omacosy-helper omniwm-overview-close` —
+  activation-based, since OmniWM blackholes IPC while its overview is
+  open and ignored synthetic Escape. Both live-verified.
+  PENDING: the granted swipe binary predates the direction-overrides
+  patch (their makefile skips recompiles without `make clean`), so
+  horizontal swipes are harmlessly double-handled until the
+  post-certificate rebuild.
 - **Phantom-bar workaround FAILED** — their workspace bar's
   reserveLayoutSpace does reserve under dwindle (measured, windows
   y=32->78), but the bar cannot be made invisible (app icons and
@@ -119,6 +125,23 @@ this directory. Version-critical reconciliation:
   natively; our fold-into-1-9 has no equivalent (may not be needed).
 - Undocumented gem: system-wide window corner radius via
   NSConvolutionOverride defaults.
+
+## Next session (in order)
+
+1. **Apple Development certificate** (Xcode -> Settings -> Accounts ->
+   Manage Certificates -> +). Tonight cost five re-grants; this ends
+   the class.
+2. `make clean && make` in aerospace-swipe + stable re-sign — one
+   final grant, activates the direction-overrides patch.
+3. Mirror the LIVE ~/.config/omniwm/settings.toml (full canonical,
+   0.6.3-proof) into config/omniwm/settings.toml — the repo still
+   carries the sparse file that 0.6.3 rejects. Then make install.sh
+   provision it with a key-patch step rather than a plain copy.
+4. Upstream issues: dwindle outer-gaps resolved-but-not-applied
+   (payload says 42, layout applies 0 — full evidence in this doc),
+   and the unimplemented alias section in docs/IPC-CLI.md.
+5. theme-set writes overview backdrop/border colors (option 1 of the
+   overview plan).
 
 ## Remaining
 
