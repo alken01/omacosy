@@ -2366,6 +2366,15 @@ func safeTop(for display: CGRect) -> CGFloat {
 
 func fullscreenDisplays() -> Set<CGDirectDisplayID> {
     var covered: Set<CGDirectDisplayID> = []
+    // Under OmniWM the width test below cannot separate a tiled window
+    // from a fullscreen one: its 0.6.3 dwindle applies no outer gaps
+    // (resolved settings say 42, layout applies 0 — upstream bug, see
+    // docs/omniwm-port.md), so ordinary tiles take the side gaps too
+    // and EVERYTHING reads as fullscreen — the bar lived in
+    // hover-reveal permanently. Until the gap bug is fixed the bar
+    // stays visible under OmniWM, accepting that it overlaps a real
+    // fullscreen window instead of ducking away.
+    if omniwmActive() { return covered }
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
     else { return covered }
     var ids = [CGDirectDisplayID](repeating: 0, count: 8)
