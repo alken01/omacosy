@@ -63,7 +63,10 @@ omniwm)
   echo "    - Accessibility        (required — nothing works without it)"
   echo "    - Input Monitoring     (workspace swipes)"
   echo
-  read -r -p "  Press Enter AFTER both grants are done (Ctrl-C aborts, nothing changed): "
+  # read from the terminal itself, not stdin — run through Claude Code's
+  # `!` prefix (or any pipe) stdin is EOF and both gates would blow
+  # through instantly, turning the switch into a pointless bounce
+  read -r -p "  Press Enter AFTER both grants are done (Ctrl-C aborts, nothing changed): " < /dev/tty
   log "Handing over: stopping AeroSpace, ffm and swipe"
   stop_aerospace_world
   # the exec chords (terminal, launcher, theme, lock, ...) lived in
@@ -76,7 +79,7 @@ omniwm)
   echo "  Anything else reverts to AeroSpace automatically."
   echo
   CONFIRM=""
-  read -r -t 90 -p "  working? " CONFIRM || true
+  read -r -t 90 -p "  working? " CONFIRM < /dev/tty || true
   if [ "$CONFIRM" = "yes" ]; then
     log "Switch confirmed. OmniWM is your window manager."
     log "Way back any time: omacosy-wm-switch aerospace"
