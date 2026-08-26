@@ -85,6 +85,41 @@ grant-first, snapshot-backed and auto-reverting.
   actually persist to settings.toml in our attempt — TOML remained the
   authority.
 
+## Capability audit (2026-08-26, four docs)
+
+Full reference: omniwm-capabilities-{config,features,ipc,layout}.md in
+this directory. Version-critical reconciliation:
+
+- Installed 0.6.2; **0.6.3 released 2026-08-25** and audited at its
+  commit (33b748b). Two findings of ours were 0.6.2-only:
+  - "dwindle ignores outer gaps" — FIXED in 0.6.3: outer gaps are
+    struts on the workingFrame for BOTH engines (WMController
+    .layoutFrames). The bar gets its strip by upgrading. No upstream
+    issue needed.
+  - fullscreen-uses-outer-gaps and other keys exist only from 0.6.3.
+- **0.6.3 UPGRADE TRAP**: its decoder is strict (every table complete,
+  every hotkey catalog id present exactly once) and cold start
+  silently moves a rejected file to settings.toml.corrupt and writes
+  defaults. Our file is sparse. REQUIRED ORDER:
+    1. brew upgrade omniwm (restarts the WM; expect our config to be
+       rejected -> defaults, exec chords still work via Karabiner)
+    2. let 0.6.3 write its full canonical defaults file
+    3. patch our keys INTO that file (script the patch; comments are
+       lost on GUI rewrites anyway)
+    4. verify hotkeys + [gaps.outer] top -> bar strip
+- Overview: theirs is hardcoded layout (zoom + 4 colors only); cannot
+  be themed toward our wallpaper-card concept. Options: fork (GPL,
+  cleanly layered) or external overview on IPC (feasible: queries +
+  focus/switch commands exist; missing thumbnails-by-IPC means own
+  ScreenCaptureKit, which omacosy-overview already does).
+- IPC: bar + gesture daemon fully served; no exec, no config access,
+  no close-window (Karabiner Cmd+W stays). Docs' alias section is
+  unimplemented — worth reporting upstream.
+- Undock: workspaces keep numbers and re-resolve home on redock
+  natively; our fold-into-1-9 has no equivalent (may not be needed).
+- Undocumented gem: system-wide window corner radius via
+  NSConvolutionOverride defaults.
+
 ## Remaining
 
 1. **Verification pass.** Map the rest of the omarchy scheme into
