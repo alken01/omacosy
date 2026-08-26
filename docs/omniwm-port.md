@@ -44,6 +44,39 @@ grant-first, snapshot-backed and auto-reverting.
 3. Bar under OmniWM (payload shapes taken from source, never probed
    live), borders, spawn behaviour, monitor routing vs 11-19.
 
+## Trial findings (2026-08-26, first live day)
+
+- **Switch flow works** after two script fixes: gates read /dev/tty,
+  and OmniWM is re-poked after AeroSpace dies (it refuses to start
+  alongside another WM and its conflict dialog never re-checks).
+- **Dwindle ignores outer gaps** — DwindleSettings carries only
+  innerGap; [gaps.outer] is Niri-only. Verified empirically (top=42
+  and bottom=60 both no-ops after forced relayout; innerGap
+  live-reloads fine). So the bar gets no reserved strip and lives in
+  hover-reveal mode. Gap values stay in settings.toml for the day
+  upstream honors them. UPSTREAM ISSUE CANDIDATE.
+- **Gestures need the grant before launch** — the multitouch reader
+  initializes at startup, so Input Monitoring granted mid-session
+  needs an OmniWM restart to take. Cost us an hour of GUI archaeology;
+  the settings file had been right all along.
+- **Swipe feel**: one-switch-per-swipe by design, less smooth than
+  aerospace-swipe's feel. Trial con.
+- **No vertical swipe**: workspaceSwipeAxis is a single axis, so
+  swipe-up-for-overview is structurally gone; Super+O substitutes.
+  Possible hybrid later: aerospace-swipe kept only for the vertical
+  gesture, firing OmniWM's overview via IPC.
+- **Overview verdict (user)**: OmniWM's is search-and-scroll — the
+  search is liked, but the old omacosy overview LAYOUT (wallpaper-zoom
+  workspace cards) is preferred over their concept. Open decision:
+  port our overview to an omniwmctl data source, or upstream-feature
+  request a card layout, or live with theirs.
+- **Menu-bar apps are awkward under omacosy**: OmniWM is menu-bar-only
+  and our bar covers/hides the native bar; even _HIHideMenuBar=false +
+  Dock restart did not bring it back while our bar ran. Reaching their
+  GUI means parking omacosy-bar. Their GUI toggle for swipes did not
+  actually persist to settings.toml in our attempt — TOML remained the
+  authority.
+
 ## Remaining
 
 1. **Verification pass.** Map the rest of the omarchy scheme into
