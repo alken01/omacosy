@@ -305,14 +305,25 @@ func omniwmSnapshot() -> Snapshot {
     var sets: [String: [String]] = [:]
     var visible: [String: String] = [:]
     if let list = omniQuery("workspaces",
-                            ["--fields", "raw-name,display,is-visible,is-focused"])?["workspaces"]
+                            ["--fields", "raw-name,display"])?["workspaces"]
         as? [[String: Any]] {
         for w in list {
             guard let name = w["rawName"] as? String,
                   let monitor = (w["display"] as? [String: Any])?["id"] as? String else { continue }
             sets[monitor, default: []].append(name)
-            if (w["isVisible"] as? Bool) == true { visible[monitor] = name }
-            if (w["isFocused"] as? Bool) == true { s.focused = name }
+        }
+    }
+    // visible/focused come from the DISPLAYS query: the workspaces
+    // query's isVisible/isFocused go dark on EMPTY workspaces (the
+    // same trap omacosy-ws hit), and the pill for a focused empty 8/9
+    // never lit up
+    if let displays = omniQuery("displays", [])?["displays"] as? [[String: Any]] {
+        for d in displays {
+            guard let id = d["id"] as? String,
+                  let active = (d["activeWorkspace"] as? [String: Any])?["rawName"] as? String
+            else { continue }
+            visible[id] = active
+            if (d["isCurrent"] as? Bool) == true { s.focused = active }
         }
     }
     for id in surfaces.map({ $0.monitorID }) {

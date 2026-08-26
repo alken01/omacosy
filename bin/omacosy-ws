@@ -25,10 +25,62 @@ moved() { : > /tmp/omacosy-bar-moved; }
 wm_is_omniwm() { pgrep -qf "OmniWM.app/Contents/MacOS/OmniWM"; }
 if wm_is_omniwm; then
   O="$(command -v omniwmctl || echo /Applications/OmniWM.app/Contents/MacOS/omniwmctl)"
+  # `omacosy-ws next` puts the direction in $slot with op defaulting to
+  # switch — normalize, or the cycle logic never runs and OmniWM's own
+  # walk-everything next wanders into the guest workspaces
+  case "$slot" in next | prev) op="$slot" ;; esac
+  # under aerospace the exec-on-workspace-change hook feeds the bar's
+  # fast path; OmniWM's event stream skips EMPTY-workspace switches in
+  # bursts (measured: focus-name 8/9 'executed', no event, pill stale)
+  # — so every switch here feeds the same fast-path file by hand
+  bar_poke() { echo "$1" > /tmp/omacosy-bar-ws 2>/dev/null || true; }
   case "$op" in
-    switch) "$O" command switch-workspace "$slot" >/dev/null 2>&1 || true ;;
-    move) "$O" command move-to-workspace "$slot" >/dev/null 2>&1 || true ;;
-    next | prev) "$O" command switch-workspace "$op" >/dev/null 2>&1 || true ;;
+    switch)
+      "$O" command switch-workspace "$slot" >/dev/null 2>&1 || true
+      bar_poke "$slot" ;;
+    move)
+      "$O" command move-to-workspace "$slot" >/dev/null 2>&1 || true
+      bar_poke "$slot" ;;
+    next | prev)
+      # OmniWM's own next/prev walks EVERY workspace resolved onto the
+      # monitor — on one display the 14-17 guests live there too, and
+      # swiping past 9 wandered into them (the same trap aerospace's
+      # `workspace next` had). Cycle within the slot SET the current
+      # workspace belongs to: 1-9 when on a single digit, the guest
+      # set when on one of those — aerospace-era semantics exactly.
+      # current = the CURRENT display's active workspace (query
+      # displays) — isFocused on the workspaces query goes dark on
+      # empty workspaces and the cycle stranded itself there. Two
+      # separate parses: omniwmctl pretty-prints multi-line JSON, so
+      # the docs cannot be concatenated and split by line.
+      cur="$("$O" query displays 2>/dev/null | /usr/bin/python3 -c "
+import sys, json
+for d in json.load(sys.stdin)['result']['payload']['displays']:
+    if d.get('isCurrent'):
+        print(d['activeWorkspace']['rawName']); break
+")"
+      names="$("$O" query workspaces --fields raw-name 2>/dev/null | /usr/bin/python3 -c "
+import sys, json
+print(' '.join(sorted((w['rawName'] for w in json.load(sys.stdin)['result']['payload']['workspaces']), key=int)))
+")"
+      cur="$(/usr/bin/python3 -c "
+import sys
+cur = int('$cur') if '$cur' else None
+names = [int(n) for n in '$names'.split()]
+if cur is None or not names: sys.exit(0)
+inset = [n for n in names if (n <= 9) == (cur <= 9)]
+i = inset.index(cur) if cur in inset else 0
+step = 1 if '$op' == 'next' else -1
+print(inset[(i + step) % len(inset)])
+")"
+      # log every attempt with the REAL response: this path failed
+      # silently six times in a row once (cause never caught in the
+      # act), and silenced errors cost hours. The log is tiny and
+      # /tmp-transient.
+      r="$("$O" workspace focus-name "$cur" 2>&1)" || true
+      echo "$(date +%T) op=$op cur='$cur' resp='$(echo "$r" | head -c 120)'" >> /tmp/omacosy-ws.log
+      bar_poke "$cur"
+      ;;
   esac
   exit 0
 fi

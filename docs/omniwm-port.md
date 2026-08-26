@@ -126,6 +126,29 @@ this directory. Version-critical reconciliation:
 - Undocumented gem: system-wide window corner radius via
   NSConvolutionOverride defaults.
 
+## Root cause of the pill/overshoot saga (2026-08-26)
+
+Four stacked bugs, each masking the next: `omacosy-ws next` parsed
+"next" as a slot so the cycle logic was dead code; isFocused goes dark
+on empty workspaces; omniwmctl pretty-prints multi-line JSON that a
+per-line parser silently rejects; and — the last one standing —
+**OmniWM's active-workspace event channel skips empty-workspace
+switches during bursts** (measured: focus-name 8/9 returned
+`executed`, no event arrived, the pill froze while the screen showed
+the empty workspace). The bar cannot trust the stream alone; every
+omacosy-ws switch now feeds the bar's fast-path file directly, the way
+aerospace's exec-on-workspace-change hook always did. UPSTREAM ISSUE
+CANDIDATE (#6).
+
+## Stability watch (2026-08-26, late)
+
+OmniWM relaunched itself at 03:34 with no crash report and no known
+trigger — during its downtime swipes fell back to the aerospace path
+(dead socket warnings, self-healed on return). Watch for recurrence;
+if it repeats, `log show --predicate 'process == \"OmniWM\"'` around
+the restart is the first stop. Degraded behavior during a WM restart
+is acceptable-by-design; silent WM restarts are not.
+
 ## Next session (in order)
 
 1. **Apple Development certificate** (Xcode -> Settings -> Accounts ->
