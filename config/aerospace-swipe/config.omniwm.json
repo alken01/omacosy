@@ -8,5 +8,5 @@
   "swipe_left": "none",
   "swipe_right": "none",
   "swipe_up": "/opt/homebrew/bin/omniwmctl command toggle-overview",
-  "swipe_down": ""
+  "swipe_down": "$HOME/.local/bin/omacosy-helper omniwm-overview-close"
 }

@@ -243,6 +243,28 @@ case "input-age":
         .min() ?? .infinity
     print(String(format: "%.2f", age))
 
+case "omniwm-overview-close":
+    // Swipe-down's half of the overview gesture. OmniWM rejects every
+    // IPC command while its overview is open (ignored_overview), so no
+    // gesture can close it through the socket — but the overview
+    // listens for Escape. Post one, guarded on the overview actually
+    // being on screen (an OmniWM-owned window tall enough to be the
+    // panel, not the workspace bar), so a stray swipe-down can never
+    // fire Escape into whatever app is focused.
+    //
+    // CGEventPost needs Accessibility, judged by the RESPONSIBLE
+    // process: run from AerospaceSwipe's gesture handler (which holds
+    // the grant) this works; run from a bare shell it may not.
+    guard let wins = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { exit(1) }
+    let overviewUp = wins.contains { w in
+        (w[kCGWindowOwnerName as String] as? String) == "OmniWM"
+            && ((w[kCGWindowBounds as String] as? [String: CGFloat])?["Height"] ?? 0) > 400
+    }
+    guard overviewUp else { exit(0) }
+    let src = CGEventSource(stateID: .hidSystemState)
+    CGEvent(keyboardEventSource: src, virtualKey: 53, keyDown: true)?.post(tap: .cghidEventTap)
+    CGEvent(keyboardEventSource: src, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
+
 case "split-hint":
     // Hyprland's dwindle splits the focused window along its longer
     // edge; AeroSpace has no such layout and no window geometry in its
