@@ -53,7 +53,10 @@ apps = {k: os.environ[k] for k in ("TERMINAL", "BROWSER", "MUSIC", "MESSENGER")}
 rules = [
     rule("terminal", "return_or_enter", SUPER, cmd=f"open -na '{apps['TERMINAL']}'"),
     rule("browser", "return_or_enter", SHIFT, cmd=f"open -a '{apps['BROWSER']}'"),
-    rule("launcher", "spacebar", SUPER, cmd="open -a Raycast"),
+    # trial: OmniWM's command palette on the launcher chord (Raycast
+    # parked — swap the two lines to go back)
+    rule("launcher", "spacebar", SUPER, cmd="/opt/homebrew/bin/omniwmctl command open-command-palette >/dev/null 2>&1"),
+    rule("overview", "o", SUPER, cmd=f"{home}/.local/bin/omacosy-overview"),
     rule("files", "f", SHIFT, cmd="open -a Finder"),
     rule("music", "m", SHIFT, cmd=f"open -a '{apps['MUSIC']}'"),
     rule("messenger", "g", SHIFT, cmd=f"open -a '{apps['MESSENGER']}'"),
