@@ -69,6 +69,13 @@ omniwm)
   read -r -p "  Press Enter AFTER both grants are done (Ctrl-C aborts, nothing changed): " < /dev/tty
   log "Handing over: stopping AeroSpace, ffm and swipe"
   stop_aerospace_world
+  # OmniWM refuses to start while another WM runs — it sits in a
+  # "Conflicting Window Managers" dialog and does NOT re-check on its
+  # own. Give AeroSpace a moment to die, then relaunch OmniWM: a fresh
+  # activation re-runs the conflict check and it starts managing.
+  sleep 2
+  open -a OmniWM
+  sleep 2
   # the exec chords (terminal, launcher, theme, lock, ...) lived in
   # aerospace.toml — OmniWM's hotkeys cannot exec, so they move into
   # Karabiner rules for the duration
