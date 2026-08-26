@@ -126,6 +126,32 @@ this directory. Version-critical reconciliation:
 - Undocumented gem: system-wide window corner radius via
   NSConvolutionOverride defaults.
 
+## Upstream issue ledger (file these on BarutSRB/OmniWM)
+
+1. **Dwindle ignores [gaps.outer] on 0.6.3** — resolved settings report
+   outerGapTop 42 (IPC payload) while the layout applies 0; the strut
+   plumbing exists in source. Evidence: capabilities-layout doc +
+   measured frames.
+2. **docs/IPC-CLI.md aliases are unimplemented** — `query monitors` /
+   `--monitor` rejected live; no alias code at HEAD.
+3. **Overview scroll fights natural scrolling** —
+   normalizedScrollDelta un-inverts isDirectionInvertedFromDevice
+   (OverviewWindow.swift), hardcoded.
+4. **No move-window-by-id IPC** — `command move-to-workspace` acts on
+   the focused window only; external tooling must focus-then-move
+   (racy). Feature ask: `window move-to-workspace <id> <ws>`.
+5. **active-workspace events skip empty-workspace switches in bursts**
+   — focus-name returns `executed`, no event arrives; consumers'
+   state freezes. (The pill saga's final bug.)
+6. **Dwindle has no mouse move/swap** — MouseEventHandler's dwindle
+   path guards button == .right (resize only); Option+drag move is
+   Niri-only.
+7. (cosmetic) **Their border decorates their own command palette** —
+   mismatched-radius outline; persists with borders disabled, so
+   likely the palette's own edge drawing.
+8. (watch) **Silent self-relaunch at 03:34 2026-08-26** — no crash
+   report, no known trigger; not yet reproducible.
+
 ## Root cause of the pill/overshoot saga (2026-08-26)
 
 Four stacked bugs, each masking the next: `omacosy-ws next` parsed
