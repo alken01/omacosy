@@ -1644,7 +1644,10 @@ func omniwmCheatEntries() -> [CheatEntry] {
     var binding = ""
     var id = ""
     func flush() {
-        if inHotkey, !binding.isEmpty, !id.isEmpty {
+        // the canonical settings file carries EVERY catalog id — most
+        // Unassigned. A cheatsheet's job is what you CAN press, so the
+        // ~90 unassigned rows stay out (they made the sheet a wall).
+        if inHotkey, !binding.isEmpty, binding != "Unassigned", !id.isEmpty {
             entries.append(CheatEntry(group: group, key: prettyOmniKey(binding), action: id))
         }
         binding = ""
@@ -1689,6 +1692,41 @@ func omniwmCheatEntries() -> [CheatEntry] {
         if key == "binding" { binding = v } else if key == "id" { id = v }
     }
     flush()
+    // the exec chords live in Karabiner while OmniWM runs (its hotkeys
+    // cannot exec) — the sheet must show them or half the muscle-memory
+    // map is invisible. Read our own injected rules back by their
+    // description prefix.
+    entries.append(contentsOf: karabinerExecCheatEntries())
+    return entries
+}
+
+// "omacosy-omniwm: terminal" rules out of karabiner.json — description
+// carries the action, from.key_code + modifiers carry the chord
+func karabinerExecCheatEntries() -> [CheatEntry] {
+    let path = "\(NSHomeDirectory())/.config/karabiner/karabiner.json"
+    guard let data = FileManager.default.contents(atPath: path),
+        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let profiles = root["profiles"] as? [[String: Any]] else { return [] }
+    var entries: [CheatEntry] = []
+    for profile in profiles {
+        guard (profile["selected"] as? Bool) ?? (profiles.count == 1),
+            let cm = profile["complex_modifications"] as? [String: Any],
+            let rules = cm["rules"] as? [[String: Any]] else { continue }
+        for rule in rules {
+            guard let desc = rule["description"] as? String,
+                desc.hasPrefix("omacosy-omniwm: "),
+                let manips = rule["manipulators"] as? [[String: Any]],
+                let from = manips.first?["from"] as? [String: Any],
+                let keyCode = from["key_code"] as? String else { continue }
+            let mods = ((from["modifiers"] as? [String: Any])?["mandatory"] as? [String]) ?? []
+            let hasShift = mods.contains("shift")
+            let key = keyCode == "return_or_enter" ? "Enter"
+                : keyCode == "spacebar" ? "Space" : keyCode.uppercased()
+            let chord = "Super+" + (hasShift ? "Shift+" : "") + key
+            entries.append(CheatEntry(group: "Apps and system (Karabiner)",
+                key: chord, action: String(desc.dropFirst("omacosy-omniwm: ".count))))
+        }
+    }
     return entries
 }
 
