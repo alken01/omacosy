@@ -416,6 +416,17 @@ func recheck(after delay: Double) {
 }
 
 func tick() {
+    // Under OmniWM the ring is parked entirely: OmniWM draws its own
+    // border (themed by theme-set writing [borders.color] into its
+    // settings), and the WM's border hugs screen edges where our
+    // outside-stroked ring clips — tiles touch the edges there (the
+    // 0.6.3 outer-gap bug). The daemon stays resident so switching
+    // back to AeroSpace needs no restart.
+    if omniwmActive() {
+        hideRing("omniwm")
+        syncShroud(nil)
+        return
+    }
     noteStat(event: false)
     guard let hit = focusedWindowFrame() else {
         // ring already hidden: there is nothing to hide and nothing
