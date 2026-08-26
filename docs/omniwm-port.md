@@ -65,6 +65,14 @@ grant-first, snapshot-backed and auto-reverting.
   swipe-up-for-overview is structurally gone; Super+O substitutes.
   Possible hybrid later: aerospace-swipe kept only for the vertical
   gesture, firing OmniWM's overview via IPC.
+- **Phantom-bar workaround FAILED** — their workspace bar's
+  reserveLayoutSpace does reserve under dwindle (measured, windows
+  y=32->78), but the bar cannot be made invisible (app icons and
+  workspace chips render regardless of backgroundOpacity/showLabels)
+  and the reservation did not survive an OmniWM restart. Removed;
+  omacosy-bar stays hover-reveal until upstream honors [gaps.outer]
+  for dwindle. That upstream issue is now the ONLY path to a
+  permanently visible bar.
 - **Overview verdict (user)**: OmniWM's is search-and-scroll — the
   search is liked, but the old omacosy overview LAYOUT (wallpaper-zoom
   workspace cards) is preferred over their concept. Open decision:

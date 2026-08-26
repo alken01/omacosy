@@ -74,13 +74,7 @@ enabled = false
 # (opacity 0, no labels) purely to hold the strip. height 10 below the
 # notch puts windows at y=42, pixel-identical to the aerospace layout.
 [workspaceBar]
-enabled = true
-reserveLayoutSpace = true
-height = 10.0
-backgroundOpacity = 0.0
-showLabels = false
-showAppNames = false
-position = "overlappingMenuBar" 
+enabled = false
 
 [statusBar]
 showAppNames = false
