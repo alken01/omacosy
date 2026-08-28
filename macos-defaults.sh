@@ -20,6 +20,7 @@ record_default() { # domain key
   fi
 }
 record_default NSGlobalDomain _HIHideMenuBar
+record_default NSGlobalDomain _HIHideMenuBarInFullscreen
 record_default com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture
 record_default com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture
 record_default com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture
@@ -30,9 +31,11 @@ record_default com.apple.dock showMissionControlGestureEnabled
 # profile keeps macOS's own bar and avoids running another status process.
 if [ "${OMACOSY_STATUS_BAR:-1}" = 1 ]; then
   defaults write NSGlobalDomain _HIHideMenuBar -bool true
+  defaults write NSGlobalDomain _HIHideMenuBarInFullscreen -bool true
   menu_bar_message="menu bar set to auto-hide"
 else
   defaults write NSGlobalDomain _HIHideMenuBar -bool false
+  defaults write NSGlobalDomain _HIHideMenuBarInFullscreen -bool false
   menu_bar_message="native menu bar restored"
 fi
 killall cfprefsd 2>/dev/null || true
