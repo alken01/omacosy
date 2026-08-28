@@ -51,7 +51,9 @@ home = os.environ["HOME"]
 apps = {k: os.environ[k] for k in ("TERMINAL", "BROWSER", "MUSIC", "MESSENGER")}
 
 rules = [
-    rule("terminal", "return_or_enter", SUPER, cmd=f"open -na '{apps['TERMINAL']}'"),
+    # omacosy-spawn preselects the omarchy insertion side and serializes
+    # bursts — a bare `open -na` gives OmniWM's above-not-below spiral
+    rule("terminal", "return_or_enter", SUPER, cmd=f"{home}/.local/bin/omacosy-spawn '{apps['TERMINAL']}'"),
     rule("browser", "return_or_enter", SHIFT, cmd=f"open -a '{apps['BROWSER']}'"),
     # trial: OmniWM's command palette on the launcher chord (Raycast
     # parked — swap the two lines to go back)

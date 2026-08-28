@@ -15,10 +15,51 @@
 APP="$1"
 [ -n "$APP" ] || exit 1
 
-# Under OmniWM the dwindle split hint doesn't run, so there is no race
-# to serialize — just open the window.
+# Under OmniWM the split is native, but its insertion side is not
+# omarchy's: with smartSplit off a new window goes RIGHT in horizontal
+# splits and ABOVE in vertical ones (frames are y-up; "second child"
+# lands at the top), while Hyprland's force_split=2 is right/below —
+# so the spiral never read as the omarchy staircase. OmniWM's one-shot
+# `preselect <dir>` fixes the side per spawn: apply its own
+# orientation rule (height * splitWidthMultiplier > width -> vertical)
+# to the focused tile and preselect down/right. No state, no
+# prediction — one query and one command, through a sanctioned API.
+# Spawns are still serialized (lock + wait for the window to appear)
+# so a burst becomes a clean staircase instead of splitting the same
+# cell over and over.
 wm_is_omniwm() { pgrep -qf "OmniWM.app/Contents/MacOS/OmniWM"; }
-wm_is_omniwm && { open -na "$APP"; exit 0; }
+if wm_is_omniwm; then
+  O="$(command -v omniwmctl || echo /Applications/OmniWM.app/Contents/MacOS/omniwmctl)"
+  LOCK="/tmp/omacosy-spawn-$(id -u).lock.d"
+  for i in $(seq 120); do
+    mkdir "$LOCK" 2>/dev/null && break
+    [ "$i" -ge 100 ] && { rm -rf "$LOCK"; }
+    sleep 0.05
+  done
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+  mult="$(sed -n 's/^splitWidthMultiplier = //p' "$HOME/.config/omniwm/settings.toml" 2>/dev/null | head -1)"
+  read -r dir before < <("$O" query focused-window 2>/dev/null | /usr/bin/python3 -c "
+import sys, json
+mult = float('${mult:-1.4}')
+try:
+    w = json.load(sys.stdin)['result']['payload']['window']
+except Exception:
+    print('none 0'); sys.exit(0)
+f = w.get('frame') or {}
+if w.get('mode') == 'floating' or not f:
+    print('none 0'); sys.exit(0)
+print('down' if f['height'] * mult > f['width'] else 'right', w.get('workspace', {}).get('id', ''))
+")
+  [ "$dir" != "none" ] && "$O" command preselect "$dir" >/dev/null 2>&1
+  count() { "$O" query windows 2>/dev/null | /usr/bin/python3 -c "import sys,json; print(len(json.load(sys.stdin)['result']['payload']['windows']))" 2>/dev/null || echo 0; }
+  prev="$(count)"
+  open -na "$APP"
+  for _ in $(seq 40); do
+    [ "$(count)" -gt "$prev" ] 2>/dev/null && exit 0
+    sleep 0.05
+  done
+  exit 0
+fi
 
 STATE="/tmp/omacosy-split-state-$(id -u)"
 
