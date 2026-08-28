@@ -12,38 +12,17 @@ start-at-login = true
 after-login-command = []
 after-startup-command = []
 
-# flatten is OFF because it dissolves the very container `split` makes,
-# and `split` is how the dwindle direction gets set (see below).
-# AeroSpace says so itself if you try: "'split' has no effect when
-# 'enable-normalization-flatten-containers' normalization enabled".
-# Empty containers are still reaped without it — closing a window hands
-# its space back to its sibling, which is the part that mattered.
-# opposite-orientation stays OFF — it is the inverse of Hyprland's
-# preserve_split=true and made Super+J's togglesplit cascade through
-# every nested container instead of flipping the one pair.
-enable-normalization-flatten-containers = false
+# Keep the tree flat so landscape workspaces produce predictable left/right
+# columns. The upstream dwindle hook deliberately created top/bottom splits
+# once a tile became tall; this profile uses AeroSpace's native layout instead.
+enable-normalization-flatten-containers = true
 enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
-# 'auto' = split along the monitor's longer edge, which is the same
-# rule the dwindle hint below applies to every window after it
-default-root-container-orientation = 'auto'
+default-root-container-orientation = 'horizontal'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
-
-# Hyprland's dwindle splits the focused window along ITS longer edge,
-# so the next window lands beside a wide one and below a tall one.
-# AeroSpace has no such layout and no window geometry in its config
-# language (the format variables are ids, titles and container layouts
-# — no width or height), so the direction is decided in code and set
-# with `split` BEFORE the next window exists. AeroSpace then places
-# that window correctly in its first pass; the old daemon corrected the
-# tree afterwards, which is why the screen used to lay out twice.
-#
-# The hook runs after keyboard focus changes and primes the next split.
-# AEROSPACE_WINDOW_ID names the newly focused window.
-on-focus-changed = ['exec-and-forget $HOME/.local/bin/omacosy-helper split-hint']
 
 [gaps]
 inner.horizontal = 8
@@ -71,9 +50,8 @@ run = 'layout floating'
 # Super manages windows; add Shift for moving and app shortcuts.
 [mode.main.binding]
 # Terminal / browser
-# through omacosy-spawn: spawns are serialized so each window's dwindle
-# split hint lands before the next window opens — spamming this chord
-# gives a clean spiral instead of a simultaneous flat pile
+# `omacosy-spawn` asks macOS for a fresh app window rather than merely
+# activating an existing one.
 cmd-ctrl-alt-enter = 'exec-and-forget $HOME/.local/bin/omacosy-spawn @TERMINAL@'
 cmd-ctrl-alt-shift-enter = 'exec-and-forget open -a @BROWSER@'
 
@@ -104,8 +82,6 @@ cmd-ctrl-alt-t = 'layout floating tiling'
 # focus next and cannot be pinned on top without a private window-level
 # call; this is how you get it back, cursor and all.
 cmd-ctrl-alt-s = 'exec-and-forget $HOME/.local/bin/omacosy-float'
-# wrapper-aware: the dwindle hint's solo container makes the bare
-# commands no-op or misfire (issue #3) — omacosy-layout compensates
 cmd-ctrl-alt-j = 'exec-and-forget $HOME/.local/bin/omacosy-layout togglesplit'
 cmd-ctrl-alt-f = 'fullscreen --no-outer-gaps'
 # native (green-button) fullscreen: the only mode that may claim the

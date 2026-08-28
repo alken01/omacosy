@@ -11,6 +11,11 @@ this one repo.
 
 ![The omacosy desktop — themed bar over the osaka-jade wallpaper](docs/screenshots/desktop.jpg)
 
+> **Alken profile:** `alken-minimal` keeps AeroSpace and Caps Lock Super,
+> but disables the custom bar, borders, focus-follows-mouse, gestures,
+> overview, and dwindle hook. New windows use flat left/right columns. See
+> [ALKEN-PROFILE.md](ALKEN-PROFILE.md) for the live configuration.
+
 The whole environment idles at about **157MB** of memory. Numbers per
 process in [Memory use](#memory-use).
 
@@ -149,7 +154,7 @@ Your personal shell config belongs in `~/.zshrc.local`; the repo's
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
 | Trackpad gestures | `omacosy-gesture` (self-compiled launchd agent; engine absorbed from [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe), MIT) | `helper/gesture/`, `config/gesture/config.json` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
-| Dwindle split direction | `on-focus-changed` hook running `omacosy-helper split-hint` (no daemon) | `config/aerospace/aerospace.template.toml`, `helper/main.swift` |
+| Dwindle split direction | Optional helper source; disabled by the Alken profile | `helper/main.swift` |
 | Workspace / window navigation | `omacosy-ws`, `omacosy-cycle`, `omacosy-float` | `bin/` |
 | Terminal look & spawn size | Ghostty (hidden titlebar; new windows spawn small so tiling never flashes full-screen) | `config/ghostty/config` |
 | Park/restore the stack | `omacosy-toggle` | `bin/omacosy-toggle` |
@@ -324,6 +329,9 @@ own convention), and `backgrounds/` (wallpapers from omarchy's
 MIT-licensed theme packs). Copy a directory to add one.
 
 ## Tiling: dwindle
+
+> This describes the upstream layout. The Alken profile disables the hook and
+> uses AeroSpace's native flat horizontal layout.
 
 ![Three terminals in a dwindle layout — README, git log and btop — accent border ring on the focused one](docs/screenshots/tiling.jpg)
 

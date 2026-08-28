@@ -7,8 +7,8 @@ components optional. Edit `config/features.conf`, then run `./install.sh`.
 
 - **AeroSpace:** automatic tiling, keyboard focus/move/resize, floating and
   fullscreen modes, and nine workspaces per display.
-- **Dwindle split hint:** new windows split along the focused window's longer
-  edge. This is a small hook, not a persistent extra daemon.
+- **Native AeroSpace layout:** new windows become left/right columns on the
+  landscape displays; the upstream top/bottom dwindle hook is disabled.
 - **Caps Lock Super:** Karabiner maps held Caps Lock to Command+Control+Option
   and tapped Caps Lock to Escape.
 - **App shortcuts:** terminal, browser, Raycast, Finder, music, and messenger.
@@ -56,7 +56,7 @@ future testing.
 | Component | Role | Profile choice |
 | --- | --- | --- |
 | AeroSpace | Tiling and spaces | Keep |
-| `omacosy-helper` | Dwindle hints, lock, wallpaper | Keep |
+| `omacosy-helper` | Lock and wallpaper utilities | Keep |
 | `omacosy-ws` | Monitor-aware workspaces | Keep |
 | Karabiner | Caps Lock Super | Keep for now |
 | OmaCosy bar | Status, workspace labels, system widgets | Disable |
