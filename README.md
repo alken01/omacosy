@@ -366,6 +366,36 @@ off. Instead the bar grows a pill whenever the focused workspace holds
 floats, and **Super+S** or a click on that pill surfaces the next one
 and brings the cursor with it.
 
+## Two window managers (OmniWM option, beta)
+
+AeroSpace is the default. [OmniWM](https://github.com/BarutSRB/OmniWM)
+is a newer, signed-and-notarized tiling WM with a native dwindle
+layout — omacosy can run on either, and switching is one command:
+
+```sh
+omacosy-wm-switch omniwm      # installs OmniWM on first use, then
+                              # switches with a guarded handover
+omacosy-wm-switch aerospace   # the way back
+```
+
+The switch is deliberately paranoid: it snapshots your windows, waits
+for you to grant OmniWM's permissions, and requires you to confirm
+within 90 seconds that workspace switching works — anything else
+reverts to AeroSpace automatically and puts your windows back.
+
+Under OmniWM everything keeps working — bar, overview (with
+type-to-search), gestures, keybindings, themes — and the dwindle
+layout is native, so the split-hint machinery below simply isn't
+needed there. What changes: OmniWM draws the focus border (themed by
+theme-set), app-launching chords run through Karabiner rules that the
+switch installs and removes, and Super+Space opens OmniWM's command
+palette instead of Raycast.
+
+Beta honesty: multi-monitor under OmniWM is untested by the author so
+far, and docs/omniwm-port.md carries a ledger of upstream quirks found
+while porting (empty-workspace event gaps, outer gaps ignored by
+dwindle in 0.6.3). AeroSpace remains the battle-tested default.
+
 ## Focus follows mouse & swipes
 
 `omacosy-ffm`: hover focuses, with no raise over floating windows, so
