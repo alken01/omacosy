@@ -26,23 +26,39 @@ record_default com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFi
 record_default com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture
 record_default com.apple.dock showMissionControlGestureEnabled
 
-# One bar, not two: auto-hide the native menu bar (sketchybar takes the top).
-# cfprefsd must be killed so the OS re-reads the pref without a logout.
-defaults write NSGlobalDomain _HIHideMenuBar -bool true
+# Hide the native menu bar only when the OmaCosy bar replaces it. The lean
+# profile keeps macOS's own bar and avoids running another status process.
+if [ "${OMACOSY_STATUS_BAR:-1}" = 1 ]; then
+  defaults write NSGlobalDomain _HIHideMenuBar -bool true
+  menu_bar_message="menu bar set to auto-hide"
+else
+  defaults write NSGlobalDomain _HIHideMenuBar -bool false
+  menu_bar_message="native menu bar restored"
+fi
 killall cfprefsd 2>/dev/null || true
 sleep 1
 killall SystemUIServer 2>/dev/null || true
 
-echo "macos-defaults: menu bar set to auto-hide (log out/in if it doesn't apply immediately)"
+echo "macos-defaults: $menu_bar_message (log out/in if it doesn't apply immediately)"
 
 # The 4-finger swipes belong to omacosy-gesture (workspaces + the
 # omacosy overview). Left enabled, the SYSTEM also fires Mission
 # Control / Spaces on the same gesture — MC opens on top of the
 # overview and eats every click and keystroke (and SCK captures catch
 # windows mid-MC-zoom). Trackpad -> More Gestures equivalents: off.
-defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture -int 0
-defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture -int 0
-defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture -int 0 2>/dev/null || true
-defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture -int 0 2>/dev/null || true
-defaults write com.apple.dock showMissionControlGestureEnabled -bool false
-echo "macos-defaults: 4-finger swipes released to omacosy-gesture (Dock restart applies)"
+if [ "${OMACOSY_GESTURES:-1}" = 1 ]; then
+  defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture -int 0
+  defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture -int 0
+  defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture -int 0 2>/dev/null || true
+  defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture -int 0 2>/dev/null || true
+  defaults write com.apple.dock showMissionControlGestureEnabled -bool false
+  echo "macos-defaults: 4-finger swipes released to omacosy-gesture (Dock restart applies)"
+else
+  defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerVertSwipeGesture -int 2
+  defaults write com.apple.AppleMultitouchTrackpad TrackpadFourFingerHorizSwipeGesture -int 2
+  defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerVertSwipeGesture -int 2 2>/dev/null || true
+  defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadFourFingerHorizSwipeGesture -int 2 2>/dev/null || true
+  defaults delete com.apple.dock showMissionControlGestureEnabled 2>/dev/null || true
+  killall Dock 2>/dev/null || true
+  echo "macos-defaults: native four-finger gestures restored"
+fi

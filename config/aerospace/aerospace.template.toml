@@ -1,8 +1,7 @@
-# AeroSpace template — i3-like tiling with omarchy's keybinding scheme.
+# AeroSpace template — lean tiling with a dedicated Caps Lock Super key.
 # @PLACEHOLDERS@ are filled from config/apps.conf (+ apps.local.conf)
 # by install.sh, which writes the real aerospace.toml next to this file.
-# "Super" = Caps Lock, remapped by Karabiner to cmd+ctrl+alt — a combo
-# nothing on macOS uses, so bindings never collide with typing or apps.
+# Super = Caps Lock through Karabiner (Command+Control+Option).
 # Docs: https://nikitabobko.github.io/AeroSpace/guide
 
 config-version = 2
@@ -42,17 +41,9 @@ on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 # that window correctly in its first pass; the old daemon corrected the
 # tree afterwards, which is why the screen used to lay out twice.
 #
-# One hook covers both ways focus moves: AeroSpace fires it for its own
-# keyboard commands AND for the focus omacosy-ffm moves under the mouse
-# (it does notice those, despite moving focus via SLPS itself).
+# The hook runs after keyboard focus changes and primes the next split.
 # AEROSPACE_WINDOW_ID names the newly focused window.
 on-focus-changed = ['exec-and-forget $HOME/.local/bin/omacosy-helper split-hint']
-
-# Tell the bar which workspace is focused — a bash builtin redirect,
-# no extra process, and a regular file so a dead reader cannot wedge it
-exec-on-workspace-change = ['/bin/bash', '-c',
-  'touch /tmp/omacosy-ws-switch; echo "$AEROSPACE_FOCUSED_WORKSPACE" > /tmp/omacosy-bar-ws; $HOME/.local/bin/omacosy-focus-guard'
-]
 
 [gaps]
 inner.horizontal = 8
@@ -60,10 +51,7 @@ inner.vertical = 8
 outer.left = 8
 outer.bottom = 8
 outer.right = 8
-# room for the bar: measured from the display top on flat monitors,
-# but from below the notch strip on built-in notched displays (macOS
-# reports usable space starting there), so the laptop needs less
-outer.top = [{ monitor.'built-in' = 10 }, 42]
+outer.top = 8
 
 # Fixed-size settings windows fight the tiler (resize -> snap back ->
 # relayout flicker); float them instead.
@@ -80,10 +68,9 @@ run = 'layout floating'
 if.window-title-regex-substring = 'omacosy-activity'
 run = 'layout floating'
 
-# Omarchy's map, Super = Caps Lock (cmd-ctrl-alt). Two layers, like
-# omarchy: Super for window management, Super+Shift for moving and apps.
+# Super manages windows; add Shift for moving and app shortcuts.
 [mode.main.binding]
-# Terminal / browser (omarchy: Super+Return, Super+Shift+Return)
+# Terminal / browser
 # through omacosy-spawn: spawns are serialized so each window's dwindle
 # split hint lands before the next window opens — spamming this chord
 # gives a clean spiral instead of a simultaneous flat pile
@@ -110,9 +97,6 @@ cmd-ctrl-alt-shift-right = 'move right'
 
 # Layout (omarchy: Super+T float toggle, Super+J split toggle, Super+F fullscreen)
 cmd-ctrl-alt-t = 'layout floating tiling'
-# Keybinding cheatsheet (omarchy: Super+K) — the bar renders it from
-# THIS file, so the sheet cannot drift from the keys it documents.
-cmd-ctrl-alt-k = 'exec-and-forget /usr/bin/touch /tmp/omacosy-bar-cheatsheet'
 
 # Floats
 # Surface the next float on this workspace (S for surface). macOS
@@ -175,8 +159,8 @@ cmd-ctrl-alt-b = 'workspace-back-and-forth'
 alt-tab = 'exec-and-forget $HOME/.local/bin/omacosy-cycle next'
 alt-shift-tab = 'exec-and-forget $HOME/.local/bin/omacosy-cycle prev'
 
-# Cycle focus between monitors (omarchy: Ctrl+Alt+Tab, and free here)
-ctrl-alt-tab = 'focus-monitor next --wrap-around'
+# Cycle focus between monitors.
+cmd-ctrl-alt-d = 'focus-monitor next --wrap-around'
 
 # Throw window to the other monitor
 # the same slot, so the twin workspace keeps its meaning
@@ -189,7 +173,7 @@ cmd-ctrl-alt-shift-space = 'exec-and-forget $HOME/.local/bin/omacosy-ws 0 throw-
 # Apps (omarchy: Super+Shift+letter)
 cmd-ctrl-alt-shift-f = 'exec-and-forget open ~'          # files
 cmd-ctrl-alt-shift-m = 'exec-and-forget open -a @MUSIC@' # music
-cmd-ctrl-alt-shift-g = 'exec-and-forget open -a @MESSENGER@'   # messenger (omarchy: G)
+cmd-ctrl-alt-shift-g = 'exec-and-forget open -a @MESSENGER@' # messenger
 
 # Lock the screen (omarchy: Super+Ctrl+L — ctrl is spent, so Shift+L)
 cmd-ctrl-alt-shift-l = 'exec-and-forget $HOME/.local/bin/omacosy-helper lock'

@@ -7,6 +7,46 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
+# Optional pieces are explicit, safe 0/1 switches. Keep the defaults
+# compatible with upstream when config/features.conf is absent; the fork's
+# tracked profile turns the visual/background extras off.
+STATUS_BAR=1
+BORDERS=1
+FOCUS_FOLLOWS_MOUSE=1
+GESTURES=1
+OVERVIEW=1
+KARABINER_SUPER=1
+read_features() {
+  local f=$1 line k v
+  [ -f "$f" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    k="${line%%=*}"; v="${line#*=}"
+    [ "$k" = "$line" ] && continue
+    case "$v" in
+      0|1) ;;
+      *) log "ignoring $k in $(basename "$f"): expected 0 or 1"; continue ;;
+    esac
+    case "$k" in
+      STATUS_BAR) STATUS_BAR=$v ;;
+      BORDERS) BORDERS=$v ;;
+      FOCUS_FOLLOWS_MOUSE) FOCUS_FOLLOWS_MOUSE=$v ;;
+      GESTURES) GESTURES=$v ;;
+      OVERVIEW) OVERVIEW=$v ;;
+      KARABINER_SUPER) KARABINER_SUPER=$v ;;
+    esac
+  done < "$f"
+}
+read_features "$REPO_DIR/config/features.conf"
+export OMACOSY_STATUS_BAR="$STATUS_BAR" OMACOSY_GESTURES="$GESTURES"
+
+disable_user_agent() {
+  local label=$1 plist="$HOME/Library/LaunchAgents/$1.plist"
+  launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+  launchctl unload "$plist" 2>/dev/null || true
+  rm -f "$plist"
+}
+
 # --- 0. Manifest: record what THIS machine gains ----------------------------
 # uninstall.sh removes only what is recorded here, so tools and settings
 # the user had before omacosy are never touched. First run wins for
@@ -152,29 +192,27 @@ link "$REPO_DIR/config/ghostty"      "$HOME/.config/ghostty"
 # OmniWM trial (this branch): settings are canonical TOML, live-reloaded
 link "$REPO_DIR/config/omniwm"       "$HOME/.config/omniwm"
 
-# Karabiner is COPIED, not symlinked: its background services can't read
-# configs living under ~/Documents (TCC folder protection) without Full
-# Disk Access. The repo copy is the source of truth on install.
-mkdir -p "$HOME/.config/karabiner"
-# preserve a pre-omacosy karabiner config once, for uninstall to restore
-if [ -f "$HOME/.config/karabiner/karabiner.json" ] \
-  && [ ! -f "$HOME/.config/karabiner/karabiner.json.bak.omacosy" ] \
-  && ! cmp -s "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"; then
-  cp "$HOME/.config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json.bak.omacosy"
-  mark "had-karabiner-config"
+if [ "$KARABINER_SUPER" = 1 ]; then
+  # Karabiner is COPIED, not symlinked: its background services can't read
+  # configs living under ~/Documents (TCC folder protection) without Full
+  # Disk Access. The repo copy is the source of truth on install.
+  mkdir -p "$HOME/.config/karabiner"
+  # preserve a pre-omacosy karabiner config once, for uninstall to restore
+  if [ -f "$HOME/.config/karabiner/karabiner.json" ] \
+    && [ ! -f "$HOME/.config/karabiner/karabiner.json.bak.omacosy" ] \
+    && ! cmp -s "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"; then
+    cp "$HOME/.config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json.bak.omacosy"
+    mark "had-karabiner-config"
+  fi
+  cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
+  launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
+  # Keep Karabiner's settings and notification helpers out of the menu bar.
+  for agent in Karabiner-Menu Karabiner-NotificationWindow; do
+    launchctl bootout "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
+    launchctl disable "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
+  done
+  pkill -f "Karabiner-Menu|Karabiner-NotificationWindow" 2>/dev/null || true
 fi
-cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
-launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
-# Karabiner's Menu and NotificationWindow helpers are disabled the
-# SUPPORTED way in karabiner.json (global.show_in_menu_bar and
-# global.enable_notification_window, both false) — the bootout below
-# is only the immediate cleanup for agents already running; the config
-# is what survives Karabiner updates, which used to resurrect them
-for agent in Karabiner-Menu Karabiner-NotificationWindow; do
-  launchctl bootout "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
-  launchctl disable "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
-done
-pkill -f "Karabiner-Menu|Karabiner-NotificationWindow" 2>/dev/null || true
 
 # theme scripts on PATH (aerospace's theme chord calls ~/.local/bin/theme-next)
 mkdir -p "$HOME/.local/bin"
@@ -187,8 +225,8 @@ if [ ! -x "$HOME/.local/bin/omacosy-helper" ] || [ "$REPO_DIR/helper/main.swift"
   swiftc -O -F /System/Library/PrivateFrameworks -framework DisplayServices -o "$HOME/.local/bin/omacosy-helper" "$REPO_DIR/helper/main.swift"
 fi
 
-# workspace overview overlay (4-finger swipe up)
-if [ ! -x "$HOME/.local/bin/omacosy-overview" ] || [ "$REPO_DIR/helper/overview.swift" -nt "$HOME/.local/bin/omacosy-overview" ]; then
+# workspace overview overlay (optional; normally paired with gestures)
+if [ "$OVERVIEW" = 1 ] && { [ ! -x "$HOME/.local/bin/omacosy-overview" ] || [ "$REPO_DIR/helper/overview.swift" -nt "$HOME/.local/bin/omacosy-overview" ]; }; then
   log "Building omacosy-overview"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-overview" "$REPO_DIR/helper/overview.swift"
 fi
@@ -211,17 +249,17 @@ fi
 # strings live there and a stale binary asks for nothing
 BAR_APP="$HOME/.local/share/omacosy/omacosy-bar.app"
 BAR_BIN="$BAR_APP/Contents/MacOS/omacosy-bar"
-if [ ! -x "$BAR_BIN" ] \
+if [ "$STATUS_BAR" = 1 ] && { [ ! -x "$BAR_BIN" ] \
   || [ "$REPO_DIR/helper/bar.swift" -nt "$BAR_BIN" ] \
-  || [ "$REPO_DIR/helper/bar-info.plist" -nt "$BAR_BIN" ]; then
+  || [ "$REPO_DIR/helper/bar-info.plist" -nt "$BAR_BIN" ]; }; then
   log "Building omacosy-bar"
   mkdir -p "$BAR_APP/Contents/MacOS"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -framework DisplayServices \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$REPO_DIR/helper/bar-info.plist" \
     -o "$BAR_BIN" "$REPO_DIR/helper/bar.swift"
+  cp "$REPO_DIR/helper/bar-info.plist" "$BAR_APP/Contents/Info.plist"
+  mark "built-bar-app"
 fi
-cp "$REPO_DIR/helper/bar-info.plist" "$BAR_APP/Contents/Info.plist"
-mark "built-bar-app"
 rm -f "$HOME/.local/bin/omacosy-bar"   # the pre-bundle binary, if any
 
 # omacosy-dwindle is gone: the spiral is three on-window-detected rules
@@ -234,14 +272,14 @@ rm -f "$HOME/Library/LaunchAgents/com.omacosy.dwindle.plist" "$HOME/.local/bin/o
 
 # focus-follows-mouse daemon (own binary so helper rebuilds never
 # invalidate its Accessibility grant); runs as a launchd agent
-if [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; then
+if [ "$FOCUS_FOLLOWS_MOUSE" = 1 ] && { [ ! -x "$HOME/.local/bin/omacosy-ffm" ] || [ "$REPO_DIR/helper/ffm.swift" -nt "$HOME/.local/bin/omacosy-ffm" ]; }; then
   log "Building omacosy-ffm (grant Accessibility when prompted)"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-ffm" "$REPO_DIR/helper/ffm.swift"
 fi
 
 # focused-window border ring (replaces JankyBorders; no permissions;
 # SkyLight for the window-server event notifications)
-if [ ! -x "$HOME/.local/bin/omacosy-borders" ] || [ "$REPO_DIR/helper/borders.swift" -nt "$HOME/.local/bin/omacosy-borders" ]; then
+if [ "$BORDERS" = 1 ] && { [ ! -x "$HOME/.local/bin/omacosy-borders" ] || [ "$REPO_DIR/helper/borders.swift" -nt "$HOME/.local/bin/omacosy-borders" ]; }; then
   log "Building omacosy-borders"
   swiftc -O -F /System/Library/PrivateFrameworks -framework SkyLight -o "$HOME/.local/bin/omacosy-borders" "$REPO_DIR/helper/borders.swift"
 fi
@@ -249,11 +287,11 @@ fi
 # signing identity is present — then re-grant after each rebuild)
 if security find-identity -p codesigning -v 2>/dev/null | grep -q "Apple Development"; then
   codesign -f -s "Apple Development" --identifier com.omacosy.helper "$HOME/.local/bin/omacosy-helper" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
+  [ "$FOCUS_FOLLOWS_MOUSE" = 0 ] || codesign -f -s "Apple Development" --identifier com.omacosy.ffm "$HOME/.local/bin/omacosy-ffm" 2>/dev/null || true
+  [ "$BORDERS" = 0 ] || codesign -f -s "Apple Development" --identifier com.omacosy.borders "$HOME/.local/bin/omacosy-borders" 2>/dev/null || true
   # the BUNDLE is signed now; the identifier is what grants key on
-  codesign -f -s "Apple Development" --identifier com.omacosy.bar "$BAR_APP" 2>/dev/null || true
-  codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
+  [ "$STATUS_BAR" = 0 ] || codesign -f -s "Apple Development" --identifier com.omacosy.bar "$BAR_APP" 2>/dev/null || true
+  [ "$OVERVIEW" = 0 ] || codesign -f -s "Apple Development" --identifier com.omacosy.overview "$HOME/.local/bin/omacosy-overview" 2>/dev/null || true
 else
   log "NOTE: no Apple Development signing identity found."
   log "  macOS ties permission grants to the binary's signature — without a"
@@ -277,7 +315,8 @@ cp "$REPO_DIR/config/borders.conf" "$HOME/.config/omacosy/borders.conf"
 printf 'TERMINAL=%s\nBROWSER=%s\nMUSIC=%s\nMESSENGER=%s\n' \
   "$TERMINAL" "$BROWSER" "$MUSIC" "$MESSENGER" > "$HOME/.config/omacosy/apps.conf"
 
-cat > "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" <<PLIST
+if [ "$BORDERS" = 1 ]; then
+  cat > "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -289,10 +328,14 @@ cat > "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.omacosy.borders.plist"
+  launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.borders.plist" 2>/dev/null || true
+  launchctl load "$HOME/Library/LaunchAgents/com.omacosy.borders.plist"
+else
+  disable_user_agent com.omacosy.borders
+fi
 
-cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
+if [ "$FOCUS_FOLLOWS_MOUSE" = 1 ]; then
+  cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -305,11 +348,14 @@ cat > "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist"
+  launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist" 2>/dev/null || true
+  launchctl load "$HOME/Library/LaunchAgents/com.omacosy.ffm.plist"
+else
+  disable_user_agent com.omacosy.ffm
+fi
 
-
-cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
+if [ "$STATUS_BAR" = 1 ]; then
+  cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -327,8 +373,11 @@ cat > "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.omacosy.bar.plist"
+  launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.bar.plist" 2>/dev/null || true
+  launchctl load "$HOME/Library/LaunchAgents/com.omacosy.bar.plist"
+else
+  disable_user_agent com.omacosy.bar
+fi
 link "$REPO_DIR/bin/theme-set"  "$HOME/.local/bin/theme-set"
 link "$REPO_DIR/bin/theme-next" "$HOME/.local/bin/theme-next"
 link "$REPO_DIR/bin/theme-bg-next" "$HOME/.local/bin/theme-bg-next"
@@ -392,8 +441,9 @@ fi
 # command. Config is COPIED (launch agents can't read ~/Documents — TCC).
 GESTURE_APP="$HOME/.local/share/omacosy/omacosy-gesture.app"
 GESTURE_BIN="$GESTURE_APP/Contents/MacOS/omacosy-gesture"
-mkdir -p "$HOME/.config/omacosy"
-cp "$REPO_DIR/config/gesture/config.json" "$HOME/.config/omacosy/gesture.json"
+if [ "$GESTURES" = 1 ]; then
+  mkdir -p "$HOME/.config/omacosy"
+  cp "$REPO_DIR/config/gesture/config.json" "$HOME/.config/omacosy/gesture.json"
 # the aerospace-swipe era: retire its agent, and its clone if it was ours
 if [ -f "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" ]; then
   launchctl unload "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
@@ -458,6 +508,9 @@ if tail -5 /tmp/omacosy-gesture.log 2>/dev/null | grep -q "Waiting for accessibi
   log "  (a rebuild makes macOS treat it as a new app — this is a macOS rule, not a bug)."
   log "  Fix: System Settings -> Privacy & Security -> Accessibility -> toggle omacosy-gesture"
 fi
+else
+  disable_user_agent com.omacosy.gesture
+fi
 
 # --- 6. macOS look ----------------------------------------------------------
 "$REPO_DIR/macos-defaults.sh"
@@ -481,11 +534,13 @@ sleep 1
 # the settings window, and it costs ~92MB resident to leave open. Launch
 # it only when the service is not already up — i.e. a first run, where it
 # is needed to approve the driver extension.
-if launchctl list 2>/dev/null | grep -q org.pqrs.service.agent.karabiner_console_user_server; then
-  log "Karabiner already running (Caps Lock -> Super)"
-else
-  log "Starting Karabiner-Elements (approve its driver extension, then quit the app)"
-  open -a Karabiner-Elements
+if [ "$KARABINER_SUPER" = 1 ]; then
+  if launchctl list 2>/dev/null | grep -q org.pqrs.service.agent.karabiner_console_user_server; then
+    log "Karabiner already running (Caps Lock -> Super)"
+  else
+    log "Starting Karabiner-Elements (approve its driver extension, then quit the app)"
+    open -a Karabiner-Elements
+  fi
 fi
 
 cat <<'EOF'
