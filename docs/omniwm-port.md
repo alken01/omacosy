@@ -149,6 +149,15 @@ this directory. Version-critical reconciliation:
 7. (cosmetic) **Their border decorates their own command palette** —
    mismatched-radius outline; persists with borders disabled, so
    likely the palette's own edge drawing.
+9. **Dwindle vertical insertion is top, not bottom** — with smartSplit
+   off, planSplit returns newFirst=false ("new is second") and
+   splitRect places the first child at minY; frames are y-up, so the
+   new window lands ABOVE the existing one. Horizontal splits go right
+   as expected. Hyprland's force_split=2 (omarchy) is right/bottom, so
+   the spiral never reads as the omarchy staircase. Measured 2026-08-28
+   with tty-timestamped spawns; `command preselect down` over IPC
+   yields the bottom placement (one-shot). Feature ask: a
+   newWindowPosition knob, or flip the vertical default.
 8. (watch) **Silent self-relaunch at 03:34 2026-08-26** — no crash
    report, no known trigger; not yet reproducible.
 
