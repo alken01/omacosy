@@ -165,9 +165,11 @@ if [ -f "$HOME/.config/karabiner/karabiner.json" ] \
 fi
 cp "$REPO_DIR/config/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
 launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null || true
-# Karabiner's Menu and NotificationWindow helper apps idle at ~135MB
-# combined and serve a menu-bar icon we hide; remapping lives in the
-# core service, which stays
+# Karabiner's Menu and NotificationWindow helpers are disabled the
+# SUPPORTED way in karabiner.json (global.show_in_menu_bar and
+# global.enable_notification_window, both false) — the bootout below
+# is only the immediate cleanup for agents already running; the config
+# is what survives Karabiner updates, which used to resurrect them
 for agent in Karabiner-Menu Karabiner-NotificationWindow; do
   launchctl bootout "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
   launchctl disable "gui/$(id -u)/org.pqrs.service.agent.$agent" 2>/dev/null || true
