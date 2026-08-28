@@ -147,7 +147,7 @@ Your personal shell config belongs in `~/.zshrc.local`; the repo's
 | Status bar, popups, shade | `omacosy-bar` (self-compiled launchd agent, one process draws all of it) | `helper/bar.swift` |
 | Window borders + fullscreen shroud | `omacosy-borders` (self-compiled launchd agent) | `helper/borders.swift`, `config/borders.conf` |
 | Focus follows mouse | `omacosy-ffm` (self-compiled launchd agent) | `helper/ffm.swift`, `config/ffm-ignore` |
-| Trackpad swipes | [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) + our patch | `config/aerospace-swipe/config.json`, `patches/` |
+| Trackpad gestures | `omacosy-gesture` (self-compiled launchd agent; engine absorbed from [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe), MIT) | `helper/gesture/`, `config/gesture/config.json` |
 | Workspace overview | `omacosy-overview` (self-compiled resident daemon) | `helper/overview.swift` |
 | Dwindle split direction | `on-focus-changed` hook running `omacosy-helper split-hint` (no daemon) | `config/aerospace/aerospace.template.toml`, `helper/main.swift` |
 | Workspace / window navigation | `omacosy-ws`, `omacosy-cycle`, `omacosy-float` | `bin/` |
@@ -164,10 +164,13 @@ Why so much of it is self-built:
   `omacosy-ffm` focuses windows through the same SkyLight calls
   AeroSpace uses.
 - **aerospace-swipe** broke because CGEvent taps stopped carrying
-  multi-touch data. The patched version reads raw MultitouchSupport
-  frames; the fixes are offered upstream as
+  multi-touch data on macOS 26.3. We fixed it (raw MultitouchSupport
+  frames) and offered the fixes upstream as
   [#29](https://github.com/acsandmann/aerospace-swipe/pull/29) and
-  [#30](https://github.com/acsandmann/aerospace-swipe/pull/30).
+  [#30](https://github.com/acsandmann/aerospace-swipe/pull/30); once
+  the daemon had to serve both window managers and carried more of
+  our patches than upstream commits, the engine moved in-tree as
+  `omacosy-gesture` (MIT notice kept).
 - **JankyBorders** keeps a bitmap per window and costs hundreds of MB.
   `omacosy-borders` strokes one CAShapeLayer that the WindowServer
   rasterizes, driven by SkyLight notifications for focus, move and
@@ -454,7 +457,7 @@ Largest first:
 | AeroSpace | 24MB | 85MB |
 | Karabiner (4 processes) | 24MB | 61MB |
 | `omacosy-borders` | 19MB | 29MB |
-| aerospace-swipe | 13MB | 22MB |
+| `omacosy-gesture` | 13MB | 22MB |
 | `omacosy-ffm` | 10MB | 24MB |
 
 On one display the same set measured ~155MB; the bar and the border
@@ -488,4 +491,5 @@ MIT (see `LICENSE`). Standing on: [omarchy](https://omarchy.org)
 [AeroSpace](https://github.com/nikitabobko/AeroSpace),
 [Karabiner-Elements](https://karabiner-elements.pqrs.org),
 [aerospace-swipe](https://github.com/acsandmann/aerospace-swipe) (MIT;
-patched here for macOS 26, fixes offered upstream).
+its gesture engine lives on here as `omacosy-gesture`, notice kept in
+`helper/gesture/`).

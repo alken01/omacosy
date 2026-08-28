@@ -58,12 +58,15 @@ rm -f /tmp/omacosy-*.log /tmp/omacosy-*.err "/tmp/omacosy-overview-$(id -u).pid"
 rm -rf "/tmp/omacosy-spawn-$(id -u).lock.d"
 rm -rf "$HOME/.config/omacosy"
 
-# aerospace-swipe: ONLY if we cloned it — a pre-existing install
-# (agent, app, clone) belongs to the user and stays untouched
+# omacosy-gesture (and the aerospace-swipe era before it: its agent,
+# and its clone ONLY if we made it — a pre-existing install stays)
+launchctl unload "$HOME/Library/LaunchAgents/com.omacosy.gesture.plist" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.omacosy.gesture.plist"
+rm -rf "$HOME/.local/share/omacosy/omacosy-gesture.app"
 if have "cloned-aerospace-swipe" && [ -d "$HOME/.local/share/aerospace-swipe" ]; then
-  (cd "$HOME/.local/share/aerospace-swipe" && make uninstall) 2>/dev/null || true
-  rm -rf "$HOME/.local/share/aerospace-swipe"
-  rm -rf "$HOME/.config/aerospace-swipe"
+  launchctl unload "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist" 2>/dev/null || true
+  rm -f "$HOME/Library/LaunchAgents/com.acsandmann.swipe.plist"
+  rm -rf "$HOME/.local/share/aerospace-swipe" "$HOME/.config/aerospace-swipe"
 fi
 
 # --- 2. Native menu bar + system gestures back ------------------------------

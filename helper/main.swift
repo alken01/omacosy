@@ -253,7 +253,7 @@ case "omniwm-overview-close":
     // fire Escape into whatever app is focused.
     //
     // CGEventPost needs Accessibility, judged by the RESPONSIBLE
-    // process: run from AerospaceSwipe's gesture handler (which holds
+    // process: run from omacosy-gesture's handler (which holds
     // the grant) this works; run from a bare shell it may not.
     guard let wins = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { exit(1) }
     let overviewUp = wins.contains { w in
