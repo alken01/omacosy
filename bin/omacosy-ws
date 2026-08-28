@@ -48,35 +48,29 @@ if wm_is_omniwm; then
       # `workspace next` had). Cycle within the slot SET the current
       # workspace belongs to: 1-9 when on a single digit, the guest
       # set when on one of those — aerospace-era semantics exactly.
-      # current = the CURRENT display's active workspace (query
-      # displays) — isFocused on the workspaces query goes dark on
-      # empty workspaces and the cycle stranded itself there. Two
-      # separate parses: omniwmctl pretty-prints multi-line JSON, so
-      # the docs cannot be concatenated and split by line.
-      cur="$("$O" query displays 2>/dev/null | /usr/bin/python3 -c "
-import sys, json
-for d in json.load(sys.stdin)['result']['payload']['displays']:
-    if d.get('isCurrent'):
-        print(d['activeWorkspace']['rawName']); break
-")"
-      names="$("$O" query workspaces --fields raw-name 2>/dev/null | /usr/bin/python3 -c "
-import sys, json
-print(' '.join(sorted((w['rawName'] for w in json.load(sys.stdin)['result']['payload']['workspaces']), key=int)))
-")"
-      cur="$(/usr/bin/python3 -c "
-import sys
-cur = int('$cur') if '$cur' else None
-names = [int(n) for n in '$names'.split()]
-if cur is None or not names: sys.exit(0)
-inset = [n for n in names if (n <= 9) == (cur <= 9)]
-i = inset.index(cur) if cur in inset else 0
-step = 1 if '$op' == 'next' else -1
-print(inset[(i + step) % len(inset)])
-")"
-      # log every attempt with the REAL response: this path failed
-      # silently six times in a row once (cause never caught in the
-      # act), and silenced errors cost hours. The log is tiny and
-      # /tmp-transient.
+      # One query + one command, no python: the swipe->switch latency
+      # IS this script (measured 215 ms with three python startups and
+      # three IPC round-trips; ~80 ms now). The workspace set is static
+      # config, so it comes from settings.toml instead of a query; the
+      # current workspace comes from `query active-workspace` — the
+      # workspaces query's isFocused goes dark on EMPTY workspaces and
+      # once stranded the cycle there.
+      cur="$("$O" query active-workspace 2>/dev/null | sed -n 's/.*"rawName" : "\([0-9][0-9]*\)".*/\1/p' | head -1)"
+      names="$(sed -n 's/^name = "\([0-9][0-9]*\)"$/\1/p' "$HOME/.config/omniwm/settings.toml" | sort -n | tr '\n' ' ')"
+      if [ -n "$cur" ] && [ -n "$names" ]; then
+        # slot set: 1-9 cycles within 1-9, guests (14-17) within guests
+        inset=""
+        for n in $names; do
+          if [ "$cur" -le 9 ]; then [ "$n" -le 9 ] && inset="$inset $n"
+          else [ "$n" -gt 9 ] && inset="$inset $n"; fi
+        done
+        set -- $inset; count=$#; i=0; idx=0
+        for n in "$@"; do [ "$n" = "$cur" ] && idx=$i; i=$((i + 1)); done
+        if [ "$op" = next ]; then idx=$(( (idx + 1) % count )); else idx=$(( (idx + count - 1) % count )); fi
+        shift "$idx"; cur="$1"
+      else
+        cur=""
+      fi
       r="$("$O" workspace focus-name "$cur" 2>&1)" || true
       echo "$(date +%T) op=$op cur='$cur' resp='$(echo "$r" | head -c 120)'" >> /tmp/omacosy-ws.log
       bar_poke "$cur"
